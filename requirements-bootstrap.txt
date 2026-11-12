@@ -1,0 +1,3 @@
+# Solo para el autoetiquetado temporal con OpenAI durante el bootstrap del dataset.
+# El servidor de producción no requiere ni importa el SDK de OpenAI.
+openai>=1.0.0

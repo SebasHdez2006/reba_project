@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>REBA — Dashboard</title>
+    <meta
+      name="description"
+      content="Dashboard local de la plataforma flotante REBA: fotos clasificadas con visión artificial y ciclos de bomba."
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">REBA</div>
+          <div class="brand-sub">Recolección acuática autónoma · visión local</div>
+        </div>
+        <div id="wsStatus" class="status-pill offline" title="Estado del WebSocket">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="wsStatusText">Desconectado</span>
+        </div>
+      </header>
+
+      <div id="alertBanner" class="alert" role="alert" aria-live="assertive">
+        <strong>ALERTA</strong>
+        <span id="alertText">Bomba activada.</span>
+      </div>
+
+      <main class="grid">
+        <!-- Columna fotos -->
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Capturas clasificadas</h2>
+            <span id="captureCount" class="status-pill">0 fotos</span>
+          </div>
+          <div class="panel-body">
+            <div class="capture-feature">
+              <img id="latestCaptureImage" alt="Última foto clasificada" hidden />
+              <p id="captureEmpty" class="capture-empty">
+                Esperando que la ESP32 envíe la primera foto.
+              </p>
+            </div>
+            <div class="capture-caption">
+              <strong id="latestCaptureClasses">Sin capturas</strong>
+              <span id="latestCaptureTime">Las fotos llegan por POST /upload.</span>
+            </div>
+            <div class="video-meta">
+              <span>Detecciones foto: <strong id="frameCount">0</strong></span>
+              <span>Inferencia: <strong id="inferMs">—</strong> ms</span>
+              <span>Motor: <strong id="inferSource">—</strong></span>
+            </div>
+            <div
+              id="captureGallery"
+              class="capture-gallery"
+              aria-label="Fotos clasificadas recientes"
+            ></div>
+          </div>
+        </section>
+
+        <!-- Columna métricas -->
+        <aside class="stack">
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Materiales acumulados</h2>
+            </div>
+            <div class="panel-body">
+              <div class="kpi-row">
+                <div class="kpi">
+                  <span class="kpi-label">Total objetos</span>
+                  <div class="kpi-value" id="totalObjects">0</div>
+                </div>
+                <div class="kpi">
+                  <span class="kpi-label">Fotos recibidas</span>
+                  <div class="kpi-value" id="uploadsReceived">0</div>
+                </div>
+              </div>
+
+              <div class="chart-wrap" aria-label="Distribución porcentual por material">
+                <canvas id="donutChart" width="280" height="280"></canvas>
+                <div class="chart-center">
+                  <div class="big" id="chartTotal">0</div>
+                  <div class="small">objetos</div>
+                </div>
+              </div>
+
+              <ul class="legend" id="classLegend">
+                <!-- Rellenado por app.js -->
+              </ul>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Bomba</h2>
+              <span id="pumpState" class="status-pill">esperando fotos</span>
+            </div>
+            <div class="panel-body">
+              <div class="kpi-row">
+                <div class="kpi">
+                  <span class="kpi-label">Progreso hacia ciclo</span>
+                  <div class="kpi-value" id="pumpProgress">0 / 3</div>
+                </div>
+                <div class="kpi">
+                  <span class="kpi-label">Duración del ciclo</span>
+                  <div class="kpi-value" id="pumpDuration">— s</div>
+                </div>
+              </div>
+              <p class="footer-note" style="margin: 0.5rem 0 0">
+                La ESP32 enciende la bomba ~<span id="pumpSecondsInline">10</span> s
+                cada <span id="pumpTriggerInline">3</span> fotos tomadas.
+                Último ciclo inferido:
+                <strong id="lastPumpEvent">—</strong>
+              </p>
+            </div>
+          </section>
+        </aside>
+      </main>
+
+      <p class="footer-note">
+        REBA · Dashboard local · Parámetros configurables en
+        <code>.env</code> (servidor) y en el sketch <code>fotos_nc.ino</code> ·
+        Ver <code>docs/dashboard.md</code>
+      </p>
+    </div>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>

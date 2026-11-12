@@ -1,0 +1,40 @@
+# Entorno y secretos
+.env
+.venv/
+.venv-reba/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Datos locales
+data/
+*.db
+*.db-journal
+*.db-wal
+
+# Modelos pesados (entrenar y colocar localmente)
+models/**/*.onnx
+models/**/*.pt
+!models/.gitkeep
+
+# Pesos base descargables y artefactos de entrenamiento
+yolov8n.pt
+runs/
+
+# Dataset generado
+datasets/
+raw_images/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Colab / notebooks checkpoints
+.ipynb_checkpoints/
