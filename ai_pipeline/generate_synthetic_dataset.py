@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import random
 from pathlib import Path
+from typing import Optional
 
 import cv2
 import numpy as np
@@ -187,14 +188,24 @@ def to_yolo(x1, y1, x2, y2) -> tuple[float, float, float, float]:
     return xc / IMG_SIZE, yc / IMG_SIZE, bw / IMG_SIZE, bh / IMG_SIZE
 
 
-def make_image(rng: random.Random) -> tuple[np.ndarray, list[str]]:
+def make_image(
+    rng: random.Random, class_weights: Optional[list[float]] = None
+) -> tuple[np.ndarray, list[str]]:
     img = water_background(rng)
     labels: list[str] = []
     n_objects = rng.randint(1, 4)
-    used_classes = rng.sample(range(len(CLASSES)), k=min(n_objects, len(CLASSES)))
-    # permitir repetir si n_objects > clases muestreadas
-    while len(used_classes) < n_objects:
-        used_classes.append(rng.randrange(len(CLASSES)))
+    if class_weights is None:
+        used_classes = rng.sample(
+            range(len(CLASSES)), k=min(n_objects, len(CLASSES))
+        )
+        # permitir repetir si n_objects > clases muestreadas
+        while len(used_classes) < n_objects:
+            used_classes.append(rng.randrange(len(CLASSES)))
+    else:
+        # muestreo con reemplazo ponderado — para boosts de clases raras
+        used_classes = rng.choices(
+            range(len(CLASSES)), weights=class_weights, k=n_objects
+        )
 
     for cid in used_classes:
         x1, y1, x2, y2 = clip_box(*DRAWERS[cid](img, rng))
@@ -210,14 +221,17 @@ def make_image(rng: random.Random) -> tuple[np.ndarray, list[str]]:
     return img, labels
 
 
-def write_split(out_root: Path, split: str, n: int, seed: int) -> None:
+def write_split(
+    out_root: Path, split: str, n: int, seed: int,
+    class_weights: Optional[list[float]] = None,
+) -> None:
     img_dir = out_root / "images" / split
     lbl_dir = out_root / "labels" / split
     img_dir.mkdir(parents=True, exist_ok=True)
     lbl_dir.mkdir(parents=True, exist_ok=True)
     rng = random.Random(seed)
     for i in range(n):
-        img, labels = make_image(rng)
+        img, labels = make_image(rng, class_weights)
         stem = f"{split}_{i:04d}"
         cv2.imwrite(str(img_dir / f"{stem}.jpg"), img, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
         (lbl_dir / f"{stem}.txt").write_text("\n".join(labels) + ("\n" if labels else ""), encoding="utf-8")
@@ -246,12 +260,27 @@ def main() -> None:
     p.add_argument("--n-val", type=int, default=60)
     p.add_argument("--n-test", type=int, default=60)
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument(
+        "--class-weights", type=str, default=None,
+        help="Pesos por clase separados por coma (orden: plastico,tela,"
+             "organico,unicel,metal). Úsalo para boosts de clases raras, "
+             "ej. '1,3,4,1,1'.",
+    )
     args = p.parse_args()
 
+    class_weights: Optional[list[float]] = None
+    if args.class_weights:
+        class_weights = [float(x) for x in args.class_weights.split(",")]
+        if len(class_weights) != len(CLASSES):
+            raise SystemExit(
+                f"--class-weights debe tener {len(CLASSES)} valores "
+                f"({','.join(CLASSES)})"
+            )
+
     args.output.mkdir(parents=True, exist_ok=True)
-    write_split(args.output, "train", args.n_train, args.seed)
-    write_split(args.output, "val", args.n_val, args.seed + 1)
-    write_split(args.output, "test", args.n_test, args.seed + 2)
+    write_split(args.output, "train", args.n_train, args.seed, class_weights)
+    write_split(args.output, "val", args.n_val, args.seed + 1, class_weights)
+    write_split(args.output, "test", args.n_test, args.seed + 2, class_weights)
 
     write_data_yaml(args.output)
     print("Dataset sintético listo.")

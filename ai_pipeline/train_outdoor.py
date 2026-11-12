@@ -61,18 +61,24 @@ def write_combined_data_yaml(
 
 
 def build_dataset_yaml() -> Path:
-    """Combina REBA_synthetic + REBA_taco (si existe) en datasets/REBA_outdoor."""
+    """Combina sintético (+boost de clases raras) + TACO en datasets/REBA_outdoor."""
     synthetic = DATASETS_ROOT / "REBA_synthetic"
+    boost = DATASETS_ROOT / "REBA_synthetic_boost"
     taco = DATASETS_ROOT / "REBA_taco"
 
     train_dirs = [Path("REBA_synthetic/images/train")]
+    parts = ["sintético"]
+    if (boost / "images" / "train").is_dir() and any(
+        (boost / "images" / "train").iterdir()
+    ):
+        train_dirs.append(Path("REBA_synthetic_boost/images/train"))
+        parts.append("boost(organico/tela)")
     if (taco / "images" / "train").is_dir() and any(
         (taco / "images" / "train").iterdir()
     ):
         train_dirs.append(Path("REBA_taco/images/train"))
-        print("Dataset combinado: sintético + TACO")
-    else:
-        print("REBA_taco no disponible; entrenando solo con sintético")
+        parts.append("TACO")
+    print("Dataset combinado: " + " + ".join(parts))
 
     yaml_path = DATASETS_ROOT / "REBA_outdoor" / "data.yaml"
     return write_combined_data_yaml(
