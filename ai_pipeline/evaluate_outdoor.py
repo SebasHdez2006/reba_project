@@ -65,6 +65,16 @@ def baseline_archived_pt(archive_dir: Path) -> tuple:
     return None, skipped
 
 
+def find_latest_run(detect_dir: Path) -> Optional[Path]:
+    """El run `REBA_outdoor*` con `weights/best.pt` más reciente."""
+    candidates = []
+    for d in detect_dir.glob("REBA_outdoor*"):
+        best = d / "weights" / "best.pt"
+        if best.is_file():
+            candidates.append((best.stat().st_mtime, d))
+    return max(candidates)[1] if candidates else None
+
+
 def read_training_info(run_dir: Path) -> Dict[str, object]:
     """Extrae configuración y progreso real del run de entrenamiento."""
     info: Dict[str, object] = {}
@@ -174,8 +184,8 @@ def build_report(
         "mAP50-95 (peso 1.0 en Ultralytics ≥8.4)."
     )
     lines.append(
-        "- Entrenamiento combinado: dataset sintético + subconjunto real "
-        "TACO (basura in the wild) cuando está disponible."
+        "- Entrenamiento combinado: dataset sintético + boost de clases "
+        "raras (`REBA_synthetic_boost`) + subconjunto real TACO."
     )
     lines.append("")
 
@@ -341,9 +351,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         raise SystemExit(f"No existe --new: {args.new}")
 
     models = {"baseline (previo)": baseline, "outdoor (nuevo)": args.new}
-    training_info = read_training_info(
-        PROJECT_ROOT / "runs" / "detect" / "REBA_outdoor"
-    )
+    run_dir = find_latest_run(PROJECT_ROOT / "runs" / "detect")
+    training_info = read_training_info(run_dir) if run_dir else {}
 
     rows: List[dict] = []
     per_class_rows: List[dict] = []
