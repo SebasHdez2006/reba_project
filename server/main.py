@@ -28,7 +28,7 @@ import cv2
 import numpy as np
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from server.config import PROJECT_ROOT, settings
@@ -316,6 +316,57 @@ async def health():
 async def get_config():
     """Config pública (parámetros editables vía `.env`). Sin secretos."""
     return settings.public_dict()
+
+
+# ---------------------------------------------------------------------------
+# Configuración del dispositivo ESP32 (la consulta en su arranque y cada minuto)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/device/config", response_class=PlainTextResponse)
+async def device_config():
+    """
+    Config que el ESP32-CAM descarga periódicamente.
+
+    Formato `clave=valor` por línea (sin JSON: el firmware lo parsea simple).
+    Solo se devuelven las claves con override guardado — el firmware conserva
+    sus valores locales para el resto.
+    """
+    cfg = db.get_device_config()
+    return "\n".join(f"{k}={v}" for k, v in sorted(cfg.items())) + "\n"
+
+
+@app.get("/api/admin/device-config")
+async def admin_get_device_config():
+    """Overrides actuales (los edita el dashboard)."""
+    return {"items": db.get_device_config(),
+            "allowed_keys": list(db.DEVICE_CONFIG_KEYS)}
+
+
+@app.post("/api/admin/device-config")
+async def admin_set_device_config(payload: Dict[str, Any]):
+    """
+    Guarda overrides de config del ESP32.
+
+    Body JSON: {"wifi_ssid": "...", "pump_photos": "3", ...}
+    Valor vacío o null elimina el override (vuelve al default del firmware).
+    """
+    items = payload.get("items", payload)
+    if not isinstance(items, dict):
+        raise HTTPException(400, "Se esperaba un objeto JSON de clave=valor")
+    allowed = set(db.DEVICE_CONFIG_KEYS)
+    invalid = [k for k in items if k not in allowed]
+    if invalid:
+        raise HTTPException(400, f"Claves no permitidas: {', '.join(invalid)}")
+    applied, removed = [], []
+    for key, value in items.items():
+        if value is None or str(value).strip() == "":
+            db.delete_device_config(key)
+            removed.append(key)
+        else:
+            db.set_device_config(key, str(value).strip())
+            applied.append(key)
+    logger.info("device_config: aplicadas=%s eliminadas=%s", applied, removed)
+    return {"ok": True, "applied": applied, "removed": removed}
 
 
 @app.get("/api/stats")

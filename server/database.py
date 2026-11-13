@@ -87,6 +87,11 @@ class Database:
                 total INTEGER NOT NULL DEFAULT 0
             );
 
+            CREATE TABLE IF NOT EXISTS device_config (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_detections_ts ON detections(ts);
             CREATE INDEX IF NOT EXISTS idx_detections_class ON detections(class_name);
             """
@@ -308,6 +313,37 @@ class Database:
             (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    # ---------------------------------------------------------- device config
+
+    # Claves que el firmware entiende (ver fotos_nc.ino → /api/device/config)
+    DEVICE_CONFIG_KEYS = (
+        "wifi_ssid", "wifi_pass", "server_url",
+        "pump_photos", "pump_seconds",
+        "dist_min_cm", "dist_max_cm",
+    )
+
+    def get_device_config(self) -> Dict[str, str]:
+        """Overrides de configuración para el ESP32 (solo claves conocidas)."""
+        rows = self.conn.execute(
+            "SELECT key, value FROM device_config"
+        ).fetchall()
+        allowed = set(self.DEVICE_CONFIG_KEYS)
+        return {r["key"]: r["value"] for r in rows if r["key"] in allowed}
+
+    def set_device_config(self, key: str, value: str) -> None:
+        if key not in self.DEVICE_CONFIG_KEYS:
+            raise ValueError(f"Clave no permitida: {key}")
+        self.conn.execute(
+            "INSERT INTO device_config(key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
+        self.conn.commit()
+
+    def delete_device_config(self, key: str) -> None:
+        self.conn.execute("DELETE FROM device_config WHERE key = ?", (key,))
+        self.conn.commit()
 
     def export_json_snapshot(self) -> str:
         return json.dumps(

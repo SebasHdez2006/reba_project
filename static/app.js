@@ -317,6 +317,75 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Configuración del dispositivo ESP32-CAM (admin)
+  // ---------------------------------------------------------------------------
+  const CFG_FIELDS = {
+    wifi_ssid: "cfgWifiSsid",
+    wifi_pass: "cfgWifiPass",
+    server_url: "cfgServerUrl",
+    pump_photos: "cfgPumpPhotos",
+    pump_seconds: "cfgPumpSeconds",
+    dist_min_cm: "cfgDistMin",
+    dist_max_cm: "cfgDistMax",
+  };
+
+  function setDeviceConfigStatus(text, mode) {
+    const el = $("deviceConfigState");
+    if (!el) return;
+    el.textContent = text;
+    el.className = `status-pill ${mode || "offline"}`;
+  }
+
+  async function loadDeviceConfig() {
+    try {
+      const res = await fetch("/api/admin/device-config");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const items = data.items || {};
+      for (const [key, inputId] of Object.entries(CFG_FIELDS)) {
+        const input = $(inputId);
+        if (input) input.value = items[key] ?? "";
+      }
+      setDeviceConfigStatus("guardado", "online");
+    } catch (err) {
+      console.warn("Device config unavailable", err);
+      setDeviceConfigStatus("sin conexión", "offline");
+    }
+  }
+
+  async function saveDeviceConfig(ev) {
+    ev.preventDefault();
+    const payload = {};
+    for (const [key, inputId] of Object.entries(CFG_FIELDS)) {
+      const input = $(inputId);
+      const value = input ? input.value.trim() : "";
+      if (value !== "") payload[key] = value;
+    }
+    // wifi_ssid/pass van en pareja: si solo viene uno, el ESP32 esperaría
+    // la otra mitad para siempre. Exigir ambas o ninguna.
+    const hasSsid = "wifi_ssid" in payload;
+    const hasPass = "wifi_pass" in payload;
+    if (hasSsid !== hasPass) {
+      setDeviceConfigStatus("WiFi incompleto", "offline");
+      alert("Para cambiar el WiFi llena SSID y contraseña (o deja ambos vacíos).");
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/device-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setDeviceConfigStatus(`aplicado (${data.applied.length})`, "online");
+    } catch (err) {
+      console.warn("Save device config failed", err);
+      setDeviceConfigStatus("error al guardar", "offline");
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Bootstrap: REST snapshot por si el WS tarda
   // ---------------------------------------------------------------------------
   async function bootstrapFromRest() {
@@ -358,7 +427,13 @@
     }
   }, 25000);
 
+  const cfgForm = $("deviceConfigForm");
+  if (cfgForm) cfgForm.addEventListener("submit", saveDeviceConfig);
+  const cfgReload = $("deviceConfigReload");
+  if (cfgReload) cfgReload.addEventListener("click", loadDeviceConfig);
+
   bootstrapFromRest();
   bootstrapCaptures();
+  loadDeviceConfig();
   connectWs();
 })();

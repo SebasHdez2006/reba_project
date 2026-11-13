@@ -115,6 +115,62 @@
               </p>
             </div>
           </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Dispositivo ESP32-CAM</h2>
+              <span id="deviceConfigState" class="status-pill">—</span>
+            </div>
+            <div class="panel-body">
+              <form id="deviceConfigForm" class="device-form">
+                <label>
+                  WiFi SSID
+                  <input type="text" id="cfgWifiSsid" autocomplete="off"
+                         placeholder="Red 2.4 GHz (vacío = sin cambio)">
+                </label>
+                <label>
+                  WiFi contraseña
+                  <input type="password" id="cfgWifiPass" autocomplete="new-password"
+                         placeholder="Vacío = sin cambio">
+                </label>
+                <label>
+                  URL del servidor
+                  <input type="text" id="cfgServerUrl"
+                         placeholder="http://192.168.1.3:5000">
+                </label>
+                <div class="device-form-row">
+                  <label>
+                    Fotos para bomba
+                    <input type="number" id="cfgPumpPhotos" min="1" max="20">
+                  </label>
+                  <label>
+                    Bomba (segundos)
+                    <input type="number" id="cfgPumpSeconds" min="1" max="120">
+                  </label>
+                </div>
+                <div class="device-form-row">
+                  <label>
+                    Dist. mín (cm)
+                    <input type="number" id="cfgDistMin" step="0.5" min="0">
+                  </label>
+                  <label>
+                    Dist. máx (cm)
+                    <input type="number" id="cfgDistMax" step="0.5" min="1">
+                  </label>
+                </div>
+                <div class="device-form-actions">
+                  <button type="submit" class="primary">Guardar y aplicar</button>
+                  <button type="button" id="deviceConfigReload">Recargar</button>
+                </div>
+                <p class="footer-note" style="margin: 0.5rem 0 0">
+                  La ESP32 descarga esta config cada 60 s (<code>/api/device/config</code>)
+                  y la aplica en caliente. Si el WiFi nuevo falla, revierte solo a los
+                  anteriores. También puedes configurar la ESP32 por su AP
+                  <code>REBA-Setup</code> (se abre solo si no hay WiFi o tras ~10 min sin conexión).
+                </p>
+              </form>
+            </div>
+          </section>
         </aside>
       </main>
 

@@ -492,3 +492,45 @@ button.danger {
   font-size: 0.8rem;
   text-align: center;
 }
+
+/* ---------------- Configuración del dispositivo ---------------- */
+.device-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.device-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.device-form input {
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--stroke);
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+}
+
+.device-form input:focus {
+  outline: none;
+  border-color: rgba(46, 196, 182, 0.6);
+}
+
+.device-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.device-form-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
