@@ -1,57 +1,62 @@
 # REBA — Dashboard Web
 
-Interfaz servida por FastAPI desde `static/` en **http://localhost:5000**.
+Interfaz servida por FastAPI desde `static/` — abrir por HTTP en **http://localhost:5000** o la IP de la PC (nunca como archivo `file://`).
+
+**Acceso desde el celular:** conectar el teléfono a la misma red que la PC (ej. hotspot `REBA-AP`) y abrir `http://<IP-PC>:5000` — con el hotspot activo suele ser `http://192.168.137.1:5000`. Sin autenticación por decisión: la red `REBA-AP` aísla el sistema; no exponer el puerto a redes no confiables.
 
 ---
 
-## Qué muestra
+## Módulos
 
-| Elemento | Descripción |
-|----------|-------------|
-| Marca **REBA** | Identidad del producto en el header |
-| Estado WebSocket | Píldora En vivo / Reconectando |
-| Capturas clasificadas | Última foto (con cajas YOLO) y galería local de fotos guardadas en SQLite |
-| Detecciones foto / Inferencia / Motor | Conteo de objetos en la última foto, ms de inferencia y fuente (`onnx`/`none`) |
-| Total objetos | Contador acumulado SQLite |
-| Fotos recibidas | Uploads totales procesados por `/upload` |
-| Donut chart | % plastico, tela, organico, unicel, metal |
-| Leyenda | Conteo y % por clase |
-| Panel Bomba | Progreso `X / 3` fotos hacia el ciclo, duración del ciclo y hora del último ciclo inferido |
-| Banner ALERTA | Visible unos segundos cuando se completa un ciclo de bomba |
+| Módulo | Qué hace |
+|--------|----------|
+| **Header** | Marca REBA, estado WebSocket (En vivo / Reconectando), pill del dispositivo (online/offline por heartbeat) |
+| **Última captura** | Foto anotada con cajas YOLO + conteo de detecciones, ms de inferencia y fuente del motor |
+| **Donut + leyenda** | % y conteo por clase (plastico, tela, organico, unicel, metal) + total acumulado |
+| **Galería completa** | Grid paginado (24/pág) de todas las capturas con filtro por clase y lightbox (imagen, hora, detecciones con confianza) |
+| **Panel Bomba** | Progreso automático `fotos/N` + control manual (segundos elegibles → "Activar ahora") + eventos recientes + orden pendiente (`pending_cmd`) |
+| **Panel Actividad** | Gráfica de barras apiladas por día/clase (7/14/30 días), auto-refresh |
+| **Exportar YOLO** | Descarga ZIP con imágenes originales + labels YOLO + `data.yaml` para reentrenar |
+| **Dispositivo ESP32-CAM** | Config remota clave=valor (WiFi, server_url, bomba, distancias) — se aplica en el próximo poll del firmware (≤60 s) |
 
 ---
 
 ## Cómo se actualiza
 
-1. Al cargar, `app.js` pide snapshot REST (`/api/config`, `/api/stats`, `/api/pump-status`) e historial local de fotos (`/api/captures`).
+1. Al cargar, `app.js` pide snapshot REST (`/api/config`, `/api/stats`, `/api/stats/timeseries`, `/api/pump/events`, `/api/captures`) e historial de capturas.
 2. Abre WebSocket `ws://<host>/ws`.
 3. El servidor empuja:
    - `capture` → foto JPEG guardada, clases y hora
-   - `detections` → contadores, ms de inferencia, fuente (`onnx` o `none`), progreso de bomba
-   - `pump_event` → banner "Bomba activada" durante ~`PUMP_RUN_SECONDS` segundos
-4. Ping cada 25 s para keepalive.
+   - `detections` → contadores, ms de inferencia, fuente (`onnx`/`none`), progreso de bomba
+   - `pump_event` → banner "Bomba activada"
+   - estado del dispositivo → actualiza el pill online/offline
+4. Poll ligero de `/api/health` cada 30 s para el estado del dispositivo.
+5. Ping cada 25 s para keepalive.
 
 Archivos:
 
-- `static/index.html` — estructura
-- `static/styles.css` — tema acuático con fuentes del sistema
-- `static/app.js` — WS, chart canvas, progreso de bomba
+- `static/index.html` — estructura y secciones
+- `static/styles.css` — tema acuático oscuro, responsive móvil (grid colapsable, lightbox, táctil)
+- `static/app.js` — WS, canvas donut/gráficas, galería, lightbox, bomba manual, export YOLO, config remota
 
 ---
 
-## Interpretar el progreso de bomba
+## Interpretar el panel Bomba
 
-- La bomba es **autónoma en la ESP32**: cada `FOTOS_PARA_BOMBA` fotos tomadas corre `TIEMPO_BOMBA_MS`.
-- El servidor **infiere** el ciclo contando fotos efectivamente recibidas por `/upload`. Si el ESP32 retiene fotos en su cola (sin Wi-Fi), el progreso mostrado se atrasa respecto al conteo real.
-- `last_pump_event` es la hora del último ciclo **inferido por el servidor**, no confirmado por el hardware.
+- El ciclo **automático** es autónomo en la ESP32: cada `pump_photos` fotos corre `pump_seconds`.
+- El servidor **infiere** el progreso contando uploads recibidos; si la cola del ESP32 retiene fotos sin Wi-Fi, el conteo mostrado se atrasa.
+- La **bomba manual** encola `pump_cmd=<unix_ts>:<s>` que el ESP32 recoge en su poll de config (≤60 s), ejecuta no-bloqueante y confirma por `/api/device/ack`. El comando expira a los 10 min — si el dispositivo estuvo offline, no hay bomba fantasma.
+- `pending_cmd` muestra la orden encolada sin confirmar; `pump_events` mezcla ciclos inferidos y manuales.
 
 ---
 
-## Requisitos de red en el navegador
+## Requisitos de red
 
-- Abre el dashboard por HTTP del servidor (`localhost:5000` o la IP del PC), **no** abriendo el HTML como archivo.
-- El PC debe ser alcanzable por el ESP32 (`SERVIDOR_URL` del firmware → mismo Wi-Fi 2.4 GHz).
-- La ESP32 y la PC pueden usar un punto de acceso sin Internet; el modelo y la base de datos residen en la PC.
+- Abrir por HTTP del servidor (IP de la PC), no por `file://`.
+- La PC debe ser alcanzable por el ESP32 (`server_url` del firmware → mismo Wi-Fi 2.4 GHz).
+- La red `REBA-AP` (hotspot Windows de la PC) no requiere Internet: PC y ESP32 se comunican por LAN.
+- Windows Firewall debe permitir entrada TCP 5000.
+- El dashboard y el ESP32 pueden usar un punto de acceso sin Internet; el modelo y la base de datos residen en la PC.
 
 ---
 
@@ -60,7 +65,8 @@ Archivos:
 | Qué | Dónde |
 |-----|-------|
 | Colores de clases | `CLASS_COLORS` en `app.js` + variables CSS |
-| Fotos por ciclo / duración | `.env` (`PUMP_TRIGGER_PHOTOS`/`PUMP_RUN_SECONDS`) + constantes del firmware (deben coincidir) |
-| Texto / layout | `index.html` / `styles.css` |
+| Fotos por ciclo / duración | `.env` (informativo) + config remota `pump_photos`/`pump_seconds` del dispositivo |
+| Texto / layout / tema | `index.html` / `styles.css` |
+| Rango de días de la gráfica | selector en el panel Actividad (7/14/30) |
 
-El dashboard usa fuentes del sistema y recursos servidos por la PC; no descarga contenido de Internet.
+El dashboard usa fuentes del sistema y recursos servidos por la PC; no descarga contenido de Internet — funciona sin conexión externa.

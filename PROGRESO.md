@@ -316,3 +316,52 @@ detecciones contra etiquetas YOLO ground-truth (IoU≥0.5, AP@0.5 VOC-101pts).
 - HC-SR04 sigue sin lecturas en banco (no cableado a la placa del banco).
 - Prueba del trigger ultrasónico y del ciclo automático 3-fotos→bomba.
 - Evaluación con capturas acuáticas reales cuando existan.
+
+## Sesión 6 — Pulido estético/móvil + documentación completa (13-nov, noche)
+
+### Dashboard — estética y responsive
+
+- Capa de pulido en `static/styles.css` (~930 líneas): gradientes sutiles,
+  glassmorphism en paneles, micro-interacciones (hover, transiciones),
+  scrollbar personalizada, estados vacíos ilustrados.
+- **Responsive móvil** (acceso desde celular): grid de paneles colapsa a
+  1 columna <900 px, tarjetas compactas, tipografía fluida, lightbox
+  adaptado a pantalla táctil, controles ≥44 px táctiles, gráficas con DPR.
+- `static/app.js`: ajustes de clases/IDs para los nuevos módulos, lightbox
+  táctil, y poll de estado del dispositivo cada 30 s.
+- Sintaxis JS verificada (`JS OK`), dashboard responde HTTP 200.
+
+### Acceso desde el celular (verificado)
+
+| Escenario | URL |
+|-----------|-----|
+| Celular en hotspot `REBA-AP` de la PC | `http://192.168.137.1:5000` |
+| Celular en la misma Wi-Fi que la PC | `http://<IP-PC>:5000` (ej. `172.16.110.29` si sigue vigente — `ipconfig`) |
+| Requisito | Firewall Windows permite TCP 5000; servidor en `0.0.0.0` |
+
+### Documentación actualizada al estado real
+
+- `docs/componentes.md` **(nuevo)**: función + decisión justificada + uso
+  breve de cada componente físico y software; incluye tabla de acceso
+  móvil y la advertencia de que el cableado NC deja la bomba ON si el
+  ESP32 pierde alimentación por separado.
+- `docs/server.md`: endpoints nuevos (`pump/run`, `pump/events`,
+  `device/ack`, `device/config`, `admin/device-config`, `timeseries`,
+  `export/yolo`, `detections/{id}`), validación JPEG/magic bytes, doble
+  JPEG (anotado vs original), heartbeat `device`, retención horaria,
+  umbral `INFERENCE_CONFIDENCE=0.35` (máx F1 medido).
+- `docs/dashboard.md`: reescrito con los 9 módulos actuales, flujo WS,
+  bomba manual vs inferida, acceso móvil.
+- `docs/firmware.md`: reescrito antes (Preferences/WiFiManager/
+  httpSimple/pump_cmd/validación estricta).
+- `docs/hardware.md`: ya era fiel al cableado real (sin cambios).
+- `docs/ai_pipeline.md`: añadido `eval_upload_path.py`, umbral 0.35,
+  sección 5 con export YOLO y advertencia de purgar capturas de eval.
+
+### Estado del hardware en este momento
+
+- ESP32-CAM **desconectada de USB** por el usuario — operará inalámbrica
+  en el artefacto (NVS ya tiene WiFi `REBA-AP` + `server_url`; si el
+  hotspot no existe, el portal `REBA-Setup` se reabre solo).
+- HC-SR04: pendiente cableado físico (TRIG→14, ECHO→15 divisor 1k/2k).
+- Última captura real: id=10 en SQLite (firmware endurecido, source=onnx).

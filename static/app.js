@@ -593,8 +593,19 @@
   function drawTsChart(series, classNames) {
     const canvas = $("tsChart");
     if (!canvas) return;
+    // Resolución adaptable: el canvas sigue el ancho real del panel
+    // (importante en celular, donde 520px fijos se verían borrosos).
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = canvas.clientWidth || 520;
+    const cssH = Math.round(cssW * 0.36);
+    if (canvas.width !== Math.round(cssW * dpr)) {
+      canvas.width = Math.round(cssW * dpr);
+      canvas.height = Math.round(cssH * dpr);
+      canvas.style.height = `${cssH}px`;
+    }
     const ctx = canvas.getContext("2d");
-    const W = canvas.width, H = canvas.height;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const W = cssW, H = cssH;
     ctx.clearRect(0, 0, W, H);
 
     const legend = $("tsLegend");
@@ -726,6 +737,11 @@
   if (pumpBtn) pumpBtn.addEventListener("click", runManualPump);
   const tsDays = $("tsDays");
   if (tsDays) tsDays.addEventListener("change", loadTimeseries);
+  let tsResizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(tsResizeTimer);
+    tsResizeTimer = setTimeout(loadTimeseries, 250);
+  });
   const lbClose = $("lightboxClose");
   if (lbClose) lbClose.addEventListener("click", closeLightbox);
   const lb = $("lightbox");

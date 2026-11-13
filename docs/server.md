@@ -48,12 +48,13 @@ python -m server.main
 |----------|---------|-------------|
 | `HOST` / `PORT` | `0.0.0.0` / `5000` | Bind HTTP — `PORT` = puerto de `SERVIDOR_URL` |
 | `MODEL_PATH` | `models/best.onnx` | Modelo ONNX |
-| `INFERENCE_CONFIDENCE` | `0.45` | Umbral conf. |
+| `INFERENCE_CONFIDENCE` | `0.35` | Umbral conf. (afinado por `tune_confidence.py` = máx F1) |
 | `INFERENCE_IOU` | `0.45` | NMS IoU |
 | `CLASS_NAMES` | `plastico,tela,...` | Orden = class_id |
-| `PUMP_TRIGGER_PHOTOS` | `3` | Fotos por ciclo de bomba (**informativo**: = `FOTOS_PARA_BOMBA` del firmware) |
-| `PUMP_RUN_SECONDS` | `10` | Duración del ciclo (**informativo**: = `TIEMPO_BOMBA_MS/1000`) |
+| `PUMP_TRIGGER_PHOTOS` | `3` | Fotos por ciclo de bomba (**informativo**: = `pump_photos` del dispositivo) |
+| `PUMP_RUN_SECONDS` | `10` | Duración del ciclo (**informativo**: = `pump_seconds` del dispositivo) |
 | `DETECT_MIN_CM` / `DETECT_MAX_CM` | `0` / `23` | Rango ultrasónico del firmware (display) |
+| `CAPTURE_RETENTION` | `2000` | Máx. capturas en SQLite; poda horaria de las más viejas (`0` = sin poda) |
 | `DATABASE_PATH` | `data/REBA.db` | SQLite |
 
 La carga se hace en `server/config.py` (Pydantic Settings). Tras editar `.env`, reinicia uvicorn.
@@ -66,8 +67,8 @@ La carga se hace en `server/config.py` (Pydantic Settings). Tras editar `.env`, 
 |---------|-----------------|
 | `config.py` | Settings |
 | `inference.py` | ONNX YOLOv8 local |
-| `database.py` | SQLite: captures, detections, counters, pump_events |
-| `main.py` | FastAPI, `POST /upload`, REST, WebSocket, static |
+| `database.py` | SQLite: captures, detections, counters, pump_events, device_config |
+| `main.py` | FastAPI, `POST /upload`, REST, WebSocket, static, device config, pump_cmd, export |
 
 ---
 
@@ -99,6 +100,9 @@ Respuesta `200`:
 ```
 
 - **2xx** → el ESP32 saca la foto de su cola. Cualquier error → reintento en ~15 s.
+- Validación previa al decode: body vacío → 400, magic JPEG inválido (`FF D8 FF`) → 400, >2 MB → 413, JPEG no decodificable → 400.
+- Cada upload cuenta como **heartbeat** del dispositivo (`device.online` en `/api/health` y `/api/stats`, <150 s).
+- Se guardan DOS JPEG por captura: `image_jpeg` **anotado** (cajas, para el dashboard) e `image_orig_jpeg` **crudo** del ESP32 (para exportar dataset limpio).
 - Fotos sin detecciones YOLO se guardan igual (`detections: []`) — sirven como dataset real para reentrenar.
 - Prueba manual:
 
@@ -114,7 +118,7 @@ curl -X POST http://localhost:5000/upload -H "Content-Type: image/jpeg" -H "X-Ev
 
 ### `GET /api/health`
 
-Estado del motor ONNX y contadores (`uploads_received`, `photos_since_pump`).
+Estado del motor ONNX, contadores (`uploads_received`, `photos_since_pump`) y **`device`**: `{online, last_seen, ip}` — heartbeat del ESP32 (<150 s = online; se actualiza en cada poll de config y cada upload).
 
 ### `GET /api/config`
 
@@ -136,23 +140,55 @@ Progreso inferido hacia el próximo ciclo de bomba: `photos_since_pump`, `pump_t
 
 ### `GET /api/pump-events?limit=50`
 
-Historial de ciclos de bomba inferidos (cada N fotos recibidas).
+Historial de ciclos de bomba (inferidos por fotos y **manuales** del dashboard).
+
+### `POST /api/pump/run`
+
+Encola un ciclo de bomba **manual** para el ESP32. Body `{"seconds": 10}` (1-300). El comando viaja como `pump_cmd=<unix_ts>:<s>` en el próximo `GET /api/device/config` del dispositivo (≤60 s), expira a los 10 min y se borra cuando el ESP32 hace `POST /api/device/ack`. Respuesta incluye `cmd_id` y `event_id`.
+
+### `GET /api/pump/events?limit=50`
+
+Igual que `/api/pump-events` + `pending_cmd` (la orden encolada sin confirmar, o `null`).
+
+### `POST /api/device/ack`
+
+Confirmación del ESP32 tras ejecutar `pump_cmd`. Body `{"cmd_id": <unix_ts>}`. Si coincide con el pendiente, borra el override → `{"ok": true, "cleared": true}`.
+
+### `GET /api/device/config`
+
+Texto plano `clave=valor` que el ESP32 descarga cada 60 s (heartbeat incluido). Solo overrides guardados; `pump_cmd` se sirve únicamente si tiene <10 min.
+
+### `GET/POST /api/admin/device-config`
+
+GET: overrides actuales + claves permitidas. POST: body JSON `{clave: valor}` — valor vacío/null borra el override. Claves: `wifi_ssid`, `wifi_pass`, `server_url`, `pump_photos`, `pump_seconds`, `dist_min_cm`, `dist_max_cm`, `pump_cmd`. El firmware re-valida todo al aplicarlo.
+
+### `GET /api/stats/timeseries?days=14`
+
+Serie temporal para la gráfica del dashboard: `{days, series: [{date, detections: {clase: n}, captures, pump_events}], class_names}`.
+
+### `GET /api/export/yolo?min_conf=0&limit=500`
+
+Descarga `reba_dataset_yolo.zip`: `images/*.jpg` (JPEG **original** del ESP32, sin cajas), `labels/*.txt` en formato YOLO (clase cx cy w h normalizado, desde `detections`), `data.yaml` con las 5 clases. `min_conf` filtra detecciones débiles; capturas sin detección quedan como background.
 
 ### `GET /api/detections/latest`
 
 Última inferencia (clases, cajas, ms).
 
-### `GET /api/captures?limit=20`
+### `GET /api/captures?limit=20&offset=0`
 
-Historial de fotos clasificadas. Devuelve metadatos y total; no incluye los JPEG en el JSON.
+Historial de fotos clasificadas (paginado). Devuelve metadatos y total; no incluye los JPEG en el JSON.
 
 ### `GET /api/captures/latest`
 
 Metadatos de la última foto clasificada, o `null` si todavía no hay capturas.
 
-### `GET /api/captures/{id}/image`
+### `GET /api/captures/{id}/image?orig=0`
 
-JPEG anotado asociado a esa captura. Devuelve 404 si el ID no existe.
+JPEG de la captura: por defecto el **anotado** (cajas, para el dashboard); `?orig=1` devuelve el JPEG crudo del ESP32 (fallback al anotado en capturas antiguas sin `image_orig_jpeg`).
+
+### `GET /api/captures/{id}/detections`
+
+Detecciones detalladas de una captura (clase, confianza, caja xyxy) — alimenta el lightbox del dashboard. 404 si el ID no existe.
 
 ### `GET /api/detections/history?limit=100`
 
@@ -210,20 +246,23 @@ SQLite: captures + detections + counters
 WebSocket → dashboard (foto, contadores, progreso bomba)
 ```
 
-El servidor **infiere** los ciclos de bomba contando uploads recibidos: el conteo real ocurre en la ESP32 y puede adelantarse si la cola retiene fotos sin Wi-Fi.
+El servidor **infiere** los ciclos automáticos de bomba contando uploads; los ciclos **manuales** los ordena desde el dashboard y el ESP32 los ejecuta/ack. El conteo real del firmware puede adelantarse si la cola retiene fotos sin Wi-Fi.
 
 ---
 
 ## Persistencia SQLite
 
-Archivo: `data/REBA.db` (creado al arrancar).
+Archivo: `data/REBA.db` (creado al arrancar, WAL, FK ON).
 
 | Tabla | Uso |
 |-------|-----|
-| `captures` | JPEG anotado de cada foto recibida |
-| `detections` | Clase, confianza, caja y vínculo a la foto |
+| `captures` | Dos JPEG por foto: `image_jpeg` anotado + `image_orig_jpeg` crudo |
+| `detections` | Clase, confianza, caja y vínculo a la captura (`capture_id`, SET NULL al purgar) |
 | `counters` | Acumulado por clase |
-| `pump_events` | Ciclos de bomba inferidos |
+| `pump_events` | Ciclos de bomba inferidos **y manuales** |
+| `device_config` | Overrides servidor→ESP32 + `pump_cmd` pendiente |
+
+La retención (`CAPTURE_RETENTION`, default 2000) poda las capturas más viejas cada hora; las detecciones y eventos sobreviven.
 
 ---
 

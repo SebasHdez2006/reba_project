@@ -217,6 +217,7 @@ tres herramientas:
 | `ai_pipeline/build_outdoor_eval.py` | Genera `datasets/REBA_outdoor_eval/` — copias deterministas y severamente degradadas de val+test, para evaluar robustez. |
 | `ai_pipeline/train_outdoor.py` | Re-entrena YOLOv8n combinando sintético + boost de clases raras + TACO, con la aumentación outdoor inyectada vía `model.train(augmentations=...)`, early stopping (`patience`) y exportación ONNX con archivo de pesos previos. |
 | `ai_pipeline/evaluate_outdoor.py` | Compara pesos previos (`models/archive/best_*.pt`) vs. nuevos en clean/outdoor/TACO y escribe `outdoor_training_report.md`. |
+| `ai_pipeline/eval_upload_path.py` | Evalúa el **path de producción real**: sube imágenes a `POST /upload` del server y compara detecciones contra ground-truth YOLO → `eval_upload_report.json`. |
 | `ai_pipeline/tune_confidence.py` | Barre `conf` sobre el conjunto difícil y recomienda `INFERENCE_CONFIDENCE` (máx. F1). |
 
 ### Aumentación outdoor
@@ -277,7 +278,7 @@ Parámetros editables:
 
 ```env
 MODEL_PATH=models/best.onnx
-INFERENCE_CONFIDENCE=0.45
+INFERENCE_CONFIDENCE=0.35
 INFERENCE_IOU=0.45
 ```
 
@@ -312,9 +313,13 @@ Datos locales ya curados
 
 ## 5. Reentrenar con fotos reales del sistema
 
-Las fotos que el ESP32 sube por `POST /upload` quedan guardadas como JPEG anotados en `captures.image_jpeg` (SQLite, `data/REBA.db`). Son el mejor dataset real posible: misma cámara, misma iluminación, mismo ángulo.
+Cada upload del ESP32 guarda **dos** JPEG en `captures`: `image_jpeg` (anotado con cajas, para el dashboard) e `image_orig_jpeg` (crudo, para entrenamiento). Las fotos con `detection_count = 0` sirven como background/negativos.
 
-Para reutilizarlas: extrae los BLOBs de `captures` a una carpeta (`SELECT id, image_jpeg FROM captures`), etiqueta con `dataset_builder.py` (bootstrap) o manualmente (CVAT/Label Studio), mezcla con `datasets/REBA_synthetic` y reentrena con `train_local.py`. Las fotos con `detection_count = 0` son candidatas a revisión manual o a servir como negativos.
+**Vía rápida:** botón "Exportar YOLO" del dashboard (o `GET /api/export/yolo?min_conf=…`) → ZIP con `images/` + `labels/` + `data.yaml` ya en formato YOLO listo para mezclar con los datasets sintéticos y reentrenar.
+
+**Vía manual:** extraer `image_orig_jpeg` de `captures` (`SELECT id, image_orig_jpeg FROM captures`) a una carpeta, corregir/añadir labels con CVAT/Label Studio o `dataset_builder.py` (bootstrap), mezclar con `datasets/REBA_synthetic*`/`REBA_taco` y reentrenar con `train_outdoor.py`.
+
+> Cuidado al evaluar contra el server en producción: cada upload cuenta como foto hacia el ciclo de bomba y crea `pump_events` — usar un `.env`/`DATABASE_PATH` separado o purgar las capturas de evaluación después.
 
 ---
 
