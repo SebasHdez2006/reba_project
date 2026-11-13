@@ -119,6 +119,39 @@
                 Último ciclo inferido:
                 <strong id="lastPumpEvent">—</strong>
               </p>
+
+              <div class="pump-manual">
+                <label class="pump-manual-label">
+                  Bomba manual (segundos)
+                  <input type="number" id="manualPumpSeconds" min="1" max="300"
+                         value="10" />
+                </label>
+                <button type="button" id="manualPumpBtn" class="primary">
+                  Activar ahora
+                </button>
+              </div>
+              <p id="manualPumpState" class="footer-note" style="margin: 0.4rem 0 0">
+                Se entrega al ESP32 en su próximo poll (≤60 s).
+              </p>
+              <ul id="pumpEventsList" class="event-list"></ul>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <h2>Actividad</h2>
+              <select id="tsDays" class="ts-days" title="Rango de días">
+                <option value="7">7 días</option>
+                <option value="14" selected>14 días</option>
+                <option value="30">30 días</option>
+              </select>
+            </div>
+            <div class="panel-body">
+              <canvas id="tsChart" width="520" height="180"></canvas>
+              <ul id="tsLegend" class="legend ts-legend"></ul>
+              <p class="footer-note" style="margin: 0.4rem 0 0">
+                Detecciones por día y material (barras apiladas).
+              </p>
             </div>
           </section>
 
@@ -179,6 +212,36 @@
           </section>
         </aside>
       </main>
+
+      <!-- Galería completa de capturas -->
+      <section class="panel gallery-panel">
+        <div class="panel-header">
+          <h2>Galería de capturas</h2>
+          <div class="gallery-controls">
+            <input type="search" id="galleryFilter" class="gallery-filter"
+                   placeholder="Filtrar por clase (ej. plastico)…" />
+            <a class="btn ghost" href="/api/export/yolo"
+               title="Descarga ZIP con images/ + labels/ en formato YOLO para reentrenar">Exportar YOLO</a>
+            <button type="button" id="galleryMore" class="btn ghost">Cargar más</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div id="fullGallery" class="full-gallery"></div>
+          <p id="galleryEmpty" class="capture-empty" hidden>
+            Sin capturas todavía.
+          </p>
+        </div>
+      </section>
+
+      <!-- Lightbox: detalle de una captura -->
+      <div id="lightbox" class="lightbox" hidden>
+        <div class="lightbox-inner">
+          <button type="button" id="lightboxClose" class="lightbox-close"
+                  aria-label="Cerrar">✕</button>
+          <img id="lightboxImg" alt="Captura ampliada" />
+          <div id="lightboxMeta" class="lightbox-meta"></div>
+        </div>
+      </div>
 
       <p class="footer-note">
         REBA · Dashboard local · Parámetros configurables en

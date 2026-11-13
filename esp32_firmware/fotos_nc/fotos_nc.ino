@@ -135,6 +135,17 @@ unsigned long  wifiRevertEn      = 0;   // millis() en que se revierte creds si 
 unsigned long  ultimoConfigOk    = 0;   // último GET /api/device/config exitoso
 unsigned long  srvRevertEn       = 0;   // idem para server_url
 
+// --- Bomba manual (comando servidor -> ESP32 vía /api/device/config) ---
+// El server encola "pump_cmd=<unix_ts>:<segundos>"; se ejecuta una sola vez
+// (dedup por lastPumpCmdId en RTC) y se confirma con POST /api/device/ack.
+// La ejecución es NO bloqueante: lazo normal sigue vivo durante la bomba.
+RTC_DATA_ATTR unsigned long lastPumpCmdId = 0;
+bool           cmdBombaPendiente = false;
+unsigned long  cmdBombaId        = 0;
+int            cmdBombaSecs      = 0;
+bool           bombaManualActiva = false;
+unsigned long  bombaManualFin    = 0;   // millis() deadline (wrap-safe)
+
 // WiFiManager se crea SOLO cuando se abre el portal de configuración.
 // Como global consumía ~45KB de heap desde el arranque y la cámara
 // (que necesita ~250KB contiguos) no inicializaba en esta placa.
@@ -366,6 +377,24 @@ bool aplicarClaveRemota(const String& clave, const String& valor) {
       distMaxCm = v; guardarClave("dist_max_cm", String(v));
       Serial.printf("Dist max: %.1f cm\n", distMaxCm);
     }
+    return true;
+  }
+  else if (clave == "pump_cmd") {
+    // "<unix_ts>:<segundos>" — comando de un solo uso desde el dashboard.
+    // Se valida formato y se deja PENDIENTE: la ejecución (no bloqueante)
+    // y el ack ocurren en loop(), no aquí dentro del parseo de config.
+    int sep = valor.indexOf(':');
+    if (sep <= 0 || valor.indexOf(':', sep + 1) >= 0) return false;
+    String sId = valor.substring(0, sep);
+    String sSec = valor.substring(sep + 1);
+    if (!esEntero(sId) || !esEntero(sSec)) return false;
+    unsigned long id = sId.toInt();
+    int secs = sSec.toInt();
+    if (id == 0 || id <= lastPumpCmdId || secs < 1 || secs > 300) return false;
+    cmdBombaId = id;
+    cmdBombaSecs = secs;
+    cmdBombaPendiente = true;
+    Serial.printf("Cmd bomba pendiente: id=%lu %ds\n", cmdBombaId, cmdBombaSecs);
     return true;
   }
   return false;   // clave desconocida
@@ -927,6 +956,7 @@ void correrBomba() {
   bombaEncender();
   delay(pumpSeconds * 1000UL);
   bombaApagar();
+  bombaManualActiva = false;   // el ciclo automático también apaga la manual
   Serial.println("Bomba APAGADA");
 
   fotosTomadas = 0;
@@ -1085,12 +1115,48 @@ void procesarSerial() {
   }
 }
 
+// Ejecuta el comando de bomba pendiente (llega por config remota o SET).
+// NO bloquea: la bomba se apaga sola al cumplirse el plazo, verificado en
+// loop() — así el sensor, la cola y el WiFi siguen vivos durante el ciclo.
+void procesarCmdBomba() {
+  if (!cmdBombaPendiente) return;
+  cmdBombaPendiente = false;
+  if (cmdBombaId <= lastPumpCmdId) return;      // dedup: ya se ejecutó
+  lastPumpCmdId = cmdBombaId;                   // RTC: sobrevive resets
+
+  bombaManualActiva = true;
+  bombaManualFin = millis() + (unsigned long)cmdBombaSecs * 1000UL;
+  Serial.printf("Bomba MANUAL %ds (cmd %lu)\n", cmdBombaSecs, cmdBombaId);
+  bombaEncender();
+
+  // ACK al servidor: borra el override para que no se re-entregue.
+  // Si falla (sin WiFi), el TTL del server lo expira; el dedup RTC evita
+  // re-ejecución si el comando resucita en un poll posterior.
+  if (WiFi.status() == WL_CONNECTED && srvBase.length() > 0) {
+    String url = srvBase + "/api/device/ack";
+    String body = "{\"cmd_id\":" + String(cmdBombaId) + "}";
+    const char* hdrs = "Content-Type: application/json\r\n";
+    int codigo = httpSimple("POST", url, hdrs,
+                            (const uint8_t*)body.c_str(), body.length(),
+                            nullptr, 8000);
+    Serial.printf("Ack bomba cmd %lu -> HTTP %d\n", cmdBombaId, codigo);
+  }
+}
+
 void loop() {
   unsigned long ahora = millis();
 
   revisarPortal();
   revisarReversionSrv();
   procesarSerial();
+  procesarCmdBomba();
+
+  // Apagado de la bomba manual al cumplirse el plazo (wrap-safe).
+  if (bombaManualActiva && (long)(ahora - bombaManualFin) >= 0) {
+    bombaManualActiva = false;
+    bombaApagar();
+    Serial.println("Bomba manual APAGADA");
+  }
 
   // Sin credenciales guardadas: mantener el AP de configuración disponible
   // (el portal se cierra a los 5 min; reabrirlo periódicamente).

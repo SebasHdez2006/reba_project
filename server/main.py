@@ -20,7 +20,10 @@ Documentación: docs/server.md
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
+import time
+import zipfile
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from typing import Any, Dict, List, Set
@@ -209,6 +212,7 @@ async def process_upload(body: bytes, evento: str | None) -> Dict[str, Any]:
         [d.to_dict() for d in photo_detections],
         inference_ms=result.inference_ms,
         source=result.source,
+        image_orig_jpeg=body,   # JPEG crudo del ESP32 p/exportar YOLO
     )
 
     payload = result.to_dict()
@@ -396,6 +400,20 @@ async def get_config():
 # Configuración del dispositivo ESP32 (la consulta en su arranque y cada minuto)
 # ---------------------------------------------------------------------------
 
+# Comando de bomba manual: "<unix_ts>:<segundos>". Si el ESP32 estuvo
+# offline más de esto, el comando expira y no se entrega (evita que una
+# orden vieja encienda la bomba al reconectar).
+PUMP_CMD_TTL_S = 600
+
+
+def _pump_cmd_fresh(value: str) -> bool:
+    try:
+        ts = int(value.split(":", 1)[0])
+        return (time.time() - ts) < PUMP_CMD_TTL_S
+    except (ValueError, IndexError):
+        return False
+
+
 @app.get("/api/device/config", response_class=PlainTextResponse)
 async def device_config(request: Request):
     """
@@ -408,6 +426,10 @@ async def device_config(request: Request):
     """
     _touch_device(request)
     cfg = db.get_device_config()
+    cmd = cfg.get("pump_cmd")
+    if cmd is not None and not _pump_cmd_fresh(cmd):
+        db.delete_device_config("pump_cmd")   # expirado: no entregarlo
+        cfg.pop("pump_cmd", None)
     return "\n".join(f"{k}={v}" for k, v in sorted(cfg.items())) + "\n"
 
 
@@ -445,6 +467,138 @@ async def admin_set_device_config(payload: Dict[str, Any]):
     return {"ok": True, "applied": applied, "removed": removed}
 
 
+@app.post("/api/device/ack")
+async def device_ack(payload: Dict[str, Any]):
+    """
+    ACK del ESP32 tras ejecutar un comando de un solo uso (pump_cmd).
+
+    El firmware hace POST aqui con {"cmd_id": <unix_ts>} despues de correr
+    la bomba; el servidor borra el override para que no se re-entregue.
+    """
+    try:
+        cmd_id = int(payload.get("cmd_id", -1))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "cmd_id inválido")
+    cfg = db.get_device_config()
+    pending = cfg.get("pump_cmd", "")
+    if pending.startswith(f"{cmd_id}:"):
+        db.delete_device_config("pump_cmd")
+        logger.info("pump_cmd %s confirmado por el dispositivo", cmd_id)
+        return {"ok": True, "cleared": True}
+    return {"ok": True, "cleared": False}
+
+
+# ---------------------------------------------------------------------------
+# Bomba manual (comando servidor -> ESP32 via /api/device/config)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/pump/run")
+async def pump_run(payload: Dict[str, Any]):
+    """
+    Encola un ciclo de bomba manual para el ESP32.
+
+    Body: {"seconds": 10}  (1-300 s)
+    La orden viaja en el proximo GET /api/device/config del dispositivo
+    (<=60 s) con formato pump_cmd="<unix_ts>:<segundos>"; expira a los
+    PUMP_CMD_TTL_S si el ESP32 no la recoge. El dispositivo hace ack por
+    POST /api/device/ack.
+    """
+    try:
+        seconds = int(payload.get("seconds", settings.pump_run_seconds))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "seconds inválido")
+    if not 1 <= seconds <= 300:
+        raise HTTPException(400, "seconds fuera de rango (1-300)")
+
+    cmd_id = int(time.time())
+    cmd = f"{cmd_id}:{seconds}"
+    db.set_device_config("pump_cmd", cmd)
+    event = db.insert_pump_event(
+        seconds, detail=f"Bomba manual solicitada desde dashboard (cmd {cmd_id})"
+    )
+    logger.info("pump_cmd encolado: %s", cmd)
+    return {"ok": True, "cmd_id": cmd_id, "seconds": seconds,
+            "event_id": event["id"], "note": "Se entrega en el próximo poll del ESP32 (<=60 s)"}
+
+
+@app.get("/api/pump/events")
+async def pump_events(limit: int = 50):
+    limit = max(1, min(limit, 200))
+    return {"items": db.get_pump_events(limit),
+            "pending_cmd": db.get_device_config().get("pump_cmd")}
+
+
+# ---------------------------------------------------------------------------
+# Estadísticas temporales (para gráficas del dashboard)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/stats/timeseries")
+async def stats_timeseries(days: int = 14):
+    days = max(1, min(days, 365))
+    return {"days": days, "series": db.get_stats_timeseries(days),
+            "class_names": settings.class_list}
+
+
+# ---------------------------------------------------------------------------
+# Exportación del dataset en formato YOLO para reentrenar
+# ---------------------------------------------------------------------------
+
+@app.get("/api/export/yolo")
+async def export_yolo(min_conf: float = 0.0, limit: int = 500):
+    """
+    Genera un .zip con images/*.jpg + labels/*.txt (YOLO) + data.yaml.
+
+    Usa el JPEG ORIGINAL del ESP32 (sin cajas dibujadas). Las detecciones se
+    convierten de xyxy-píxeles a xywh-normalizado. min_conf filtra labels
+    débiles; imágenes sin detecciones quedan con label vacío (background).
+    """
+    min_conf = max(0.0, min(min_conf, 1.0))
+    limit = max(1, min(limit, 2000))
+    captures = db.get_captures_for_export(limit=limit,
+                                          min_confidence=min_conf)
+    class_names = settings.class_list
+    class_to_id = {n: i for i, n in enumerate(class_names)}
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        # data.yaml compatible con ultralytics
+        names_yaml = "names:\n" + "".join(
+            f"  {i}: {n}\n" for i, n in enumerate(class_names)
+        )
+        z.writestr("data.yaml",
+                   "# Exportado desde REBA dashboard (/api/export/yolo)\n"
+                   "train: images\nval: images\n" + names_yaml)
+        for cap in captures:
+            img = cap["image"]
+            frame = cv2.imdecode(np.frombuffer(img, np.uint8),
+                                 cv2.IMREAD_COLOR)
+            if frame is None:
+                continue
+            h, w = frame.shape[:2]
+            stem = f"capture_{cap['id']:05d}"
+            z.writestr(f"images/{stem}.jpg", img)
+            lines = []
+            for d in cap["detections"]:
+                cid = class_to_id.get(d["class_name"])
+                if cid is None:
+                    continue
+                cx = ((d["x1"] + d["x2"]) / 2) / w
+                cy = ((d["y1"] + d["y2"]) / 2) / h
+                bw = (d["x2"] - d["x1"]) / w
+                bh = (d["y2"] - d["y1"]) / h
+                lines.append(f"{cid} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}")
+            z.writestr(f"labels/{stem}.txt", "\n".join(lines))
+
+    buf.seek(0)
+    logger.info("Export YOLO: %d capturas -> zip", len(captures))
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition":
+                 "attachment; filename=reba_dataset_yolo.zip"},
+    )
+
+
 @app.get("/api/stats")
 async def get_stats():
     stats = db.get_stats()
@@ -475,9 +629,11 @@ async def detections_latest():
 
 
 @app.get("/api/captures")
-async def captures_history(limit: int = 20):
+async def captures_history(limit: int = 20, offset: int = 0):
     limit = max(1, min(limit, 100))
-    return {"items": db.get_captures(limit), "total": db.count_captures()}
+    offset = max(0, min(offset, 100000))
+    return {"items": db.get_captures(limit, offset),
+            "total": db.count_captures(), "offset": offset}
 
 
 @app.get("/api/captures/latest")
@@ -486,11 +642,29 @@ async def latest_capture_metadata():
 
 
 @app.get("/api/captures/{capture_id}/image")
-async def capture_image(capture_id: int):
-    image = db.get_capture_image(capture_id)
+async def capture_image(capture_id: int, orig: bool = False):
+    """
+    JPEG de la captura. Por defecto el ANOTADO (cajas dibujadas) que ve el
+    dashboard; ?orig=1 devuelve el JPEG crudo del ESP32 si existe.
+    """
+    image = (db.get_capture_image_orig(capture_id) if orig
+             else db.get_capture_image(capture_id))
+    if image is None:
+        # orig puede no existir en capturas antiguas -> fallback al anotado
+        if orig:
+            image = db.get_capture_image(capture_id)
     if image is None:
         raise HTTPException(404, "Capture not found")
     return Response(content=image, media_type="image/jpeg")
+
+
+@app.get("/api/captures/{capture_id}/detections")
+async def capture_detections(capture_id: int):
+    """Detecciones detalladas de una captura (para el lightbox del dashboard)."""
+    if not db.capture_exists(capture_id):
+        raise HTTPException(404, "Capture not found")
+    return {"capture_id": capture_id,
+            "detections": db.get_capture_detections(capture_id)}
 
 
 # ---------------------------------------------------------------------------

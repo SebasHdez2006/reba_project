@@ -234,3 +234,85 @@ en banco con la ESP32 en `COM9` contra el server real.
 - Bomba: 3 fotos → relé GPIO13 (NC, 12V boost) — verificar con multímetro.
 - Sumergibilidad: carcasa estanca + HC-SR04 fuera del agua.
 - Modelo: primeras fotos acuáticas reales = dataset para reentrenar.
+
+---
+
+## Sesión 5 — Evaluación por path de producción + módulos del dashboard (13-nov, noche)
+
+### Evaluación de reconocimiento SIN hardware (path /upload real)
+
+Nuevo script `ai_pipeline/eval_upload_path.py`: sube imágenes del dataset
+por HTTP a `POST /upload` — el mismo contrato del ESP32 — y compara las
+detecciones contra etiquetas YOLO ground-truth (IoU≥0.5, AP@0.5 VOC-101pts).
+
+**Resultado TACO test (74 fotos reales de basura), umbral operativo 0.35:**
+
+| Clase | P | R | F1 |
+|---|---|---|---|
+| plastico | 0.400 | 0.238 | 0.298 |
+| tela | 0.000 | 0.000 | 0.000 |
+| unicel | 0.000 | 0.000 | 0.000 |
+| metal | 0.333 | 0.143 | 0.200 |
+| GLOBAL | 0.394 | 0.198 | 0.264 |
+
+- mAP@0.5 operativo = 0.050 (el server solo devuelve dets ≥0.35).
+- Inferencia media 97.8 ms (p95 121 ms) en CPU.
+- **Lectura**: conservador en escenas terrestres reales — pierde ~76% de
+  objetos. El dominio real (basura flotando, vista superior, QVGA) es más
+  simple; estas fotos son un piso pesimista. Las capturas acuáticas
+  decidirán. Reporte: `ai_pipeline/eval_upload_report.json`.
+- Las 77 imágenes de eval se purgaron de la DB tras el test (quedaron solo
+  las 4 capturas reales del ESP32).
+
+### Nuevos módulos del dashboard (sin autenticación — LAN local)
+
+**Server:**
+- `POST /api/pump/run {seconds}` → encola `pump_cmd=<unix_ts>:<s>` en
+  `device_config` (válidas 1-300 s) + `pump_event` "manual".
+- `GET /api/device/config` → sirve `pump_cmd` solo si <10 min (TTL);
+  expirado se borra (evita bomba fantasma tras offline largo).
+- `POST /api/device/ack {cmd_id}` → el ESP32 confirma ejecución; borra el
+  override.
+- `GET /api/pump/events` → historial + `pending_cmd`.
+- `GET /api/stats/timeseries?days=N` → detecciones/día por clase +
+  capturas + pump_events.
+- `GET /api/export/yolo?min_conf=&limit=` → ZIP con `images/*.jpg`
+  (JPEG ORIGINAL del ESP32, sin cajas) + `labels/*.txt` YOLO + `data.yaml`.
+- `GET /api/captures?offset=` paginación; `GET /api/captures/{id}/detections`
+  detalle; `GET /api/captures/{id}/image?orig=1` JPEG crudo.
+- `captures.image_orig_jpeg` (nueva columna, migración automática) guarda
+  el JPEG sin anotaciones para reentrenar limpio.
+
+**Firmware `fotos_nc.ino`:**
+- `aplicarClaveRemota` acepta `pump_cmd=<ts>:<s>` (validación estricta,
+  dedup por `lastPumpCmdId` RTC_DATA_ATTR — sobrevive resets).
+- Ejecución NO bloqueante en `loop()`: `bombaManualActiva`/`bombaManualFin`
+  con comparación wrap-safe; el sensor/cola/WiFi siguen vivos durante el
+  ciclo. `correrBomba()` limpia el flag para consistencia.
+- ACK por `POST /api/device/ack` tras ejecutar; si falla, el TTL del
+  servidor lo expira y el dedup RTC evita re-ejecución.
+
+**Dashboard (`static/`):**
+- Panel **Actividad**: barras apiladas Canvas 2D de detecciones/día por
+  clase (selector 7/14/30 días, auto-refresh 30 s).
+- Panel **Bomba**: control manual (segundos + "Activar ahora"), estado de
+  orden pendiente y lista de eventos recientes.
+- **Galería completa**: grid paginado (24/pág, "Cargar más"), filtro por
+  clase en vivo, click → lightbox con imagen anotada + chips de detección
+  con confianza. Nuevas capturas WS aparecen arriba solas.
+- Botón **Exportar YOLO** (descarga el ZIP directo).
+
+### Verificado end-to-end
+
+- `POST /api/pump/run {seconds:5}` → ESP32 lo recibió en su poll →
+  `Bomba MANUAL 5s` → `Ack -> HTTP 200` → `Bomba manual APAGADA` →
+  `pending_cmd: None` en servidor. Relay conmutó (GPIO13, semántica NC).
+- Export YOLO: ZIP válido (4 imágenes + labels + data.yaml).
+- Paginación, detecciones por captura (404 correcto), orig/annotated OK.
+- Compilación firmware OK (1 134 541 B, 36%).
+
+### Pendiente
+
+- HC-SR04 sigue sin lecturas en banco (no cableado a la placa del banco).
+- Prueba del trigger ultrasónico y del ciclo automático 3-fotos→bomba.
+- Evaluación con capturas acuáticas reales cuando existan.

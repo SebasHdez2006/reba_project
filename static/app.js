@@ -209,6 +209,12 @@
     card.append(image, caption);
     gallery.prepend(card);
     while (gallery.children.length > 6) gallery.lastElementChild.remove();
+
+    // Reflejar en la galería completa si no está duplicada
+    if (!galleryState.items.some((c) => String(c.id) === id)) {
+      galleryState.items.unshift(capture);
+      renderGallery();
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -404,6 +410,253 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Galería completa (paginada, filtro por clase, lightbox)
+  // ---------------------------------------------------------------------------
+  const galleryState = {
+    items: [],          // capturas cargadas (más reciente primero)
+    offset: 0,
+    limit: 24,
+    loading: false,
+    done: false,
+    filter: "",
+  };
+
+  function galleryCard(capture) {
+    const card = document.createElement("div");
+    card.className = "capture-card";
+    card.dataset.captureId = capture.id;
+    const classes = (capture.class_names || []).join(", ") || "sin clase";
+    const ts = capture.ts ? new Date(capture.ts).toLocaleString() : "";
+    const img = document.createElement("img");
+    img.src = `/api/captures/${encodeURIComponent(capture.id)}/image`;
+    img.alt = `Captura ${capture.id}: ${classes}`;
+    img.loading = "lazy";
+    const meta = document.createElement("div");
+    meta.className = "g-meta";
+    const cls = document.createElement("span");
+    cls.className = "g-cls";
+    cls.textContent = classes;
+    const time = document.createElement("span");
+    time.className = "g-ts";
+    time.textContent = `#${capture.id} · ${ts}`;
+    meta.append(cls, time);
+    card.append(img, meta);
+    card.addEventListener("click", () => openLightbox(capture));
+    return card;
+  }
+
+  function renderGallery() {
+    const grid = $("fullGallery");
+    if (!grid) return;
+    grid.replaceChildren();
+    const f = galleryState.filter.trim().toLowerCase();
+    const seen = new Set();
+    const shown = galleryState.items.filter((c) => {
+      if (seen.has(String(c.id))) return false;
+      seen.add(String(c.id));
+      return !f || (c.class_names || []).join(" ").toLowerCase().includes(f);
+    });
+    for (const c of shown.slice(0, 120)) grid.appendChild(galleryCard(c));
+    const empty = $("galleryEmpty");
+    if (empty) empty.hidden = shown.length > 0;
+    const more = $("galleryMore");
+    if (more) more.style.display = galleryState.done ? "none" : "";
+  }
+
+  async function loadFullGallery(reset = false) {
+    if (galleryState.loading) return;
+    if (reset) {
+      galleryState.items = [];
+      galleryState.offset = 0;
+      galleryState.done = false;
+    }
+    if (galleryState.done) { renderGallery(); return; }
+    galleryState.loading = true;
+    try {
+      const res = await fetch(
+        `/api/captures?limit=${galleryState.limit}&offset=${galleryState.offset}`
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const items = data.items || [];
+      galleryState.items.push(...items);
+      galleryState.offset += items.length;
+      galleryState.done = items.length < galleryState.limit;
+      renderGallery();
+    } catch (err) {
+      console.warn("Gallery load failed", err);
+    } finally {
+      galleryState.loading = false;
+    }
+  }
+
+  // Lightbox con detecciones detalladas
+  async function openLightbox(capture) {
+    const lb = $("lightbox");
+    const img = $("lightboxImg");
+    const meta = $("lightboxMeta");
+    if (!lb || !img) return;
+    img.src = `/api/captures/${encodeURIComponent(capture.id)}/image?v=${Date.now()}`;
+    meta.textContent = `#${capture.id} · ${capture.ts ? new Date(capture.ts).toLocaleString() : ""}`;
+    lb.hidden = false;
+    try {
+      const res = await fetch(`/api/captures/${capture.id}/detections`);
+      if (res.ok) {
+        const data = await res.json();
+        const chips = document.createElement("div");
+        for (const d of data.detections || []) {
+          const chip = document.createElement("span");
+          chip.className = "det-chip";
+          chip.textContent = `${d.class_name} ${(d.confidence * 100).toFixed(0)}%`;
+          chips.appendChild(chip);
+        }
+        meta.appendChild(chips);
+      }
+    } catch (_) { /* sin detalle: la imagen ya se ve */ }
+  }
+
+  function closeLightbox() {
+    const lb = $("lightbox");
+    if (lb) lb.hidden = true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Bomba manual + eventos
+  // ---------------------------------------------------------------------------
+  async function runManualPump() {
+    const input = $("manualPumpSeconds");
+    const btn = $("manualPumpBtn");
+    const stateEl = $("manualPumpState");
+    const secs = parseInt(input?.value, 10);
+    if (!secs || secs < 1 || secs > 300) {
+      if (stateEl) stateEl.textContent = "Segundos inválidos (1-300).";
+      return;
+    }
+    if (btn) btn.disabled = true;
+    if (stateEl) stateEl.textContent = "Encolando…";
+    try {
+      const res = await fetch("/api/pump/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seconds: secs }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      if (stateEl) stateEl.textContent =
+        `Orden encolada (${secs} s) — el ESP32 la ejecuta en su próximo poll.`;
+      loadPumpEvents();
+    } catch (err) {
+      console.warn("pump/run failed", err);
+      if (stateEl) stateEl.textContent = `Error: ${err.message}`;
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function loadPumpEvents() {
+    const ul = $("pumpEventsList");
+    const stateEl = $("manualPumpState");
+    if (!ul) return;
+    try {
+      const res = await fetch("/api/pump/events?limit=8");
+      if (!res.ok) return;
+      const data = await res.json();
+      ul.replaceChildren();
+      const pending = data.pending_cmd;   // "<ts>:<secs>" si hay orden sin ack
+      if (pending && stateEl && !stateEl.textContent.startsWith("Orden encolada")) {
+        const secs = pending.split(":")[1] || "?";
+        stateEl.textContent = `⏳ Orden pendiente de entrega: ${secs} s`;
+      }
+      for (const ev of data.items || []) {
+        const li = document.createElement("li");
+        const ts = ev.ts ? new Date(ev.ts).toLocaleString() : "";
+        li.innerHTML = `<strong>${ts}</strong> — ${ev.detail || `${ev.photos_trigger} fotos`}`;
+        ul.appendChild(li);
+      }
+    } catch (_) { /* silencioso: se reintenta en el próximo poll */ }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Gráfica de actividad (barras apiladas por clase, Canvas 2D)
+  // ---------------------------------------------------------------------------
+  async function loadTimeseries() {
+    const sel = $("tsDays");
+    const days = sel ? parseInt(sel.value, 10) || 14 : 14;
+    try {
+      const res = await fetch(`/api/stats/timeseries?days=${days}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      drawTsChart(data.series || [], data.class_names || []);
+    } catch (_) { /* silencioso */ }
+  }
+
+  function drawTsChart(series, classNames) {
+    const canvas = $("tsChart");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    const legend = $("tsLegend");
+    if (legend) {
+      legend.replaceChildren();
+      for (const n of classNames) {
+        const li = document.createElement("li");
+        li.innerHTML = `<span class="legend-left">
+          <span class="swatch ${n}" style="background:${CLASS_COLORS[n] || "#fff"}"></span>
+          <span>${n}</span></span>`;
+        legend.appendChild(li);
+      }
+    }
+    if (!series.length) {
+      ctx.fillStyle = "rgba(255,255,255,0.4)";
+      ctx.font = "13px sans-serif";
+      ctx.fillText("Sin datos en el rango", 16, H / 2);
+      return;
+    }
+
+    const padL = 30, padR = 8, padT = 12, padB = 26;
+    const plotW = W - padL - padR, plotH = H - padT - padB;
+    const totals = series.map((d) =>
+      Object.values(d.detections || {}).reduce((s, n) => s + n, 0)
+    );
+    const maxV = Math.max(1, ...totals);
+
+    // rejilla horizontal + etiquetas Y
+    ctx.strokeStyle = "rgba(255,255,255,0.07)";
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    ctx.font = "10px sans-serif";
+    for (let i = 0; i <= 3; i++) {
+      const y = padT + plotH - (plotH * i) / 3;
+      ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+      ctx.fillText(String(Math.round((maxV * i) / 3)), 4, y + 3);
+    }
+
+    const n = series.length;
+    const slot = plotW / n;
+    const barW = Math.min(46, slot * 0.62);
+
+    series.forEach((day, i) => {
+      const x = padL + slot * i + (slot - barW) / 2;
+      let acc = 0;
+      for (const cls of classNames) {
+        const v = day.detections?.[cls] || 0;
+        if (v <= 0) continue;
+        const bh = (v / maxV) * plotH;
+        const y = padT + plotH - acc - bh;
+        ctx.fillStyle = CLASS_COLORS[cls] || "#888";
+        ctx.fillRect(x, y, barW, bh);
+        acc += bh;
+      }
+      // etiqueta del día
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.textAlign = "center";
+      ctx.fillText(day.date.slice(5), x + barW / 2, H - 8);
+      ctx.textAlign = "left";
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // Bootstrap: REST snapshot por si el WS tarda
   // ---------------------------------------------------------------------------
   async function bootstrapFromRest() {
@@ -451,6 +704,8 @@
     try {
       const stats = await fetch("/api/stats").then((r) => r.json());
       applyStats(stats);
+      loadPumpEvents();       // refresca eventos + estado de orden pendiente
+      loadTimeseries();       // gráfica de actividad
     } catch (_) { /* red local: reintenta en el próximo ciclo */ }
   }, 30000);
 
@@ -459,8 +714,29 @@
   const cfgReload = $("deviceConfigReload");
   if (cfgReload) cfgReload.addEventListener("click", loadDeviceConfig);
 
+  // --- Módulos nuevos ---
+  const galleryMoreBtn = $("galleryMore");
+  if (galleryMoreBtn) galleryMoreBtn.addEventListener("click", () => loadFullGallery(false));
+  const galleryFilter = $("galleryFilter");
+  if (galleryFilter) galleryFilter.addEventListener("input", () => {
+    galleryState.filter = galleryFilter.value;
+    renderGallery();
+  });
+  const pumpBtn = $("manualPumpBtn");
+  if (pumpBtn) pumpBtn.addEventListener("click", runManualPump);
+  const tsDays = $("tsDays");
+  if (tsDays) tsDays.addEventListener("change", loadTimeseries);
+  const lbClose = $("lightboxClose");
+  if (lbClose) lbClose.addEventListener("click", closeLightbox);
+  const lb = $("lightbox");
+  if (lb) lb.addEventListener("click", (e) => { if (e.target === lb) closeLightbox(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeLightbox(); });
+
   bootstrapFromRest();
   bootstrapCaptures();
   loadDeviceConfig();
+  loadFullGallery(true);
+  loadPumpEvents();
+  loadTimeseries();
   connectWs();
 })();

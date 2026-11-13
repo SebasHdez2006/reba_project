@@ -106,6 +106,15 @@ class Database:
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_detections_capture ON detections(capture_id)"
         )
+        # JPEG original del ESP32 (sin cajas dibujadas) — lo usa la exportación
+        # YOLO para reentrenar; el dashboard sigue mostrando el anotado.
+        capture_columns = {
+            row["name"] for row in self.conn.execute("PRAGMA table_info(captures)")
+        }
+        if "image_orig_jpeg" not in capture_columns:
+            self.conn.execute(
+                "ALTER TABLE captures ADD COLUMN image_orig_jpeg BLOB"
+            )
         self.conn.commit()
 
     def ensure_classes(self, class_names: List[str]) -> None:
@@ -163,6 +172,7 @@ class Database:
         detections: List[Dict[str, Any]],
         inference_ms: float,
         source: str = "onnx",
+        image_orig_jpeg: Optional[bytes] = None,
     ) -> Dict[str, Any]:
         """
         Guarda una foto y sus detecciones en una sola transacción SQLite.
@@ -178,10 +188,12 @@ class Database:
         with self.conn:
             cur = self.conn.execute(
                 """
-                INSERT INTO captures(ts, image_jpeg, source, inference_ms, detection_count)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO captures(ts, image_jpeg, image_orig_jpeg, source, inference_ms, detection_count)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (ts, sqlite3.Binary(image_jpeg), source, float(inference_ms), len(detections)),
+                (ts, sqlite3.Binary(image_jpeg),
+                 sqlite3.Binary(image_orig_jpeg) if image_orig_jpeg else None,
+                 source, float(inference_ms), len(detections)),
             )
             capture_id = int(cur.lastrowid)
             for det in detections:
@@ -220,7 +232,9 @@ class Database:
             "class_names": list(dict.fromkeys(d["class_name"] for d in detections)),
         }
 
-    def get_captures(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def get_captures(
+        self, limit: int = 50, offset: int = 0
+    ) -> List[Dict[str, Any]]:
         rows = self.conn.execute(
             """
             SELECT c.id, c.ts, c.source, c.inference_ms, c.detection_count,
@@ -229,9 +243,9 @@ class Database:
             LEFT JOIN detections AS d ON d.capture_id = c.id
             GROUP BY c.id
             ORDER BY c.id DESC
-            LIMIT ?
+            LIMIT ? OFFSET ?
             """,
-            (limit,),
+            (limit, offset),
         ).fetchall()
         return [
             {
@@ -251,9 +265,102 @@ class Database:
         ).fetchone()
         return bytes(row["image_jpeg"]) if row else None
 
+    def get_capture_image_orig(self, capture_id: int) -> Optional[bytes]:
+        """JPEG original sin anotaciones; NULL en capturas antiguas."""
+        row = self.conn.execute(
+            "SELECT image_orig_jpeg FROM captures WHERE id = ?", (capture_id,)
+        ).fetchone()
+        if not row or row["image_orig_jpeg"] is None:
+            return None
+        return bytes(row["image_orig_jpeg"])
+
+    def get_capture_detections(self, capture_id: int) -> List[Dict[str, Any]]:
+        """Detecciones de una captura (para exportar etiquetas YOLO)."""
+        rows = self.conn.execute(
+            """
+            SELECT class_name, confidence, x1, y1, x2, y2
+            FROM detections WHERE capture_id = ? ORDER BY confidence DESC
+            """,
+            (capture_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_captures_for_export(
+        self, limit: int = 500, min_confidence: float = 0.0
+    ) -> List[Dict[str, Any]]:
+        """Capturas con su JPEG original (o anotado si no hay orig) para export."""
+        rows = self.conn.execute(
+            """
+            SELECT c.id, c.ts, COALESCE(c.image_orig_jpeg, c.image_jpeg) AS img
+            FROM captures c ORDER BY c.id DESC LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        out = []
+        for r in rows:
+            dets = self.get_capture_detections(r["id"])
+            dets = [d for d in dets if d["confidence"] >= min_confidence]
+            out.append({"id": r["id"], "ts": r["ts"], "image": bytes(r["img"]),
+                        "detections": dets})
+        return out
+
+    def get_stats_timeseries(self, days: int = 14) -> List[Dict[str, Any]]:
+        """
+        Detecciones por día y clase + capturas/eventos, últimos `days` días.
+        Devuelve una fila por (día, clase) más totales por día.
+        """
+        days = max(1, min(days, 365))
+        det_rows = self.conn.execute(
+            """
+            SELECT substr(ts, 1, 10) AS day, class_name, COUNT(*) AS n
+            FROM detections
+            WHERE ts >= date('now', ?)
+            GROUP BY day, class_name ORDER BY day
+            """,
+            (f"-{days} days",),
+        ).fetchall()
+        cap_rows = self.conn.execute(
+            """
+            SELECT substr(ts, 1, 10) AS day, COUNT(*) AS n
+            FROM captures WHERE ts >= date('now', ?) GROUP BY day
+            """,
+            (f"-{days} days",),
+        ).fetchall()
+        pump_rows = self.conn.execute(
+            """
+            SELECT substr(ts, 1, 10) AS day, COUNT(*) AS n
+            FROM pump_events WHERE ts >= date('now', ?) GROUP BY day
+            """,
+            (f"-{days} days",),
+        ).fetchall()
+
+        by_day: Dict[str, Dict[str, Any]] = {}
+        for r in det_rows:
+            d = by_day.setdefault(r["day"], {"detections": {}, "captures": 0,
+                                              "pump_events": 0})
+            d["detections"][r["class_name"]] = r["n"]
+        for r in cap_rows:
+            d = by_day.setdefault(r["day"], {"detections": {}, "captures": 0,
+                                              "pump_events": 0})
+            d["captures"] = r["n"]
+        for r in pump_rows:
+            d = by_day.setdefault(r["day"], {"detections": {}, "captures": 0,
+                                              "pump_events": 0})
+            d["pump_events"] = r["n"]
+        return [
+            {"date": day, **vals}
+            for day, vals in sorted(by_day.items())
+        ]
+
     def count_captures(self) -> int:
         row = self.conn.execute("SELECT COUNT(*) AS total FROM captures").fetchone()
         return int(row["total"])
+
+    def capture_exists(self, capture_id: int) -> bool:
+        row = self.conn.execute(
+            "SELECT 1 FROM captures WHERE id = ?", (capture_id,)
+        ).fetchone()
+        return row is not None
 
     def prune_captures(self, keep: int) -> int:
         """
@@ -341,6 +448,10 @@ class Database:
         "wifi_ssid", "wifi_pass", "server_url",
         "pump_photos", "pump_seconds",
         "dist_min_cm", "dist_max_cm",
+        # Comando de un solo uso hacia la ESP32: "<unix_ts>:<segundos>".
+        # Lo crea POST /api/pump/run; el firmware lo ejecuta una vez y hace
+        # ack por POST /api/device/ack. TTL de 10 min al servirse en config.
+        "pump_cmd",
     )
 
     def get_device_config(self) -> Dict[str, str]:

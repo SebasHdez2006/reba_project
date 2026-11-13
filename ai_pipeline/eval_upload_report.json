@@ -1,0 +1,58 @@
+{
+  "dataset": "datasets\\REBA_taco",
+  "split": "test",
+  "n_images": 74,
+  "errors": 0,
+  "per_class": {
+    "plastico": {
+      "precision": 0.4,
+      "recall": 0.2376,
+      "tp": 24,
+      "fp": 36,
+      "fn": 77,
+      "ap50": 0.13205077213594585
+    },
+    "tela": {
+      "precision": 0,
+      "recall": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 4,
+      "ap50": 0.0
+    },
+    "organico": {
+      "precision": 0,
+      "recall": 0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 0,
+      "ap50": null
+    },
+    "unicel": {
+      "precision": 0,
+      "recall": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 12,
+      "ap50": 0.0
+    },
+    "metal": {
+      "precision": 0.3333,
+      "recall": 0.1429,
+      "tp": 2,
+      "fp": 4,
+      "fn": 12,
+      "ap50": 0.06732673267326734
+    }
+  },
+  "global": {
+    "precision": 0.3939,
+    "recall": 0.1985,
+    "f1": 0.264,
+    "map50": 0.0498,
+    "tp": 26,
+    "fp": 40,
+    "fn": 105
+  },
+  "inference_ms_mean": 97.8
+}
