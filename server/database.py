@@ -255,6 +255,26 @@ class Database:
         row = self.conn.execute("SELECT COUNT(*) AS total FROM captures").fetchone()
         return int(row["total"])
 
+    def prune_captures(self, keep: int) -> int:
+        """
+        Borra las capturas más antiguas dejando solo las `keep` más recientes.
+
+        Las detecciones ligadas quedan con capture_id=NULL (ON DELETE SET NULL)
+        — la evidencia de clasificación se conserva aunque la foto se purgue.
+        Devuelve cuántas filas se eliminaron.
+        """
+        if keep <= 0:
+            return 0
+        cur = self.conn.execute(
+            """
+            DELETE FROM captures
+            WHERE id NOT IN (SELECT id FROM captures ORDER BY id DESC LIMIT ?)
+            """,
+            (int(keep),),
+        )
+        self.conn.commit()
+        return int(cur.rowcount) if cur.rowcount and cur.rowcount > 0 else 0
+
     def insert_pump_event(
         self,
         photos_trigger: int,

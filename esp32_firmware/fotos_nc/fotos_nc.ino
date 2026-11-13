@@ -85,6 +85,14 @@ const unsigned long REINTENTO_WIFI_MS  = 30000;   // espera entre reconexiones
 const unsigned long POLL_CONFIG_MS      = 60000;  // descarga config del server cada 60 s
 const unsigned long WIFI_FAILS_PARA_PORTAL = 20;  // ~10 min sin WiFi -> reabre portal
 const unsigned long WIFI_REVERT_MS      = 90000;  // si creds nuevas no conectan en 90 s, revierte
+const unsigned long SRV_REVERT_MS       = 360000; // si server_url nuevo no responde en 6 min, revierte
+const unsigned long PORTAL_RETRY_MS     = 30000;  // reabrir portal si no hay creds
+const unsigned long CAMARA_RETRY_MS     = 30000;  // reintentar init de cámara si falló
+const unsigned long CAMARA_TEST_MS      = 900000; // health check silencioso cada 15 min
+const int            FALLAS_CAMARA_REINIT = 5;    // fallos de captura seguidos -> re-init
+const int            FOTO_MAX_INTENTOS  = 25;     // ~6 min de reintentos -> descartar (anti poison)
+const size_t         HTTP_RESP_MAX      = 4096;   // tope body config remota (anti heap)
+const size_t         COLA_HEAP_RESERVA  = 24576;  // RAM libre mínima para encolar foto
 
 // ---------------- Pines de la cámara (AI-Thinker) ----------------
 #define PWDN_GPIO_NUM     32
@@ -116,7 +124,13 @@ String         srvBase;            // ej. "http://192.168.1.3:5000" (sin /upload
 int            wifiFallos        = 0;
 bool           portalActivo      = false;
 bool           camaraOk          = false;
+int            fallosCamara      = 0;      // fallos de captura seguidos
+float          lastDistCm        = -1.0f; // última lectura HC-SR04 (-1 = sin eco)
 unsigned long  ultimoPollConfig  = 0;
+unsigned long  ultimoTestCamara  = 0;      // último health check silencioso
+// RTC_DATA_ATTR sobrevive resets por software/brownout/watchdog (no por
+// power-cycle): cuenta boots consecutivos para detectar un bootloop.
+RTC_DATA_ATTR unsigned long bootCount = 0;
 unsigned long  wifiRevertEn      = 0;   // millis() en que se revierte creds si sigue sin conectar
 unsigned long  ultimoConfigOk    = 0;   // último GET /api/device/config exitoso
 unsigned long  srvRevertEn       = 0;   // idem para server_url
@@ -132,6 +146,17 @@ int httpSimple(const String& method, const String& url,
                const char* headersExtra, const uint8_t* body, size_t bodyLen,
                String* respBody, unsigned long timeoutMs);
 
+// Clamp de valores leídos de NVS: una clave corrupta no debe dejar el
+// dispositivo en un estado inválido (p.ej. pump_photos=0 o dist_max=-5).
+static int clampInt(long v, int lo, int hi, int def) {
+  if (v < lo || v > hi) return def;
+  return (int)v;
+}
+static float clampFloat(float v, float lo, float hi, float def) {
+  if (isnan(v) || v < lo || v > hi) return def;
+  return v;
+}
+
 void cargarConfig() {
   prefs.begin("reba", true);
   wifiSsid = prefs.getString("ssid", "");
@@ -139,11 +164,16 @@ void cargarConfig() {
   srvBase  = prefs.getString("srv", SRV_BASE_DEFAULT);
   // Las claves numéricas se persisten como string (guardarClave); leerlas
   // con getInt/getFloat devolvería el default por desajuste de tipo en NVS.
-  pumpPhotos  = prefs.getString("pump_photos", "3").toInt();
-  pumpSeconds = prefs.getString("pump_seconds", "10").toInt();
-  distMinCm   = prefs.getString("dist_min_cm", "0").toFloat();
-  distMaxCm   = prefs.getString("dist_max_cm", "23").toFloat();
+  pumpPhotos  = clampInt(prefs.getString("pump_photos", "3").toInt(),   1, 50,   3);
+  pumpSeconds = clampInt(prefs.getString("pump_seconds", "10").toInt(), 1, 300, 10);
+  distMinCm   = clampFloat(prefs.getString("dist_min_cm", "0").toFloat(), 0.0f, 500.0f, 0.0f);
+  distMaxCm   = clampFloat(prefs.getString("dist_max_cm", "23").toFloat(), 1.0f, 500.0f, 23.0f);
   prefs.end();
+  // Rango coherente: si min >= max (NVS corrupto), restablecer defaults.
+  if (distMinCm >= distMaxCm) { distMinCm = 0.0f; distMaxCm = 23.0f; }
+  // server_url debe ser http:// alcanzable por httpSimple; si no, default.
+  if (!srvBase.startsWith("http://")) srvBase = SRV_BASE_DEFAULT;
+  while (srvBase.endsWith("/")) srvBase.remove(srvBase.length() - 1);
 }
 
 void guardarClave(const String& clave, const String& valor) {
@@ -220,7 +250,12 @@ void aplicarWifiRemoto() {
 
   String nuevoSsid = pendWifiSsid;
   String nuevoPass = pendWifiPass;
-  if (nuevoSsid.length() == 0) return;
+  // SSID 1-32 chars, pass 0-63 (red abierta permitida). Fuera de rango se
+  // ignora el cambio completo — nunca se guarda una config WiFi inválida.
+  if (nuevoSsid.length() == 0 || nuevoSsid.length() > 32 || nuevoPass.length() > 63) {
+    Serial.println("WiFi remoto rechazado: ssid/pass fuera de rango");
+    return;
+  }
   if (nuevoSsid == wifiSsid && nuevoPass == wifiPass) return;
 
   // Respaldo de las creds actuales: si las nuevas no conectan en
@@ -237,55 +272,103 @@ void aplicarWifiRemoto() {
   WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
 }
 
-void aplicarClaveRemota(const String& clave, const String& valor) {
+// Validación estricta de numéricos: String::toInt()/toFloat() aceptan
+// prefijos ("3abc" -> 3, "abc" -> 0). Para config remota/serial un valor
+// malformado debe rechazarse, no reinterpretarse.
+static bool esEntero(const String& s) {
+  if (s.length() == 0) return false;
+  for (unsigned i = 0; i < s.length(); i++) {
+    char c = s[i];
+    if (i == 0 && (c == '-' || c == '+')) continue;
+    if (c < '0' || c > '9') return false;
+  }
+  return true;
+}
+static bool esFloat(const String& s) {
+  int puntos = 0;
+  for (unsigned i = 0; i < s.length(); i++) {
+    char c = s[i];
+    if (i == 0 && (c == '-' || c == '+')) continue;
+    if (c == '.') { if (++puntos > 1) return false; continue; }
+    if (c < '0' || c > '9') return false;
+  }
+  return puntos <= 1 && s.length() > 0;
+}
+
+// Devuelve true si la clave se aplicó (o quedó pendiente de su pareja
+// wifi_ssid/wifi_pass); false si fue rechazada por validación.
+bool aplicarClaveRemota(const String& clave, const String& valor) {
   if (clave == "wifi_ssid") {
+    if (valor.length() == 0 || valor.length() > 32) return false;
     pendWifiSsid = valor; pendWifiSsidOk = true;
     if (pendWifiPassOk) aplicarWifiRemoto();
+    return true;
   }
   else if (clave == "wifi_pass") {
+    if (valor.length() > 63) return false;
     pendWifiPass = valor; pendWifiPassOk = true;
     if (pendWifiSsidOk) aplicarWifiRemoto();
+    return true;
   }
   else if (clave == "server_url") {
     String v = valor;
     while (v.endsWith("/")) v.remove(v.length() - 1);   // normalizar: sin / final
-    if (v.length() > 0 && v != srvBase) {
+    // Solo http:// plano (LAN): httpSimple no soporta https ni otros
+    // esquemas; una URL mala dejaría el dispositivo inalcanzable.
+    if (v.length() > 7 && v.length() <= 96 && v.startsWith("http://")
+        && v.indexOf(' ') < 0 && v != srvBase) {
       // Respaldo: si la URL nueva no responde en ~6 min se revierte.
       guardarClave("srv_bak", srvBase);
       srvBase = v;
       guardarClave("srv", srvBase);
-      srvRevertEn = millis() + 360000UL;
+      srvRevertEn = millis() + SRV_REVERT_MS;
       Serial.printf("Servidor remoto: %s — probando...\n", srvBase.c_str());
+      return true;
     }
+    Serial.println("server_url rechazada (debe ser http:// válido, <=96 chars)");
+    return false;
   }
   else if (clave == "pump_photos") {
-    int v = valor.toInt();
-    if (v >= 1 && v != pumpPhotos) {
+    if (!esEntero(valor)) return false;
+    int v = clampInt(valor.toInt(), 1, 50, -1);
+    if (v <= 0) return false;
+    if (v != pumpPhotos) {
       pumpPhotos = v; guardarClave("pump_photos", String(v));
       Serial.printf("Fotos para bomba: %d\n", pumpPhotos);
     }
+    return true;
   }
   else if (clave == "pump_seconds") {
-    unsigned long v = valor.toInt();
-    if (v >= 1 && v != pumpSeconds) {
-      pumpSeconds = v; guardarClave("pump_seconds", String(v));
-      Serial.printf("Bomba segundos: %lu\n", pumpSeconds);
+    if (!esEntero(valor)) return false;
+    int v = clampInt(valor.toInt(), 1, 300, -1);
+    if (v <= 0) return false;
+    if ((unsigned long)v != pumpSeconds) {
+      pumpSeconds = (unsigned long)v; guardarClave("pump_seconds", String(v));
+      Serial.printf("Bomba segundos: %d\n", v);
     }
+    return true;
   }
   else if (clave == "dist_min_cm") {
-    float v = valor.toFloat();
+    if (!esFloat(valor)) return false;
+    float v = clampFloat(valor.toFloat(), 0.0f, 500.0f, -1.0f);
+    if (v < 0.0f || v >= distMaxCm) return false;
     if (v != distMinCm) {
       distMinCm = v; guardarClave("dist_min_cm", String(v));
       Serial.printf("Dist min: %.1f cm\n", distMinCm);
     }
+    return true;
   }
   else if (clave == "dist_max_cm") {
-    float v = valor.toFloat();
-    if (v > 0 && v != distMaxCm) {
+    if (!esFloat(valor)) return false;
+    float v = clampFloat(valor.toFloat(), 1.0f, 500.0f, -1.0f);
+    if (v <= distMinCm) return false;
+    if (v != distMaxCm) {
       distMaxCm = v; guardarClave("dist_max_cm", String(v));
       Serial.printf("Dist max: %.1f cm\n", distMaxCm);
     }
+    return true;
   }
+  return false;   // clave desconocida
 }
 
 void aplicarConfigRemota(const String& body) {
@@ -330,8 +413,9 @@ void consultarConfigRemota() {
 
 void revisarReversionSrv() {
   // Si la URL nueva lleva >6 min sin un GET exitoso, volver a la anterior.
+  // (long)(millis()-deadline) es seguro ante el wrap de millis() (~49 días).
   if (srvRevertEn == 0) return;
-  if (millis() < srvRevertEn) return;
+  if ((long)(millis() - srvRevertEn) < 0) return;
   if (millis() - ultimoConfigOk < 180000UL) return;   // aún hay margen
 
   prefs.begin("reba", true);
@@ -355,6 +439,7 @@ void revisarReversionSrv() {
 struct Foto {
   uint8_t* datos;
   size_t   tam;
+  int      intentos;   // reintentos de envío; al llegar a FOTO_MAX_INTENTOS se descarta
 };
 Foto cola[MAX_COLA];
 int  colaInicio = 0;
@@ -395,8 +480,13 @@ float leerCm() {
   delayMicroseconds(10);
   digitalWrite(PIN_TRIG, LOW);
   unsigned long t = pulseIn(PIN_ECHO, HIGH, 25000);
-  if (t == 0) return -1;            // sin eco: se trata como "nada cerca"
-  return t * 0.0343f / 2.0f;
+  if (t == 0) { lastDistCm = -1.0f; return -1.0f; }   // sin eco
+  float d = t * 0.0343f / 2.0f;
+  // Sanity: el HC-SR04 es fiable hasta ~400 cm; lecturas >450 cm son ruido
+  // (eco fantasma/tardío) y se tratan como "sin objeto".
+  if (d < 0.0f || d > 450.0f) { lastDistCm = -1.0f; return -1.0f; }
+  lastDistCm = d;
+  return d;
 }
 
 // ============================================================
@@ -523,7 +613,8 @@ bool asegurarWiFi() {
   }
 
   // Revierte a las últimas creds que funcionaron si las nuevas fallaron
-  if (wifiRevertEn != 0 && millis() > wifiRevertEn) {
+  // (comparación con signo: segura ante wrap de millis()).
+  if (wifiRevertEn != 0 && (long)(millis() - wifiRevertEn) >= 0) {
     prefs.begin("reba", true);
     String ssidBak = prefs.getString("ssid_bak", "");
     String passBak = prefs.getString("pass_bak", "");
@@ -554,6 +645,9 @@ bool asegurarWiFi() {
 
   Serial.print("Conectando a WiFi");
   WiFi.disconnect();
+  // Si el portal WiFiManager dejó el chip en modo AP, asegurar STA antes
+  // de reconectar (sin portal activo no hay razón para mantener AP).
+  if (!portalActivo) WiFi.mode(WIFI_STA);
   WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
   unsigned long inicio = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - inicio < 10000) {
@@ -562,10 +656,14 @@ bool asegurarWiFi() {
   }
   Serial.println();
 
-  if (WiFi.status() == WL_CONNECTED) {
+  // WL_CONNECTED no garantiza IP (DHCP aún pendiente o portal cautivo):
+  // exigir una IPv4 válida antes de declarar el enlace usable.
+  IPAddress ip = WiFi.localIP();
+  bool ipValida = (WiFi.status() == WL_CONNECTED) && ip != IPAddress(0, 0, 0, 0);
+  if (ipValida) {
     wifiFallos = 0;
     Serial.print("Conectado. IP del ESP32-CAM: ");
-    Serial.println(WiFi.localIP());
+    Serial.println(ip);
     return true;
   }
 
@@ -581,6 +679,13 @@ bool asegurarWiFi() {
 // Memoria temporal de fotos (cola en PSRAM)
 // ============================================================
 bool colaAgregar(const uint8_t* buf, size_t len) {
+  // Guard de heap: reservar COLA_HEAP_RESERVA para WiFi/HTTP/driver — una
+  // foto enorme (VGA ~30 KB) no debe dejar el sistema sin memoria.
+  if (len == 0 || (size_t)ESP.getFreeHeap() < len + COLA_HEAP_RESERVA) {
+    Serial.printf("Heap bajo: foto descartada (%u bytes, libres %u)\n",
+                  (unsigned)len, (unsigned)ESP.getFreeHeap());
+    return false;
+  }
   uint8_t* copia = nullptr;
   if (psramFound()) copia = (uint8_t*)ps_malloc(len);
   if (!copia) copia = (uint8_t*)malloc(len);   // fallback si no hay PSRAM
@@ -601,6 +706,7 @@ bool colaAgregar(const uint8_t* buf, size_t len) {
   int pos = (colaInicio + colaCantidad) % MAX_COLA;
   cola[pos].datos = copia;
   cola[pos].tam = len;
+  cola[pos].intentos = 0;
   colaCantidad++;
   Serial.printf("Foto guardada en memoria (%u bytes). Pendientes: %d\n", (unsigned)len, colaCantidad);
   return true;
@@ -666,19 +772,22 @@ int httpSimple(const String& method, const String& url,
         if (sp > 0) status = line.substring(sp + 1, sp + 4).toInt();
         break;
       }
-    } else delay(1);
+    } else if (!c.connected()) break;   // server cerró sin responder
+    else delay(1);
   }
 
   // Headers hasta la línea vacía
-  while (millis() < deadline) {
+  while (millis() < deadline && status > 0) {
     if (c.available() > 0) {
       line = c.readStringUntil('\n');
       line.trim();
       if (line.length() == 0) break;
-    } else delay(1);
+    } else if (!c.connected()) break;
+    else delay(1);
   }
 
-  // Cuerpo (solo si se pidió)
+  // Cuerpo (solo si se pidió) — con tope: un server que responda basura
+  // no debe inflar el String hasta agotar el heap.
   if (respBody) {
     respBody->reserve(512);
     while (millis() < deadline) {
@@ -686,7 +795,9 @@ int httpSimple(const String& method, const String& url,
       if (avail > 0) {
         uint8_t buf[256];
         int leido = c.read(buf, sizeof(buf));
-        if (leido > 0) respBody->concat((const char*)buf, leido);
+        if (leido > 0 && respBody->length() < HTTP_RESP_MAX) {
+          respBody->concat((const char*)buf, leido);
+        }
       } else if (!c.connected()) break;
       else delay(2);
     }
@@ -695,9 +806,12 @@ int httpSimple(const String& method, const String& url,
   return status;
 }
 
-bool enviarJPG(const uint8_t* datos, size_t tam) {
-  if (!asegurarWiFi()) return false;
-  if (srvBase.length() == 0) return false;
+// Devuelve el código HTTP (200, 404...) o -1 si no hubo respuesta.
+// 2xx = entregada; 4xx = error permanente del cliente (no reintentar);
+// -1/5xx = transitorio (reintentar).
+int enviarJPG(const uint8_t* datos, size_t tam) {
+  if (!asegurarWiFi()) return -1;
+  if (srvBase.length() == 0) return -1;
 
   String url = srvBase + "/upload";
   const char* hdrs =
@@ -709,7 +823,7 @@ bool enviarJPG(const uint8_t* datos, size_t tam) {
   } else {
     Serial.println("Error enviando foto (sin respuesta del servidor)");
   }
-  return codigo >= 200 && codigo < 300;
+  return codigo;
 }
 
 void colaEnviar() {
@@ -718,17 +832,32 @@ void colaEnviar() {
 
   while (colaCantidad > 0) {
     Foto& f = cola[colaInicio];
-    if (!enviarJPG(f.datos, f.tam)) {
-      huboFalloEnvio = true;
-      ultimoFalloEnvio = millis();
-      Serial.printf("Se reintentará en %lu s. Pendientes: %d\n",
-                    REINTENTO_ENVIO_MS / 1000, colaCantidad);
-      return;
+    int codigo = enviarJPG(f.datos, f.tam);
+    f.intentos++;
+
+    // Entregada (2xx) -> borrar. Error 4xx o demasiados reintentos ->
+    // descartar: una foto "venenosa" (p.ej. JPEG que el server rechaza
+    // siempre con 400) no debe bloquear el resto de la cola para siempre.
+    bool entregada = (codigo >= 200 && codigo < 300);
+    bool permanente = (codigo >= 400 && codigo < 500) || f.intentos >= FOTO_MAX_INTENTOS;
+    if (entregada || permanente) {
+      if (permanente && !entregada) {
+        Serial.printf("Foto descartada (HTTP %d, intentos %d)\n", codigo, f.intentos);
+      }
+      free(f.datos);                       // procesada: se borra de la memoria
+      f.datos = nullptr;
+      colaInicio = (colaInicio + 1) % MAX_COLA;
+      colaCantidad--;
+      if (!entregada) huboFalloEnvio = false;  // no es fallo de red: seguir con la siguiente
+      continue;
     }
-    free(f.datos);                         // enviada: se borra de la memoria
-    f.datos = nullptr;
-    colaInicio = (colaInicio + 1) % MAX_COLA;
-    colaCantidad--;
+
+    // Fallo transitorio: frenar el lote y reintentar en REINTENTO_ENVIO_MS
+    huboFalloEnvio = true;
+    ultimoFalloEnvio = millis();
+    Serial.printf("Se reintentará en %lu s. Pendientes: %d\n",
+                  REINTENTO_ENVIO_MS / 1000, colaCantidad);
+    return;
   }
   huboFalloEnvio = false;
 }
@@ -744,16 +873,47 @@ bool tomarFoto() {
   camera_fb_t* viejo = esp_camera_fb_get();   // descarta un frame anterior al flash
   if (viejo) esp_camera_fb_return(viejo);
 
-  camera_fb_t* fb = esp_camera_fb_get();   // la foto real, con el flash encendido
+  // El frame real puede caer de forma transitoria (sombra, I2C glitch):
+  // reintentar hasta 3 veces antes de declarar fallo.
+  camera_fb_t* fb = nullptr;
+  for (int k = 0; k < 3 && !fb; k++) {
+    fb = esp_camera_fb_get();
+    if (!fb) delay(120);
+  }
   digitalWrite(PIN_FLASH, LOW);            // flash OFF apenas se capturó
 
   if (!fb) {
-    Serial.printf("Error: no se pudo capturar. heap=%u dma_max=%u\n",
+    fallosCamara++;
+    Serial.printf("Error: no se pudo capturar (fallo %d). heap=%u dma_max=%u\n",
+                  fallosCamara,
                   (unsigned)ESP.getFreeHeap(),
                   (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
+    // Fallos consecutivos -> marcar cámara caída: el loop la re-inicializa.
+    if (fallosCamara >= FALLAS_CAMARA_REINIT) {
+      Serial.println("Camara marcada como caida; re-inicializando...");
+      camaraOk = false;
+      fallosCamara = 0;
+      esp_camera_deinit();
+    }
     return false;
   }
 
+  // Validar que el buffer sea un JPEG real antes de encolarlo: un frame
+  // corrupto (FB-OVF, DMA glitch) no debe subirse ni contar para la bomba.
+  bool jpegValido = fb->len >= 128 && fb->buf[0] == 0xFF &&
+                    fb->buf[1] == 0xD8 && fb->buf[2] == 0xFF;
+  if (!jpegValido) {
+    Serial.printf("Frame corrupto descartado (%u bytes, magic %02x%02x%02x)\n",
+                  (unsigned)fb->len, fb->buf[0], fb->buf[1], fb->buf[2]);
+    esp_camera_fb_return(fb);
+    fallosCamara++;
+    if (fallosCamara >= FALLAS_CAMARA_REINIT) {
+      camaraOk = false; fallosCamara = 0; esp_camera_deinit();
+    }
+    return false;
+  }
+
+  fallosCamara = 0;                        // captura sana
   bool ok = colaAgregar(fb->buf, fb->len); // copia a la memoria temporal
   esp_camera_fb_return(fb);                // libera el buffer de la cámara
   return ok;
@@ -796,7 +956,11 @@ void ingresoDetectado() {
 // ============================================================
 void setup() {
   Serial.begin(115200);
-  Serial.printf("heap_setup=%u\n", (unsigned)ESP.getFreeHeap());
+  bootCount++;
+  Serial.printf("heap_setup=%u boots=%lu\n", (unsigned)ESP.getFreeHeap(), bootCount);
+  if (bootCount > 8) {
+    Serial.println("AVISO: posibles resets repetidos (brownout/watchdog)");
+  }
   bombaApagar();                           // lo primero: bomba apagada
 
   pinMode(PIN_FLASH, OUTPUT);
@@ -813,6 +977,7 @@ void setup() {
   // driver de cámara necesita ~250KB contiguos — si NVS inicializa antes,
   // cam_dma_config falla en placas con heap justo.
   iniciarCamara();
+  ultimoTestCamara = millis();        // primer health check en 15 min
 
   cargarConfig();
   ultimoConfigOk = millis();          // margen inicial para el primer poll
@@ -855,6 +1020,7 @@ void ejecutarComandoSerial(String cmd) {
     Serial.println(F("  SET wifi_ssid=... wifi_pass=... server_url=..."));
     Serial.println(F("  SET pump_photos=N pump_seconds=N dist_min_cm=F dist_max_cm=F"));
     Serial.println(F("  CAPTURE   (foto manual: flash + cola + upload + contador bomba)"));
+    Serial.println(F("  STATUS    (diagnostico: heap, camara, wifi, cola, sensor)"));
     Serial.println(F("  REBOOT"));
   }
   else if (op == "GET") {
@@ -862,6 +1028,19 @@ void ejecutarComandoSerial(String cmd) {
                   "pump_photos=%d\npump_seconds=%d\ndist_min_cm=%.1f\ndist_max_cm=%.1f\n",
                   wifiSsid.c_str(), wifiPass.c_str(), srvBase.c_str(),
                   pumpPhotos, pumpSeconds, distMinCm, distMaxCm);
+  }
+  else if (op == "STATUS") {
+    Serial.printf("uptime=%lus boots=%lu heap=%u/%u\n",
+                  (unsigned long)(millis() / 1000), bootCount,
+                  (unsigned)ESP.getFreeHeap(),
+                  (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
+    Serial.printf("camara=%s fallos=%d wifi=%s ip=%s portal=%d\n",
+                  camaraOk ? "OK" : "CAIDA", fallosCamara,
+                  WiFi.status() == WL_CONNECTED ? "conectada" : "caida",
+                  WiFi.localIP().toString().c_str(), (int)portalActivo);
+    Serial.printf("cola=%d/%d fotos_bomba=%d/%d dist_ultima=%.1fcm rango=[%.1f,%.1f]\n",
+                  colaCantidad, MAX_COLA, fotosTomadas, pumpPhotos,
+                  lastDistCm, distMinCm, distMaxCm);
   }
   else if (op == "SET") {
     int eq = resto.indexOf('=');
@@ -875,8 +1054,10 @@ void ejecutarComandoSerial(String cmd) {
     bool ok = false;
     for (const char* k : permitidas) if (clave == k) { ok = true; break; }
     if (!ok) { Serial.println("Clave no permitida. Usa HELP."); return; }
-    aplicarClaveRemota(clave, valor);
-    Serial.printf("SET %s aplicado (GET para ver estado)\n", clave.c_str());
+    if (aplicarClaveRemota(clave, valor))
+      Serial.printf("SET %s aplicado (GET para ver estado)\n", clave.c_str());
+    else
+      Serial.printf("SET %s rechazada\n", clave.c_str());
   }
   else if (op == "CAPTURE") {
     Serial.println("CAPTURE manual por USB...");
@@ -913,21 +1094,34 @@ void loop() {
 
   // Sin credenciales guardadas: mantener el AP de configuración disponible
   // (el portal se cierra a los 5 min; reabrirlo periódicamente).
-  if (wifiSsid.length() == 0 && WiFi.status() != WL_CONNECTED && !portalActivo) {
-    static unsigned long proxPortal = 0;
-    if (millis() >= proxPortal) {
-      proxPortal = millis() + 30000;      // reintentar cada 30 s
-      iniciarPortal();
-    }
+  // Patrón "último intento + intervalo": seguro ante wrap de millis().
+  static unsigned long ultimoIntentoPortal = 0;
+  if (wifiSsid.length() == 0 && WiFi.status() != WL_CONNECTED && !portalActivo
+      && millis() - ultimoIntentoPortal >= PORTAL_RETRY_MS) {
+    ultimoIntentoPortal = millis();
+    iniciarPortal();
   }
 
   // Cámara caída: reintentar init cada 30 s (cubre fallos transitorios de
   // alimentación/sensor sin reiniciar el dispositivo).
-  if (!camaraOk) {
-    static unsigned long proxCamara = 0;
-    if (millis() >= proxCamara) {
-      proxCamara = millis() + 30000;
-      iniciarCamara();
+  static unsigned long ultimoIntentoCamara = 0;
+  if (!camaraOk && millis() - ultimoIntentoCamara >= CAMARA_RETRY_MS) {
+    ultimoIntentoCamara = millis();
+    iniciarCamara();
+  }
+
+  // Health check silencioso de la cámara cada 15 min: detecta muerte
+  // silenciosa (glitch I2C/power) aunque no haya triggers del sensor.
+  if (camaraOk && ahora - ultimoTestCamara >= CAMARA_TEST_MS) {
+    ultimoTestCamara = ahora;
+    camera_fb_t* t = esp_camera_fb_get();
+    if (t) {
+      esp_camera_fb_return(t);
+    } else {
+      Serial.println("Health check camara: sin frame -> re-inicializando");
+      camaraOk = false;
+      fallosCamara = 0;
+      esp_camera_deinit();
     }
   }
 
@@ -941,7 +1135,8 @@ void loop() {
   ultimaLectura = ahora;
 
   float d = leerCm();
-  bool enRango = (d >= distMinCm && d <= distMaxCm);
+  // Piso de 1 cm: lecturas ~0 son ruido del sensor, no un objeto real.
+  bool enRango = (d >= 1.0f) && (d >= distMinCm) && (d <= distMaxCm);
 
   if (enRango) { if (dentro < 100) dentro++; fuera = 0; }
   else         { if (fuera < 100)  fuera++;  dentro = 0; }

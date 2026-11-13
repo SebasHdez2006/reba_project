@@ -17,9 +17,15 @@
           <div class="brand-mark">REBA</div>
           <div class="brand-sub">Recolección acuática autónoma · visión local</div>
         </div>
-        <div id="wsStatus" class="status-pill offline" title="Estado del WebSocket">
-          <span class="status-dot" aria-hidden="true"></span>
-          <span id="wsStatusText">Desconectado</span>
+        <div class="topbar-status">
+          <div id="deviceStatus" class="status-pill offline" title="Estado del ESP32-CAM (heartbeat)">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="deviceStatusText">ESP32: —</span>
+          </div>
+          <div id="wsStatus" class="status-pill offline" title="Estado del WebSocket">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="wsStatusText">Desconectado</span>
+          </div>
         </div>
       </header>
 

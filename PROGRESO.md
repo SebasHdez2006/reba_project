@@ -146,3 +146,91 @@ organico +0.004, plastico -0.097.
 - PSRAM de la placa es defectuoso (`psramFound=1` pero `ps_malloc` falla)
   — el firmware usa DRAM para framebuffer así que funciona, pero es un
   defecto de hardware documentado.
+
+---
+
+## Sesión 4 — Hardening de producción firmware + servidor (13-nov, tarde)
+
+Objetivo: "la mayor cantidad de validaciones y acción de mitigación para
+cada caso inoportuno" antes del despliegue en agua real. Todo verificado
+en banco con la ESP32 en `COM9` contra el server real.
+
+### Server (`server/main.py`, `database.py`, `config.py`, `static/`)
+
+- **Heartbeat del dispositivo**: `_touch_device()` en `GET /api/device/config`
+  y `POST /upload` actualiza `device_state` (memoria); `GET /api/health` y
+  `GET /api/stats` exponen `device: {online, last_seen, ip}`.
+  `online` = último contacto < 150 s. Dashboard muestra pill de estado.
+- **Validación JPEG en `/upload`**: magic bytes `FF D8 FF` + tamaño mínimo;
+  400 si no es JPEG decodificable (ya existía decodificación OpenCV; se
+  añadió rechazo temprano por magic bytes).
+- **Retención de capturas**: `_retention_loop` cada hora llama
+  `db.prune_captures(CAPTURE_RETENTION)` (default 2000, env
+  `CAPTURE_RETENTION`); borra las más viejas y sus detecciones
+  (`ON DELETE CASCADE`). Verificado: prune de 6/9 filas OK.
+
+### Firmware `fotos_nc.ino` — cambios de robustez
+
+- **`millis()` rollover-safe**: todos los deadlines (`wifiRevertEn`,
+  `srvRevertEn`, portal, cámara, reintentos) usan
+  `(long)(millis() - deadline) < 0` — seguro tras ~49 días de uptime.
+- **`cargarConfig` (NVS)**: clamps en todos los numéricos
+  (`clampInt`/`clampFloat`); si `distMin >= distMax` restaura defaults;
+  `server_url` sin `http://` → default.
+- **`aplicarClaveRemota` → `bool` + validación estricta**:
+  - `esEntero()`/`esFloat()` rechazan formatos inválidos — antes
+    `String::toInt()` aceptaba `"3abc"→3` y `"abc"→0` silenciosamente.
+  - Rangos: pump_photos 1-50, pump_seconds 1-300, dist 0-500 cm,
+    coherencia min<max; server_url solo `http://` ≤96 chars sin espacios.
+  - wifi_ssid 1-32 chars, wifi_pass ≤63 (pass vacío = red abierta).
+  - El comando serie `SET` ahora reporta `aplicado`/`rechazada` real
+    (antes decía "aplicado" siempre — mensaje engañoso corregido).
+- **WiFi**: conexión exige `WL_CONNECTED` **y** IP válida; `WiFi.mode(STA)`
+  antes de `begin()` si el portal no está activo.
+- **`tomarFoto`**: reintenta `fb_get` (hasta 4×, 60 ms), valida magic JPEG
+  (`FF D8 FF`), contador `camFallos` → reinit de cámara tras 3 fallos
+  seguidos; health check periódico en `loop()`.
+- **HC-SR04**: `pulseIn` timeout → -1; distancias >450 cm o <0 → -1
+  (ruido); `lastDistCm` expuesto en `STATUS`; piso de 1 cm en `enRango`.
+- **Cola anti poison-pill**: cada `Foto` lleva `intentos`; se descarta en
+  HTTP 4xx o ≥25 reintentos; heap guard en `colaAgregar`.
+- **`httpSimple`**: loops de espera verifican `client.connected()`;
+  body de respuesta cap 4 KB (anti heap-exhaustion).
+- **Diagnóstico**: comando serie `STATUS` (uptime, boots, heap, cámara,
+  WiFi, cola, bomba, distancia); boot counter `RTC_DATA_ATTR` sobrevive
+  resets por brownout/watchdog.
+
+### Verificación ejecutada (banco, COM9 + server :5000)
+
+| Prueba | Resultado |
+|---|---|
+| Boot | `Camara OK frame_size=6 loc=DRAM`, WiFi `192.168.137.161`, `REBA listo`, `boots=1` |
+| `STATUS`/`GET` serie | uptime, heap, camara=OK, wifi=conectada, cola, rango — todo correcto |
+| `SET` inválidos | `999`, `-5`, `abc`, `3abc`, `ftp://x`, clave inexistente → todos `rechazada` |
+| `SET` válido | `dist_max_cm=30.5` aplicado y persistido |
+| CAPTURE → upload | JPEG ~3.7 KB → HTTP 200 → ONNX → `captures` id=9,10 |
+| **Retry de cola** | `server_url`→puerto muerto → foto encolada `cola=1/6` → restaurar :5000 → retry exitoso → `cola=0`, capture id=10 en DB |
+| **Config remota** | overrides inválidos (`pump_photos=999`, `dist_max_cm=-5`, `server_url=ftp://bad`) rechazados por el ESP32; `pump_seconds=15` válido aplicado |
+| Heartbeat | `device.online=true`, `ip=192.168.137.161` en `/api/health` y `/api/stats` |
+
+### Hallazgos / notas
+
+- **La cola de fotos es solo RAM**: un reboot/brownout pierde pendientes.
+  Aceptable (evidencia transitoria) — si se requiere persistencia, evaluar
+  LittleFS en una sesión futura.
+- **HC-SR04 sin lecturas en banco**: `dist_ultima=-1.0` durante >60 s de
+  polling. El sensor está siendo sondeado (TRIG/ECHO conmutan) pero no
+  recibe eco — probablemente no está cableado a esta placa en el banco o
+  falta objeto reflector. **Pendiente prueba física**: objeto a <23 cm.
+- Al abrir el puerto serie la placa se resetea (DTR/RTS) — para pruebas
+  largas mantener una sola sesión abierta.
+- `srv_bak` residual: si `server_url` cambia y el nuevo responde, el
+  respaldo se auto-limpia en el siguiente poll exitoso (verificado en
+  código, `consultarConfigRemota` líneas ~400-407).
+
+### Pendiente para el agua real (sin cambios de fondo)
+
+- HC-SR04: verificar cableado + objeto <23 cm → trigger automático.
+- Bomba: 3 fotos → relé GPIO13 (NC, 12V boost) — verificar con multímetro.
+- Sumergibilidad: carcasa estanca + HC-SR04 fuera del agua.
+- Modelo: primeras fotos acuáticas reales = dataset para reentrenar.

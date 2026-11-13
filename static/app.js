@@ -146,6 +146,24 @@
     setText("chartTotal", String(total));
     updateLegendValues(stats);
     drawDonut(stats);
+    if (stats.device) applyDeviceStatus(stats.device);
+  }
+
+  function applyDeviceStatus(device) {
+    const pill = $("deviceStatus");
+    const txt = $("deviceStatusText");
+    if (!pill || !txt) return;
+    if (device.online) {
+      pill.classList.add("online");
+      pill.classList.remove("offline");
+      txt.textContent = device.ip ? `ESP32: ${device.ip}` : "ESP32: en línea";
+      pill.title = `ESP32-CAM en línea${device.ip ? ` (${device.ip})` : ""}`;
+    } else {
+      pill.classList.remove("online");
+      pill.classList.add("offline");
+      txt.textContent = "ESP32: sin señal";
+      pill.title = "ESP32-CAM sin heartbeat (>150 s)";
+    }
   }
 
   function applyDetections(payload) {
@@ -426,6 +444,15 @@
       state.ws.send(JSON.stringify({ type: "ping" }));
     }
   }, 25000);
+
+  // Poll ligero de stats: actualiza contadores y el estado del ESP32
+  // aunque no haya capturas nuevas (heartbeat cada ~60 s del firmware).
+  setInterval(async () => {
+    try {
+      const stats = await fetch("/api/stats").then((r) => r.json());
+      applyStats(stats);
+    } catch (_) { /* red local: reintenta en el próximo ciclo */ }
+  }, 30000);
 
   const cfgForm = $("deviceConfigForm");
   if (cfgForm) cfgForm.addEventListener("submit", saveDeviceConfig);

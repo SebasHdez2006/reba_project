@@ -19,6 +19,7 @@ Documentación: docs/server.md
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from dataclasses import replace
@@ -66,6 +67,37 @@ pump_state: Dict[str, Any] = {
     "last_upload_ts": None,
     "last_pump_event": None,
 }
+
+# Último contacto del ESP32-CAM. Se actualiza en cada GET /api/device/config
+# (poll cada ~60 s) y en cada POST /upload — sirve de heartbeat para saber
+# si el dispositivo está en línea sin depender de que tome fotos.
+import time as _time
+
+device_state: Dict[str, Any] = {
+    "last_seen": None,   # epoch seconds
+    "ip": None,
+}
+DEVICE_ONLINE_WINDOW_S = 150.0   # >2 polls perdidos = offline
+
+
+def _touch_device(request: Request) -> None:
+    """Registra que el ESP32 contactó al servidor (heartbeat)."""
+    device_state["last_seen"] = _time.time()
+    try:
+        device_state["ip"] = request.client.host if request.client else None
+    except Exception:
+        pass
+
+
+def device_status() -> Dict[str, Any]:
+    """Estado del dispositivo para /api/health y /api/stats."""
+    last = device_state.get("last_seen")
+    online = last is not None and (_time.time() - last) < DEVICE_ONLINE_WINDOW_S
+    return {
+        "online": online,
+        "last_seen": last,
+        "ip": device_state.get("ip"),
+    }
 
 
 async def broadcast(message: Dict[str, Any]) -> None:
@@ -203,13 +235,15 @@ async def process_upload(body: bytes, evento: str | None) -> Dict[str, Any]:
         logger.info("Pump cycle inferred (event id=%s)", event["id"])
 
     progress = pump_progress()
+    stats_now = db.get_stats()
+    stats_now["device"] = device_status()
     await broadcast({"type": "capture", "payload": latest_capture})
     await broadcast(
         {
             "type": "detections",
             "payload": {
                 **payload,
-                "stats": db.get_stats(),
+                "stats": stats_now,
                 "latest_capture": latest_capture,
                 "pump": progress,
             },
@@ -240,6 +274,28 @@ async def process_upload(body: bytes, evento: str | None) -> Dict[str, Any]:
     }
 
 
+async def _retention_loop() -> None:
+    """
+    Poda periódica de capturas viejas (CAPTURE_RETENTION, default 2000).
+
+    Corre cada hora; también una vez al arranque. keep=0 desactiva la poda.
+    """
+    keep = settings.capture_retention
+    # Primera pasada al inicio (asyncio.sleep(0) cede el loop al lifespan)
+    await asyncio.sleep(0)
+    while True:
+        if keep > 0:
+            try:
+                # to_thread: el DELETE puede tardar si la DB creció mucho;
+                # no debe bloquear el event loop (uploads/WebSocket).
+                removed = await asyncio.to_thread(db.prune_captures, keep)
+                if removed:
+                    logger.info("Retención: %d capturas antiguas eliminadas (keep=%d)", removed, keep)
+            except Exception as exc:  # nunca tumbar el server por la poda
+                logger.warning("Retención falló: %s", exc)
+        await asyncio.sleep(3600)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global latest_capture
@@ -253,9 +309,13 @@ async def lifespan(app: FastAPI):
         settings.host,
         settings.port,
     )
-    yield
-    logger.info("Shutting down REBA…")
-    db.close()
+    retention_task = asyncio.create_task(_retention_loop())
+    try:
+        yield
+    finally:
+        retention_task.cancel()
+        logger.info("Shutting down REBA…")
+        db.close()
 
 
 app = FastAPI(
@@ -290,10 +350,23 @@ async def upload_photo(request: Request):
 
     Cualquier respuesta 2xx saca la foto de la cola del ESP32; un error hace
     que la foto permanezca en la cola y se reintente en ~15 s.
+
+    Validaciones previas al decode (rechazo rápido, sin gastar CPU):
+      - body vacío            -> 400
+      - magic JPEG inválido   -> 400 (FF D8 FF)
+      - tamaño fuera de rango -> 400/413
     """
     body = await request.body()
+    _touch_device(request)
+
     if not body:
         raise HTTPException(400, "Body vacío")
+    # JPEG SOI + APP0-ish: FF D8 FF. Rechazo rápido de basura/red corrupta.
+    if len(body) < 128 or body[0] != 0xFF or body[1] != 0xD8 or body[2] != 0xFF:
+        raise HTTPException(400, "Body no parece un JPEG (magic bytes)")
+    if len(body) > 2 * 1024 * 1024:
+        raise HTTPException(413, "JPEG demasiado grande (>2 MB)")
+
     evento = request.headers.get("X-Evento")
     return await process_upload(body, evento)
 
@@ -309,6 +382,7 @@ async def health():
         "ok": inference_status.get("backend") == "onnx",
         "inference": inference_status,
         "pump": pump_progress(),
+        "device": device_status(),
     }
 
 
@@ -323,14 +397,16 @@ async def get_config():
 # ---------------------------------------------------------------------------
 
 @app.get("/api/device/config", response_class=PlainTextResponse)
-async def device_config():
+async def device_config(request: Request):
     """
     Config que el ESP32-CAM descarga periódicamente.
 
     Formato `clave=valor` por línea (sin JSON: el firmware lo parsea simple).
     Solo se devuelven las claves con override guardado — el firmware conserva
-    sus valores locales para el resto.
+    sus valores locales para el resto. Cada poll cuenta como heartbeat del
+    dispositivo (device_state).
     """
+    _touch_device(request)
     cfg = db.get_device_config()
     return "\n".join(f"{k}={v}" for k, v in sorted(cfg.items())) + "\n"
 
@@ -371,7 +447,9 @@ async def admin_set_device_config(payload: Dict[str, Any]):
 
 @app.get("/api/stats")
 async def get_stats():
-    return db.get_stats()
+    stats = db.get_stats()
+    stats["device"] = device_status()
+    return stats
 
 
 @app.get("/api/pump-status")
@@ -425,13 +503,15 @@ async def websocket_endpoint(ws: WebSocket):
     ws_clients.add(ws)
     logger.info("WebSocket client connected (%d total)", len(ws_clients))
     # Snapshot inicial
+    hello_stats = db.get_stats()
+    hello_stats["device"] = device_status()
     try:
         await ws.send_json(
             {
                 "type": "hello",
                 "payload": {
                     "config": settings.public_dict(),
-                    "stats": db.get_stats(),
+                    "stats": hello_stats,
                     "detections": latest_inference,
                     "latest_capture": latest_capture,
                     "pump": pump_progress(),

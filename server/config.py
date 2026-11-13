@@ -58,6 +58,10 @@ class Settings(BaseSettings):
 
     # --- Persistencia ---
     database_path: str = Field(default="data/REBA.db")
+    # Máximo de capturas JPEG conservadas en SQLite (0 = sin límite).
+    # Las fotos son blobs ~5 KB; 2000 ≈ 10 MB. Evita crecimiento ilimitado
+    # en operación continua de campo.
+    capture_retention: int = Field(default=2000, ge=0)
 
     @property
     def class_list(self) -> List[str]:
@@ -94,6 +98,7 @@ class Settings(BaseSettings):
             "pump_run_seconds": self.pump_run_seconds,
             "detect_min_cm": self.detect_min_cm,
             "detect_max_cm": self.detect_max_cm,
+            "capture_retention": self.capture_retention,
         }
 
 
