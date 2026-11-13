@@ -39,8 +39,11 @@
 #include "esp_camera.h"
 #include <WiFi.h>
 #include <WiFiManager.h>
-#include <HTTPClient.h>
 #include <Preferences.h>
+// NOTA: HTTPClient.h está PROHIBIDO en este firmware — enlaza
+// WiFiClientSecure/mbedTLS cuyo init estático provoca FB-OVF permanente
+// en el driver de cámara (ver test_cam2..5). El HTTP se hace con
+// WiFiClient (socket TCP plano) en httpSimple() más abajo.
 
 // ---------------- Valores por defecto (se sobreescriben por config remota) ----------------
 // SRV_BASE: URL base del servidor FastAPI SIN /upload, ej. http://192.168.1.3:5000
@@ -112,6 +115,7 @@ String         srvBase;            // ej. "http://192.168.1.3:5000" (sin /upload
 
 int            wifiFallos        = 0;
 bool           portalActivo      = false;
+bool           camaraOk          = false;
 unsigned long  ultimoPollConfig  = 0;
 unsigned long  wifiRevertEn      = 0;   // millis() en que se revierte creds si sigue sin conectar
 unsigned long  ultimoConfigOk    = 0;   // último GET /api/device/config exitoso
@@ -122,6 +126,11 @@ unsigned long  srvRevertEn       = 0;   // idem para server_url
 // (que necesita ~250KB contiguos) no inicializaba en esta placa.
 WiFiManager*           wmP   = nullptr;
 WiFiManagerParameter*  pSrvP = nullptr;
+
+// Definida más abajo (sección HTTP); la usa consultarConfigRemota().
+int httpSimple(const String& method, const String& url,
+               const char* headersExtra, const uint8_t* body, size_t bodyLen,
+               String* respBody, unsigned long timeoutMs);
 
 void cargarConfig() {
   prefs.begin("reba", true);
@@ -300,11 +309,9 @@ void consultarConfigRemota() {
   if (WiFi.status() != WL_CONNECTED) return;
   if (srvBase.length() == 0) return;
 
-  HTTPClient http;
   String url = srvBase + "/api/device/config";
-  http.begin(url);
-  http.setTimeout(5000);
-  int codigo = http.GET();
+  String body;
+  int codigo = httpSimple("GET", url, nullptr, nullptr, 0, &body, 8000);
   if (codigo == 200) {
     ultimoConfigOk = millis();
     // Servidor alcanzable: confirmar el cambio de URL (quitar respaldo)
@@ -315,12 +322,10 @@ void consultarConfigRemota() {
       prefs.end();
       Serial.println("Nueva URL de servidor confirmada");
     }
-    String body = http.getString();
     if (body.length() > 0) aplicarConfigRemota(body);
   } else if (codigo > 0) {
     Serial.printf("Config remota: HTTP %d\n", codigo);
   }
-  http.end();
 }
 
 void revisarReversionSrv() {
@@ -398,7 +403,11 @@ float leerCm() {
 // Cámara
 // ============================================================
 camera_config_t configCamara(int frameSize) {
-  camera_config_t config;
+  // IMPORTANTE: memset a 0 — camera_config_t tiene campos que no se
+  // asignan abajo (sccb_freq, dma_half, dma_thresh...). Sin esto quedan
+  // con basura de stack y el driver SCCB/DMA falla de forma intermitente
+  // ("init OK pero sin frames" / FB-OVF). Ver test_cam4/5 vs 6/7.
+  camera_config_t config = {};
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer   = LEDC_TIMER_0;
   config.pin_d0 = Y2_GPIO_NUM;
@@ -421,24 +430,34 @@ camera_config_t configCamara(int frameSize) {
   config.pixel_format = PIXFORMAT_JPEG;
   config.grab_mode = CAMERA_GRAB_LATEST;
 
+  // Orden: QVGA/DRAM primero — es la config exacta verificada en test_cam2
+  // (frame real capturado). VGA/DRAM inicializa pero no entrega frames en
+  // esta placa; un intento fallido seguido de esp_camera_deinit() deja el
+  // sensor inutilizable para los intentos siguientes ("init OK sin frames").
   switch (frameSize) {
-    case 0:   // VGA + PSRAM (solo si hay PSRAM funcional)
-      config.frame_size = FRAMESIZE_VGA;
-      config.jpeg_quality = 12;
-      config.fb_count = 2;
-      config.fb_location = CAMERA_FB_IN_PSRAM;
-      break;
-    case 1:   // QVGA + DRAM (~150 KB DMA: puede no alcanzar)
+    case 0:   // QVGA + DRAM (probado: fb OK 320x240)
       config.frame_size = FRAMESIZE_QVGA;
       config.jpeg_quality = 15;
       config.fb_count = 1;
       config.fb_location = CAMERA_FB_IN_DRAM;
       break;
-    default:  // QQVGA/96x96 + DRAM (fallbacks según RAM disponible)
-      config.frame_size = (frameSize == 2) ? FRAMESIZE_QQVGA : FRAMESIZE_96X96;
+    case 1:   // VGA + DRAM (intento de mayor resolución)
+      config.frame_size = FRAMESIZE_VGA;
+      config.jpeg_quality = 12;
+      config.fb_count = 1;
+      config.fb_location = CAMERA_FB_IN_DRAM;
+      break;
+    case 2:   // QQVGA + DRAM (fallback seguro)
+      config.frame_size = FRAMESIZE_QQVGA;
       config.jpeg_quality = 15;
       config.fb_count = 1;
       config.fb_location = CAMERA_FB_IN_DRAM;
+      break;
+    default:  // VGA + PSRAM último recurso (fb_count=1 para minimizar PSRAM)
+      config.frame_size = FRAMESIZE_VGA;
+      config.jpeg_quality = 12;
+      config.fb_count = 1;
+      config.fb_location = CAMERA_FB_IN_PSRAM;
       break;
   }
   return config;
@@ -450,21 +469,38 @@ void iniciarCamara() {
                 (unsigned)ESP.getFreeHeap(),
                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL),
                 (int)psramFound());
-  // Cadena de fallback: VGA+PSRAM -> QVGA+DRAM -> QQVGA+DRAM.
-  // Placas ESP32-CAM sin PSRAM funcional solo arrancan en QQVGA.
+  // Cadena de fallback: QVGA/DRAM -> VGA/DRAM -> QQVGA/DRAM -> VGA/PSRAM.
+  // El sensor OV2640 a veces no entrega frame en el PRIMER fb_get tras
+  // init (calentamiento/SCCB): se reintenta fb_get unas veces SIN deinit —
+  // un intento fallido seguido de esp_camera_deinit() deja el sensor
+  // inutilizable para los intentos siguientes ("init OK sin frames").
   for (int intento = 0; intento < 4; intento++) {
-    if (intento == 0 && !psramFound()) continue;   // sin PSRAM: saltar VGA
+    if (intento == 3 && !psramFound()) break;   // PSRAM es el último recurso
     camera_config_t cfg = configCamara(intento);
     esp_err_t err = esp_camera_init(&cfg);
-    if (err == ESP_OK) {
+    if (err != ESP_OK) {
+      Serial.printf("Camara intento %d fallo (0x%x)\n", intento, err);
+      continue;
+    }
+    delay(300);   // margen para que el sensor empiece a entregar frames
+    camera_fb_t* prueba = nullptr;
+    for (int k = 0; k < 4 && !prueba; k++) {
+      prueba = esp_camera_fb_get();
+      if (!prueba) delay(250);
+    }
+    if (prueba) {
+      esp_camera_fb_return(prueba);
+      camaraOk = true;
       Serial.printf("Camara OK: frame_size=%d loc=%s\n",
-                    cfg.frame_size, intento == 0 ? "PSRAM" : "DRAM");
+                    cfg.frame_size, intento == 3 ? "PSRAM" : "DRAM");
       return;
     }
-    Serial.printf("Camara intento %d fallo (0x%x)\n", intento, err);
+    Serial.printf("Camara intento %d: init OK pero sin frames\n", intento);
+    esp_camera_deinit();
+    delay(200);
   }
-  Serial.println("Error iniciando la cámara: sin configuración viable");
-  while (true) delay(1000);
+  camaraOk = false;
+  Serial.println("Camara no disponible; reintentando cada 30 s");
 }
 
 // ============================================================
@@ -570,26 +606,110 @@ bool colaAgregar(const uint8_t* buf, size_t len) {
   return true;
 }
 
+// ---------- HTTP mínimo sobre WiFiClient ----------
+// Reemplaza a HTTPClient (prohibido: rompe la cámara — ver nota arriba).
+// Solo soporta http:// plano, que es todo lo que usa REBA en LAN.
+
+bool parseHttpUrl(const String& url, String& host, uint16_t& port, String& path) {
+  String u = url;
+  u.trim();
+  if (u.startsWith("http://")) u = u.substring(7);
+  else return false;                       // https u otro esquema: no soportado
+  int slash = u.indexOf('/');
+  String hp = (slash < 0) ? u : u.substring(0, slash);
+  path = (slash < 0) ? "/" : u.substring(slash);
+  int colon = hp.indexOf(':');
+  if (colon >= 0) {
+    host = hp.substring(0, colon);
+    port = (uint16_t)hp.substring(colon + 1).toInt();
+  } else {
+    host = hp; port = 80;
+  }
+  return host.length() > 0 && port > 0;
+}
+
+// Request HTTP/1.1 mínimo. Devuelve el código de estado (200, 404...) o
+// -1 si falló conexión/envío. Si respBody != nullptr llena el cuerpo.
+int httpSimple(const String& method, const String& url,
+               const char* headersExtra, const uint8_t* body, size_t bodyLen,
+               String* respBody, unsigned long timeoutMs) {
+  String host, path;
+  uint16_t port;
+  if (!parseHttpUrl(url, host, port, path)) return -1;
+
+  WiFiClient c;
+  c.setConnectionTimeout(6000);
+  if (c.connect(host.c_str(), port) != 1) { c.stop(); return -1; }
+
+  c.printf("%s %s HTTP/1.1\r\n", method.c_str(), path.c_str());
+  c.printf("Host: %s\r\n", host.c_str());
+  c.print("Connection: close\r\n");
+  c.print("User-Agent: REBA-ESP32\r\n");
+  if (headersExtra) c.print(headersExtra);
+  if (body && bodyLen) c.printf("Content-Length: %u\r\n", (unsigned)bodyLen);
+  c.print("\r\n");
+  if (body && bodyLen && c.write(body, bodyLen) != bodyLen) {
+    c.stop(); return -1;
+  }
+
+  unsigned long deadline = millis() + timeoutMs;
+  String line;
+
+  // Status line: "HTTP/1.1 200 OK"
+  int status = -1;
+  while (millis() < deadline) {
+    if (c.available() > 0) {
+      line = c.readStringUntil('\n');
+      line.trim();
+      if (line.length() > 0) {
+        int sp = line.indexOf(' ');
+        if (sp > 0) status = line.substring(sp + 1, sp + 4).toInt();
+        break;
+      }
+    } else delay(1);
+  }
+
+  // Headers hasta la línea vacía
+  while (millis() < deadline) {
+    if (c.available() > 0) {
+      line = c.readStringUntil('\n');
+      line.trim();
+      if (line.length() == 0) break;
+    } else delay(1);
+  }
+
+  // Cuerpo (solo si se pidió)
+  if (respBody) {
+    respBody->reserve(512);
+    while (millis() < deadline) {
+      int avail = c.available();
+      if (avail > 0) {
+        uint8_t buf[256];
+        int leido = c.read(buf, sizeof(buf));
+        if (leido > 0) respBody->concat((const char*)buf, leido);
+      } else if (!c.connected()) break;
+      else delay(2);
+    }
+  }
+  c.stop();
+  return status;
+}
+
 bool enviarJPG(const uint8_t* datos, size_t tam) {
   if (!asegurarWiFi()) return false;
   if (srvBase.length() == 0) return false;
 
-  HTTPClient http;
   String url = srvBase + "/upload";
-  http.begin(url);
-  http.setTimeout(8000);
-  http.addHeader("Content-Type", "image/jpeg");
-  http.addHeader("X-Evento", "ingreso");
-
-  int codigo = http.POST((uint8_t*)datos, tam);
-  bool ok = (codigo >= 200 && codigo < 300);
+  const char* hdrs =
+    "Content-Type: image/jpeg\r\n"
+    "X-Evento: ingreso\r\n";
+  int codigo = httpSimple("POST", url, hdrs, datos, tam, nullptr, 15000);
   if (codigo > 0) {
     Serial.printf("Foto enviada (%u bytes) -> HTTP %d\n", (unsigned)tam, codigo);
   } else {
-    Serial.printf("Error enviando: %s\n", http.errorToString(codigo).c_str());
+    Serial.println("Error enviando foto (sin respuesta del servidor)");
   }
-  http.end();
-  return ok;
+  return codigo >= 200 && codigo < 300;
 }
 
 void colaEnviar() {
@@ -617,6 +737,7 @@ void colaEnviar() {
 // Foto con flash corto
 // ============================================================
 bool tomarFoto() {
+  if (!camaraOk) { Serial.println("Camara no disponible aun"); return false; }
   digitalWrite(PIN_FLASH, HIGH);           // flash ON
   delay(FLASH_PREVIO_MS);                  // la cámara ajusta la exposición
 
@@ -627,7 +748,9 @@ bool tomarFoto() {
   digitalWrite(PIN_FLASH, LOW);            // flash OFF apenas se capturó
 
   if (!fb) {
-    Serial.println("Error: no se pudo capturar la imagen");
+    Serial.printf("Error: no se pudo capturar. heap=%u dma_max=%u\n",
+                  (unsigned)ESP.getFreeHeap(),
+                  (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
     return false;
   }
 
@@ -672,6 +795,8 @@ void ingresoDetectado() {
 
 // ============================================================
 void setup() {
+  Serial.begin(115200);
+  Serial.printf("heap_setup=%u\n", (unsigned)ESP.getFreeHeap());
   bombaApagar();                           // lo primero: bomba apagada
 
   pinMode(PIN_FLASH, OUTPUT);
@@ -729,6 +854,7 @@ void ejecutarComandoSerial(String cmd) {
     Serial.println(F("  GET"));
     Serial.println(F("  SET wifi_ssid=... wifi_pass=... server_url=..."));
     Serial.println(F("  SET pump_photos=N pump_seconds=N dist_min_cm=F dist_max_cm=F"));
+    Serial.println(F("  CAPTURE   (foto manual: flash + cola + upload + contador bomba)"));
     Serial.println(F("  REBOOT"));
   }
   else if (op == "GET") {
@@ -751,6 +877,10 @@ void ejecutarComandoSerial(String cmd) {
     if (!ok) { Serial.println("Clave no permitida. Usa HELP."); return; }
     aplicarClaveRemota(clave, valor);
     Serial.printf("SET %s aplicado (GET para ver estado)\n", clave.c_str());
+  }
+  else if (op == "CAPTURE") {
+    Serial.println("CAPTURE manual por USB...");
+    ingresoDetectado();
   }
   else if (op == "REBOOT") {
     Serial.println("Reiniciando...");
@@ -788,6 +918,16 @@ void loop() {
     if (millis() >= proxPortal) {
       proxPortal = millis() + 30000;      // reintentar cada 30 s
       iniciarPortal();
+    }
+  }
+
+  // Cámara caída: reintentar init cada 30 s (cubre fallos transitorios de
+  // alimentación/sensor sin reiniciar el dispositivo).
+  if (!camaraOk) {
+    static unsigned long proxCamara = 0;
+    if (millis() >= proxCamara) {
+      proxCamara = millis() + 30000;
+      iniciarCamara();
     }
   }
 

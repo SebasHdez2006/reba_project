@@ -95,37 +95,54 @@ organico +0.004, plastico -0.097.
 - Cámara: fallback chain VGA+PSRAM → QVGA+DRAM → QQVGA+DRAM → 96x96+DRAM.
 - Cola de fotos con fallback ps_malloc→malloc.
 
-### RESUELTO — cámara funciona + ESP32 en línea (2026-11-13)
+### RESUELTO — pipeline END-TO-END verificado (2026-11-13)
 
-- **Causa raíz de la cámara**: `prefs.begin()` (NVS) corría ANTES de
-  `iniciarCamara()` en `setup()` y consumía ~47KB de heap. Fix: inicializar
-  la cámara primero. Boot verificado: `Camara OK: frame_size=10 loc=PSRAM`.
-- **Provisioning sin celular**: comandos serie por USB (`SET/GET/REBOOT`,
-  mismas claves que la config remota). El portal `REBA-Setup` sigue
-  disponible para campo; bug corregido: faltaba `wm.process()` cada loop
-  para que el webserver del portal sirviera la página.
-- **Sesión verificada end-to-end** (hotspot PC `REBA-AP` 2.4GHz):
-  ESP32 `192.168.137.226` → `GET /api/device/config` → HTTP 200 en server.
-  Credenciales y `server_url=http://192.168.137.1:5000` persistidas en NVS.
-- **Fix NVS**: claves numéricas se guardan como string; `cargarConfig` ahora
-  las lee con `getString().toInt()/toFloat()` (antes `getInt/getFloat`
-  devolvían defaults por type mismatch tras reboot).
-- **Detalle monitores serie**: abrir COM9 con DTR/RTS assertados deja la
-  placa en reset/download-mode → silencio total. Usar `dtr=False, rts=False`
-  en pyserial (o el monitor serie del IDE que ya lo maneja).
+**Captura → WiFi → upload → inferencia → SQLite: FUNCIONA.**
+
+- **Causa raíz de la cámara (definitiva)**: `camera_config_t` se construía
+  dentro de `configCamara()` SIN inicializar — campos no asignados
+  (`sccb_freq`, `dma_half`, `dma_thresh`) tomaban basura de stack → SCCB/DMA
+  mal configurados → `init OK pero sin frames` / `FB-OVF` intermitente.
+  Fix: `camera_config_t config = {}`. Verificado: los tests que declaraban
+  el struct inline en `setup()` (test_cam4/5) siempre funcionaron; los que
+  lo construían en función (test_cam6/7, fotos_nc) fallaban — mismo
+  hardware, misma config de pines/resolución.
+- **HTTPClient.h eliminado**: se reemplazó por `httpSimple()` con
+  `WiFiClient` TCP plano (GET config + POST upload). Ahorra ~122KB flash y
+  evita el problema de mbedTLS/FB-OVF. Forward-declared antes de uso.
+- **`iniciarCamara` robusto**: tras `esp_camera_init` OK, reintenta
+  `esp_camera_fb_get` 4× con delays ANTES de `deinit` — un `fb_get` fallido
+  seguido de `deinit` deja el sensor inutilizable ("init OK sin frames").
+- **Prueba real ejecutada**: `CAPTURE` por USB → JPEG 3755 B → cola →
+  POST `/upload` → **HTTP 200** → ONNX inferencia (92 ms) → persistido en
+  `captures` (id=8, JPEG válido 320×240, 167 niveles de gris = foto real).
+  IP ESP32: `192.168.137.161` en hotspot `REBA-AP`.
+- Boot completo verificado: `heap_setup=264900`, `Camara OK
+  frame_size=6 loc=DRAM`, WiFi conecta, `REBA listo`, config NVS correcta
+  (`wifi_ssid=REBA-AP`, `server_url=http://192.168.137.1:5000`,
+  `pump_photos=3`, `dist_max_cm=23`).
 
 ### Estado del repo
 
-- Commits: `c104967` (firmado, pusheado) — serial commands + portal fix + NVS.
+- Firmware `fotos_nc`: cámara QVGA/DRAM + WiFiManager + Preferences +
+  httpSimple + comandos serie (GET/SET/CAPTURE/REBOOT) + config remota.
+- Server corriendo en `0.0.0.0:5000` (uvicorn), ONNX `best.onnx` época-16.
 - `.env` tiene `INFERENCE_CONFIDENCE=0.35` (NO commitear).
-- Server corriendo en `0.0.0.0:5000` (uvicorn background, shell propio).
-- ESP32-CAM: COM9 (CH340), firmware `fotos_nc` flasheado, en línea en
-  `REBA-AP` como `192.168.137.226`.
+- Hotspot PC `REBA-AP` 2.4GHz / `192.168.137.1` — OJO: Windows lo apaga por
+  inactividad; en campo usar router local o hotspot persistente.
 
-### Pendiente inmediato
+### Pendiente para el agua real
 
-- Prueba de captura real: objeto <23 cm del HC-SR04 → flash → JPEG →
-  POST /upload → inferencia ONNX → SQLite → dashboard. Verificar
-  `captures`/`detections` en `data/REBA.db`.
-- Bomba: contar 3 fotos (pump_events) — relé GPIO13 si está cableado.
-- Documentar procedimiento de campo (este archivo + docs/).
+- **HC-SR04**: acercar objeto <23 cm → debe disparar flash+foto solo
+  (el `CAPTURE` manual ya probó el path de imagen; falta el trigger
+  ultrasónico). TRIG=GPIO14, ECHO=GPIO15 (divisor 1k+2k).
+- **Bomba**: 3 fotos → `pump_events` → relé GPIO13 (bomba en NC, 12V boost).
+- **Sumergibilidad**: la ESP32-CAM NO es estanca — necesita carcasa/
+  funda sellada con orificio para la cámara; el HC-SR04 debe quedar
+  fuera del agua apuntando a la superficie (ultrasonido no atraviesa agua).
+- **Dominio del modelo**: entrenado con sintético+TACO terrestre; las
+  primeras fotos reales de REBA son el dataset que falta — etiquetar y
+  reentrenar cuando haya ~50-100 capturas acuáticas.
+- PSRAM de la placa es defectuoso (`psramFound=1` pero `ps_malloc` falla)
+  — el firmware usa DRAM para framebuffer así que funciona, pero es un
+  defecto de hardware documentado.
