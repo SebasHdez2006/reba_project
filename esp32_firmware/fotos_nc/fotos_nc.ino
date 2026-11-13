@@ -34,7 +34,7 @@
 //               (PORT en .env) + ruta /upload. Cambiarla requiere reflashear.
 const char* WIFI_SSID    = "TU_RED_WIFI";
 const char* WIFI_PASS    = "TU_CONTRASENA";
-const char* SERVIDOR_URL = "http://192.168.1.50:5000/upload";
+const char* SERVIDOR_URL = "http://192.168.1.3:5000/upload";
 
 // ---------------- Pines ----------------
 #define PIN_RELE   13
