@@ -128,10 +128,12 @@ void cargarConfig() {
   wifiSsid = prefs.getString("ssid", "");
   wifiPass = prefs.getString("pass", "");
   srvBase  = prefs.getString("srv", SRV_BASE_DEFAULT);
-  pumpPhotos  = prefs.getInt("pump_photos", 3);
-  pumpSeconds = prefs.getULong("pump_seconds", 10);
-  distMinCm   = prefs.getFloat("dist_min_cm", 0.0);
-  distMaxCm   = prefs.getFloat("dist_max_cm", 23.0);
+  // Las claves numéricas se persisten como string (guardarClave); leerlas
+  // con getInt/getFloat devolvería el default por desajuste de tipo en NVS.
+  pumpPhotos  = prefs.getString("pump_photos", "3").toInt();
+  pumpSeconds = prefs.getString("pump_seconds", "10").toInt();
+  distMinCm   = prefs.getString("dist_min_cm", "0").toFloat();
+  distMaxCm   = prefs.getString("dist_max_cm", "23").toFloat();
   prefs.end();
 }
 
@@ -188,6 +190,9 @@ void iniciarPortal() {
 
 void revisarPortal() {
   if (!portalActivo || !wmP) return;
+  // En modo no-bloqueante hay que bombear el webserver/DNS del portal
+  // cada loop — sin esto la página no carga aunque el AP esté arriba.
+  wmP->process();
   if (wmP->getConfigPortalActive()) return;   // sigue esperando al usuario
   portalActivo = false;
   Serial.println("Portal de configuracion cerrado (timeout o guardado).");
@@ -695,6 +700,78 @@ void setup() {
     digitalWrite(PIN_FLASH, LOW);  delay(150);
   }
   Serial.println("REBA listo: vigilando rango configurable");
+  Serial.println("Config USB: HELP para ver comandos");
+}
+
+// ------------------------------------------------------------
+// Config por puerto serie (USB): alternativa al portal WiFi —
+// no requiere celular ni red, ideal para aprovisionar en campo.
+//   GET
+//   SET wifi_ssid=REBA-AP
+//   SET wifi_pass=clave
+//   SET server_url=http://192.168.137.1:5000
+//   SET pump_photos=3  pump_seconds=10  dist_min_cm=0  dist_max_cm=23
+//   REBOOT
+// Reutiliza aplicarClaveRemota: mismas claves, validación, respaldos
+// y reversión automática que la configuración remota del servidor.
+// ------------------------------------------------------------
+void ejecutarComandoSerial(String cmd) {
+  cmd.trim();
+  if (cmd.length() == 0) return;
+
+  String op = cmd, resto = "";
+  int sp = cmd.indexOf(' ');
+  if (sp >= 0) { op = cmd.substring(0, sp); resto = cmd.substring(sp + 1); resto.trim(); }
+  op.toUpperCase();
+
+  if (op == "HELP") {
+    Serial.println(F("Comandos serie:"));
+    Serial.println(F("  GET"));
+    Serial.println(F("  SET wifi_ssid=... wifi_pass=... server_url=..."));
+    Serial.println(F("  SET pump_photos=N pump_seconds=N dist_min_cm=F dist_max_cm=F"));
+    Serial.println(F("  REBOOT"));
+  }
+  else if (op == "GET") {
+    Serial.printf("wifi_ssid=%s\nwifi_pass=%s\nserver_url=%s\n"
+                  "pump_photos=%d\npump_seconds=%d\ndist_min_cm=%.1f\ndist_max_cm=%.1f\n",
+                  wifiSsid.c_str(), wifiPass.c_str(), srvBase.c_str(),
+                  pumpPhotos, pumpSeconds, distMinCm, distMaxCm);
+  }
+  else if (op == "SET") {
+    int eq = resto.indexOf('=');
+    if (eq <= 0) { Serial.println("Formato: SET clave=valor"); return; }
+    String clave = resto.substring(0, eq); clave.trim();
+    String valor = resto.substring(eq + 1); valor.trim();
+    static const char* permitidas[] = {
+      "wifi_ssid", "wifi_pass", "server_url",
+      "pump_photos", "pump_seconds", "dist_min_cm", "dist_max_cm"
+    };
+    bool ok = false;
+    for (const char* k : permitidas) if (clave == k) { ok = true; break; }
+    if (!ok) { Serial.println("Clave no permitida. Usa HELP."); return; }
+    aplicarClaveRemota(clave, valor);
+    Serial.printf("SET %s aplicado (GET para ver estado)\n", clave.c_str());
+  }
+  else if (op == "REBOOT") {
+    Serial.println("Reiniciando...");
+    delay(300);
+    ESP.restart();
+  }
+  else {
+    Serial.println("Comando desconocido. HELP para ver opciones.");
+  }
+}
+
+void procesarSerial() {
+  static String linea;
+  while (Serial.available() > 0) {
+    char c = (char)Serial.read();
+    if (c == '\n' || c == '\r') {
+      if (linea.length() > 0) { ejecutarComandoSerial(linea); linea = ""; }
+    } else if (linea.length() < 160) {
+      linea += c;
+    }
+  }
 }
 
 void loop() {
@@ -702,6 +779,17 @@ void loop() {
 
   revisarPortal();
   revisarReversionSrv();
+  procesarSerial();
+
+  // Sin credenciales guardadas: mantener el AP de configuración disponible
+  // (el portal se cierra a los 5 min; reabrirlo periódicamente).
+  if (wifiSsid.length() == 0 && WiFi.status() != WL_CONNECTED && !portalActivo) {
+    static unsigned long proxPortal = 0;
+    if (millis() >= proxPortal) {
+      proxPortal = millis() + 30000;      // reintentar cada 30 s
+      iniciarPortal();
+    }
+  }
 
   // Descarga periódica de la configuración remota del servidor
   if (ahora - ultimoPollConfig >= POLL_CONFIG_MS) {
