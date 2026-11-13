@@ -95,45 +95,37 @@ organico +0.004, plastico -0.097.
 - Cámara: fallback chain VGA+PSRAM → QVGA+DRAM → QQVGA+DRAM → 96x96+DRAM.
 - Cola de fotos con fallback ps_malloc→malloc.
 
-### BLOQUEO PENDIENTE — cámara no inicializa en esta placa
+### RESUELTO — cámara funciona + ESP32 en línea (2026-11-13)
 
-- `esp_camera_init` falla en TODOS los tamaños con
-  `cam_dma_config: frame buffer malloc failed` (0xffffffff).
-- Diagnóstico serial: `heap=256660, mayor_bloque_dma=110580, psram=1`.
-- **Prueba decisiva**: sketch mínimo `esp32_firmware/test_cam/test_cam.ino`
-  (solo cámara, sin WiFiManager/WiFi/HTTPClient) → `esp_camera_init=0x0`,
-  `fb OK 2750 bytes 320x240`. **La cámara y el hardware funcionan.**
-- Conclusión: el sketch completo tiene ~47KB menos heap libre (303KB→256KB)
-  y el driver de cámara necesita más RAM contigua del disponible.
-- WiFiManager global→lazy NO fue el culpable (heap casi igual tras el cambio).
-- Sospechosos restantes: includes WiFiManager.h/HTTPClient.h/Preferences.h,
-  `prefs.begin()` (NVS) antes de `iniciarCamara()` en setup(), o inicialización
-  estática de libs.
-- **Siguiente paso al volver**: bisect en curso — `test_cam` ya incluye los 3
-  headers + globals réplica; flashearlo dice si los includes solos bajan el heap.
-  Si sí → reordenar `setup()`: `iniciarCamara()` antes de `cargarConfig()` y
-  cualquier otro init que consuma RAM. Si el heap sigue alto → el consumo está
-  en la iniciação estática de alguna lib y habrá que reestructurar (p.ej.
-  mover lógica de red a después de cámara o usar menos libs).
-- Alternativa si nada funciona: la placa tiene PSRAM defectuoso
-  (`psramFound()=1` pero `ps_malloc` falla) — evaluar placa nueva o driver
-  distinto. La SD que mencionaste el usuario podría servir de buffer de fotos
-  pero NO arregla el framebuffer (es RAM, no storage).
+- **Causa raíz de la cámara**: `prefs.begin()` (NVS) corría ANTES de
+  `iniciarCamara()` en `setup()` y consumía ~47KB de heap. Fix: inicializar
+  la cámara primero. Boot verificado: `Camara OK: frame_size=10 loc=PSRAM`.
+- **Provisioning sin celular**: comandos serie por USB (`SET/GET/REBOOT`,
+  mismas claves que la config remota). El portal `REBA-Setup` sigue
+  disponible para campo; bug corregido: faltaba `wm.process()` cada loop
+  para que el webserver del portal sirviera la página.
+- **Sesión verificada end-to-end** (hotspot PC `REBA-AP` 2.4GHz):
+  ESP32 `192.168.137.226` → `GET /api/device/config` → HTTP 200 en server.
+  Credenciales y `server_url=http://192.168.137.1:5000` persistidas en NVS.
+- **Fix NVS**: claves numéricas se guardan como string; `cargarConfig` ahora
+  las lee con `getString().toInt()/toFloat()` (antes `getInt/getFloat`
+  devolvían defaults por type mismatch tras reboot).
+- **Detalle monitores serie**: abrir COM9 con DTR/RTS assertados deja la
+  placa en reset/download-mode → silencio total. Usar `dtr=False, rts=False`
+  en pyserial (o el monitor serie del IDE que ya lo maneja).
 
 ### Estado del repo
 
-- Commit previo: `4bcde56` (v2 desplegado + reporte). Pendiente commit de:
-  server device-config, dashboard panel, firmware reescrito, test_cam.
+- Commits: `c104967` (firmado, pusheado) — serial commands + portal fix + NVS.
 - `.env` tiene `INFERENCE_CONFIDENCE=0.35` (NO commitear).
-- Server corriendo en `0.0.0.0:5000` (proceso uvicorn en background).
-- ESP32-CAM: COM9 (CH340, driver OK), última imagen flasheada = fotos_nc
-  con lazy WiFiManager (cámara aún falla — ver bloqueo arriba).
+- Server corriendo en `0.0.0.0:5000` (uvicorn background, shell propio).
+- ESP32-CAM: COM9 (CH340), firmware `fotos_nc` flasheado, en línea en
+  `REBA-AP` como `192.168.137.226`.
 
-### Para retomar la prueba de campo
+### Pendiente inmediato
 
-1. Resolver init de cámara (pasos arriba).
-2. Flashear firmware bueno → debe abrir AP `REBA-Setup` (sin creds).
-3. Conectar celular al AP → http://192.168.4.1 → WiFi + URL servidor.
-4. Verificar en serial: "Conectado. IP del ESP32-CAM" + "REBA listo".
-5. Acercar objeto <23 cm → foto → POST /upload → captura en SQLite.
-6. Editar config desde dashboard → verificar que la ESP32 la aplica en <60 s.
+- Prueba de captura real: objeto <23 cm del HC-SR04 → flash → JPEG →
+  POST /upload → inferencia ONNX → SQLite → dashboard. Verificar
+  `captures`/`detections` en `data/REBA.db`.
+- Bomba: contar 3 fotos (pump_events) — relé GPIO13 si está cableado.
+- Documentar procedimiento de campo (este archivo + docs/).
