@@ -679,10 +679,13 @@ void setup() {
   Serial.setDebugOutput(false);
   delay(500);
 
+  // La cámara va PRIMERO: prefs.begin() (NVS) consume ~47KB de heap y el
+  // driver de cámara necesita ~250KB contiguos — si NVS inicializa antes,
+  // cam_dma_config falla en placas con heap justo.
+  iniciarCamara();
+
   cargarConfig();
   ultimoConfigOk = millis();          // margen inicial para el primer poll
-
-  iniciarCamara();
   WiFi.mode(WIFI_STA);
   asegurarWiFi();                          // si no hay creds -> abre portal
 
