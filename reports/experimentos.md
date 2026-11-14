@@ -92,6 +92,23 @@ mAP50-95 por clase en `outdoor` (referencia de la misión):
   `plastico` sigue dominante ~66%).
 - **Set de validación `real_water`:** 415 imgs, ~1,101 instancias
   (plastico ~873, unicel ~171, metal ~57).
-- **Run:** `runs/detect/REBA_outdoor_v5` — pendiente de lanzar.
+- **Run:** `runs/detect/REBA_outdoor_v5` — **EN CURSO** (lanzado tras
+  la migración; ~573 iter/época, estimado 60–70 min/época en CPU).
 - **Métricas:** pendiente — comparación decisiva vs baseline v2 en
   `real_water` + `outdoor` + `taco_real`.
+
+## EXP-4 — candidato: oversampling de clases minoritarias (preparado)
+
+- **Motivación:** en v5 `plastico` ≈ 66% de las instancias
+  (~10.3k vs ~3.0k unicel / ~2.5k metal). Si las métricas de v5 en
+  `real_water` muestran que `unicel`/`metal` sufren por desbalance
+  (baja precision/recall vs baseline), este experimento está listo.
+- **Herramienta:** `ai_pipeline/balance_oversample.py` — crea
+  `datasets/REBA_oversample/` con hardlinks NTFS (sin duplicar disco)
+  de imágenes que contienen las clases objetivo, repetidas N veces.
+  Uso: `--classes unicel,metal --factor 2`.
+- **Activación:** solo si v5 lo justifica con métricas (regla FASE 2.5).
+  Requiere registrar `("REBA_oversample", "oversample")` en
+  `OPTIONAL_TRAIN_SOURCES` de `train_outdoor.py` y reentrenar (v6).
+- **Costo:** ~0 disco; +tiempo de entrenamiento proporcional a las
+  copias extra (~500–1,500 imgs → +5–15% iter/época).

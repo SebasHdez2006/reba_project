@@ -126,6 +126,12 @@ Tres vías redundantes, todas con la misma validación estricta y **reversión a
 
 ### 5.1 Reconocimiento (modelo outdoor v2, época 13)
 
+> **Nota histórica:** estas métricas corresponden al modelo de 5 clases
+> (`plastico, tela, organico, unicel, metal`) anterior al pivote a 3
+> clases. `tela` y `organico` fueron eliminadas; las cifras de abajo se
+> conservan como referencia del baseline. El modelo actual entrena solo
+> `plastico, unicel, metal` — ver `reports/experimentos.md` EXP-3.
+
 | Conjunto | ΔP | ΔR | ΔmAP50 | ΔmAP50-95 |
 |----------|-----|-----|--------|-----------|
 | clean (sintético) | -0.106 | -0.046 | -0.036 | -0.151 |
