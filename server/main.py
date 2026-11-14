@@ -152,8 +152,6 @@ def _draw_boxes(frame: np.ndarray, detections) -> np.ndarray:
     out = frame.copy()
     colors = {
         "plastico": (60, 180, 255),
-        "tela": (180, 120, 255),
-        "organico": (80, 200, 120),
         "unicel": (100, 220, 220),
         "metal": (200, 200, 80),
     }

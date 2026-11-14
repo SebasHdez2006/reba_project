@@ -4,6 +4,12 @@ Auditoría de fuentes de datos de residuos para el modelo de visión.
 Fecha: 2026-11-14. Cada entrada fue verificada en su fuente oficial
 (HF / Zenodo / Mendeley / Roboflow / GitHub / paper) — nada inventado.
 
+> **Actualización 2026-11-14 (tarde):** el modelo migró de 5 a **3 clases**
+> (`plastico`, `unicel`, `metal`) — `tela` y `organico` se eliminaron por
+> falta de datos reales que las cubrieran. Las tablas de mapeo de abajo
+> se conservan como referencia histórica; donde diga `organico`/`tela`
+> leer "→ fondo".
+
 **Regla del proyecto:** todo dataset externo es *bootstrap* — el sistema
 final es 100% offline. Las licencias se respetan; lo dudoso se marca.
 
@@ -48,7 +54,7 @@ final es 100% offline. Las licencias se respetan; lo dudoso se marca.
 - **Imágenes:** 7,906 (train 7,110 / val 796) — grabações de vídeo de superficie de río (Hobart, Sydney, Citarum Indonesia)
 - **Anotación:** COCO bbox — `annotations/instances_train.json` + `instances_val.json` (27,583 cajas, 25 clases)
 - **Licencia:** CC BY 4.0 (LICENSE en el repo)
-- **Clases → REBA:** Packaging/Other_packaging/S_*/H_*/PH_*/DH_*/P_foodcontainer/F_facemask → `plastico`; M_beveragecan/M_foodcan/M_aerosol → `metal`; D_polystyrene → `unicel`; T_wood/timber → `organico`; P_cardboard/G_*/R_*/Other → fondo
+- **Clases → REBA:** Packaging/Other_packaging/S_*/H_*/PH_*/DH_*/P_foodcontainer/F_facemask → `plastico`; M_beveragecan/M_foodcan/M_aerosol → `metal`; D_polystyrene → `unicel`; ~~T_wood/timber → organico~~ (eliminada → fondo); P_cardboard/G_*/R_*/Other → fondo
 - **Notas:** 54 imágenes sin anotación = agua limpia (negativos perfectos). `tela` NO existe en este dataset. Larga cola: Packaging+Other_packaging = 42% de anotaciones.
 - **Uso:** train subset (~1.5k priorizando clases REBA raras) + **val completo (796) = set de validación real** `REBA_real_val` — nunca entra a entrenamiento.
 
@@ -58,7 +64,7 @@ final es 100% offline. Las licencias se respetan; lo dudoso se marca.
 - **Imágenes:** 5,000 drone UAV sobre Dal Lake (Kashmir), 4,692 con plástico
 - **Anotación:** polígonos instance segmentation, exportado también en **YOLO** y COCO — 30,166 instancias, 7 clases: background, bottle, cap, foam, polythene, shoe, wrapper
 - **Licencia:** CC BY 4.0
-- **Clases → REBA:** bottle/cap/polythene/wrapper → `plastico`; foam → `unicel`; shoe → `tela`
+- **Clases → REBA:** bottle/cap/polythene/wrapper → `plastico`; foam → `unicel`; ~~shoe → tela~~ (eliminada → fondo)
 - **Notas:** vista aérea (nadir drone) ≠ superficie a 23 cm, pero aporta `tela` (shoe, 1.1% instancias — poco) y `unicel` (foam) reales. Objetos pequeños (mediana 1,448 px).
 - **Uso:** parcial — subconjunto balanceado, marcar origen `aqua` para análisis de dominio.
 
@@ -69,7 +75,7 @@ final es 100% offline. Las licencias se respetan; lo dudoso se marca.
 - **Anotación:** YOLO txt + COCO (vía mirror HF `keremberke/garbage-object-detection`)
 - **Clases:** biodegradable, cardboard, glass, metal, paper, plastic, cloth (7)
 - **Licencia:** CC BY 4.0
-- **Clases → REBA:** cloth → `tela`; biodegradable → `organico`; metal → `metal`; plastic → `plastico`; paper/cardboard/glass → fondo
+- **Clases → REBA:** cloth → ~~tela~~ (eliminada → fondo); biodegradable → ~~organico~~ (eliminada → fondo); metal → `metal`; plastic → `plastico`; paper/cardboard/glass → fondo
 - **Notas:** las ÚNICAS clases públicas con `tela` y `organico` reales. Dominio terrestre doméstico — riesgo de confundir al modelo (ropa en tendedero ≠ tela flotante). Usar con peso moderado y evaluar en set real.
 - **Uso:** parcial — subconjunto priorizando cloth/biodegradable.
 

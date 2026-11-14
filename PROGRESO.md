@@ -485,3 +485,57 @@ plastico 10,352 · tela 1,025 · organico 1,678 · unicel 2,974 · metal 2,531.
 3. **FloW dataset**: solicitud en github.com/ORCAUBOAT/FloW-Dataset.
 4. Si v4 tarda demasiado: dejar la PC encendida; el run reanuda con
    `YOLO("runs/detect/REBA_outdoor_v4/weights/last.pt").train(resume=True)`.
+
+## Sesión 9 — PIVOT a 3 clases: se eliminan `tela` y `organico` (14-nov)
+
+Decisión de producto tras la sesión 8: el modelo pasa de **5 a 3 clases**
+(`plastico`, `unicel`, `metal`). Justificación: `organico` nunca superó
+~0.15 mAP50-95 y `tela` tiene **0 instancias reales** en todos los
+datasets públicos acuáticos — mantenerlas degradaba el modelo sin
+beneficio. Los objetos de esas categorías quedan como fondo.
+
+### Migración ejecutada (`filter_classes.py`, reversible)
+
+- Backup de todas las etiquetas 5-clases en
+  `datasets/_backup_labels_5class/` (por dataset/split).
+- Remap: 0→plastico, 3→unicel→1, 4→metal→2; clases 1,2 eliminadas
+  (2,972 instancias → fondo). Idempotente vía detección de `data.yaml`.
+- `data.yaml` de cada dataset actualizado a 3 clases.
+
+### Código y configuración actualizados
+
+- `CLASS_NAMES=plastico,unicel,metal` en `.env` y `.env.example`;
+  default en `server/config.py`. `server/inference.py` ya era dinámico
+  (`nc = len(class_names)`).
+- Colores: `server/main.py`, `static/app.js` (leyenda/filters se
+  auto-adaptan desde `/api/config`).
+- Scripts: `CLASSES`/`CLASS_NAMES` en train_outdoor, synthetic_gen
+  (drawers de tela/organico eliminados), download_taco (mapping
+  tela/organico → fondo), download_ecosort, download_floatwaste
+  (T_wood → fondo), generate_copypaste, build_outdoor_eval,
+  dataset_stats, audit_labels, audit_pixels, dataset_builder,
+  download_openverse (queries actualizadas).
+- Mappings: TACO y FloatWaste ya no emiten tela/organico; EcoSort nunca
+  los tuvo.
+
+### Dataset tras el filtro
+
+- Train combinado: **4,579 imgs / ~15,588 instancias**
+  (plastico ~10.3k, unicel ~3.0k, metal ~2.5k).
+- `REBA_real_val`: 415 imgs / ~1,101 instancias (plastico ~873,
+  unicel ~171, metal ~57).
+- Las imágenes que solo tenían cajas tela/organico quedaron como
+  **background** (enseñan al modelo a ignorar esos objetos).
+
+### Diagrama y docs
+
+- `01_diagrama_clases.puml`, `02_diagrama_objetos.puml` actualizados
+  (fuentes; los .svg/.png requieren regenerar con plantuml.jar).
+- README, manual_uso, manual_alcances, server.md, preguntas_pruebas,
+  ai_pipeline.md, CATALOGO.md, experimentos.md actualizados.
+
+### Entrenamiento
+
+- v4 (5 clases) cortado en época ~1 → sin pesos útiles.
+- **v5 (3 clases) es el experimento vigente** — ver
+  `reports/experimentos.md` EXP-3.

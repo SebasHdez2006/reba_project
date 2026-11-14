@@ -12,8 +12,8 @@ problemas automáticos:
 - posibles duplicados por nombre de archivo entre splits (fugas)
 
 Uso (desde la raíz REBA/, con el venv activo):
-    python ai_pipeline/audit_labels.py --class-id 2 --per-dataset 12
-    python ai_pipeline/audit_labels.py --class-name organico
+    python ai_pipeline/audit_labels.py --class-id 1 --per-dataset 12
+    python ai_pipeline/audit_labels.py --class-name unicel
 """
 
 from __future__ import annotations
@@ -29,17 +29,12 @@ import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATASETS_ROOT = PROJECT_ROOT / "datasets"
-CLASSES = ("plastico", "tela", "organico", "unicel", "metal")
+CLASSES = ("plastico", "unicel", "metal")
 
-# Orígenes que participan en el train combinado (mismo orden que
-# OPTIONAL_TRAIN_SOURCES de train_outdoor.py) + eval.
-DATASET_DIRS = (
-    "REBA_synthetic",
-    "REBA_synthetic_boost",
-    "REBA_synthetic_boost2",
-    "REBA_taco",
-    "REBA_ecosort",
-    "REBA_outdoor_eval",
+# Auto-descubre datasets/REBA_* con labels (auditoria visual).
+DATASET_DIRS = tuple(
+    sorted(p.name for p in DATASETS_ROOT.glob("REBA_*")
+           if p.is_dir() and p.name != "REBA_outdoor")
 )
 
 

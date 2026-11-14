@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     inference_iou: float = Field(default=0.45, ge=0.0, le=1.0)
 
     # --- Clases YOLO (orden = class_id) ---
-    class_names: str = Field(default="plastico,tela,organico,unicel,metal")
+    class_names: str = Field(default="plastico,unicel,metal")
 
     # --- Bomba (informativo: espejar constantes del firmware) ---
     # Deben coincidir con FOTOS_PARA_BOMBA y TIEMPO_BOMBA_MS de fotos_nc.ino.

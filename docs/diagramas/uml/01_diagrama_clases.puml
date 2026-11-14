@@ -14,7 +14,7 @@ package "server/ — Python 3.13 · FastAPI" {
     + model_path : str = "models/best.onnx"
     + inference_confidence : float = 0.35
     + inference_iou : float = 0.45
-    + class_names : str = "plastico,tela,organico,unicel,metal"
+    + class_names : str = "plastico,unicel,metal"
     + pump_trigger_photos : int = 3
     + pump_run_seconds : float = 10.0
     + detect_min_cm / detect_max_cm : float = 0 / 23
@@ -151,7 +151,7 @@ fotos_nc "fotos_nc «sketch»" ..> "RebaAPI «module main.py»" : HTTP/WiFi\nPOS
 "app.js «módulo»" ..> "RebaAPI «module main.py»" : REST /api/* + WS /ws
 
 note bottom of "InferenceEngine"
-  ONNX Runtime CPU — models/best.onnx (YOLOv8n, 5 clases).
+  ONNX Runtime CPU — models/best.onnx (YOLOv8n, 3 clases).
   ~50–130 ms/frame. Sin fallback remoto: source=none si falta el modelo.
 end note
 

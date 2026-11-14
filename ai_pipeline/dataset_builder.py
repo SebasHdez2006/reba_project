@@ -10,7 +10,7 @@ Formato YOLO por línea:
 Todos los valores de caja están normalizados a [0, 1] respecto al tamaño de la imagen.
 
 Clases por defecto (class_id):
-    0 plastico | 1 tela | 2 organico | 3 unicel | 4 metal
+    0 plastico | 1 unicel | 2 metal
 
 Uso (desde la raíz REBA/):
     python ai_pipeline/dataset_builder.py --input raw_images --output datasets/REBA
@@ -46,8 +46,6 @@ from PIL import Image
 
 DEFAULT_CLASSES: Tuple[str, ...] = (
     "plastico",
-    "tela",
-    "organico",
     "unicel",
     "metal",
 )

@@ -64,20 +64,6 @@ DEFAULT_QUERY_BANK: Dict[str, List[str]] = {
         "floating plastic debris water",
         "water pollution plastic bottle",
     ],
-    "tela": [
-        "cloth trash water",
-        "rag floating water",
-        "fabric waste river water",
-        "textile trash water",
-        "cloth debris canal water",
-    ],
-    "organico": [
-        "food waste water",
-        "organic waste river water",
-        "fruit debris water",
-        "vegetation floating water",
-        "organic debris canal water",
-    ],
     "unicel": [
         "styrofoam floating water",
         "foam container water",
@@ -246,7 +232,7 @@ def iterate_queries(args: argparse.Namespace) -> Iterator[Tuple[str, str]]:
     if args.classes:
         selected_classes = [c.strip() for c in args.classes.split(",") if c.strip()]
     else:
-        selected_classes = ["plastico", "tela", "organico", "unicel", "metal", "context"]
+        selected_classes = ["plastico", "unicel", "metal", "context"]
 
     for cls in selected_classes:
         for q in query_bank.get(cls, []):
@@ -449,7 +435,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     p.add_argument(
         "--classes",
         type=str,
-        default="plastico,tela,organico,unicel,metal,context",
+        default="plastico,unicel,metal,context",
         help="Comma-separated class hints to query",
     )
     p.add_argument(

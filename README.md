@@ -81,9 +81,11 @@ Scripts del pipeline: `train_outdoor.py` (entrena+exporta), `evaluate_outdoor.py
 | Herramienta / fuente | Uso en REBA |
 |----------------------|-------------|
 | `REBA_synthetic` (propio) | 240 tr / 60 val / 60 test — escenas acuáticas sintéticas generadas por script |
-| `REBA_synthetic_boost` + `REBA_synthetic_boost2` (propio) | 180 + 240 train extra — refuerzo de clases raras (`organico`, `tela`, `unicel`) |
-| TACO (Trash Annotations in Context, real) | ~1300 imágenes vía `download_taco.py`, mapeadas a las 5 clases REBA |
+| `REBA_synthetic_boost` + `REBA_synthetic_boost2` (propio) | 180 + 240 train extra — refuerzo de clases raras |
+| TACO (Trash Annotations in Context, real) | ~1300 imágenes vía `download_taco.py`, mapeadas a las clases REBA |
 | EcoSort (Hugging Face, real) | 718 tr / 82 val vía `download_ecosort.py` — basura real fusionada (Open Images + TACO + Roboflow), remapeada a `plastico`/`metal` |
+| FloatWaste (Hugging Face, real) | ~1,550 train vía `download_floatwaste.py` — residuos **flotando en ríos** (CC BY 4.0); su split val → `REBA_real_val` (415 imgs limpias de fugas) = set de validación real |
+| `REBA_copypaste` (propio) | 600 imgs copy-paste de recortes reales sobre fondos de agua |
 | `REBA_outdoor_eval` (propio) | 120 copias degradadas deterministas para medir robustez |
 | Formato YOLO | Labels `class cx cy w h` normalizados; export del dashboard en ZIP re-entrenable |
 | Openverse + OpenAI Vision | **Solo bootstrap opcional** (`download_openverse_dataset.py`, `dataset_builder.py`) — nunca en producción |
@@ -132,7 +134,7 @@ Scripts del pipeline: `train_outdoor.py` (entrena+exporta), `evaluate_outdoor.py
 | **Dashboard** | `http://<IP_PC o localhost>:<PUERTO>` | `http://localhost:5000` | Navegador en la misma LAN |
 | **`MODEL_PATH`** | Ruta relativa o absoluta al `.onnx` | `models/best.onnx` | `.env` |
 | **`INFERENCE_CONFIDENCE` / `INFERENCE_IOU`** | 0.0–1.0 | `0.35` / `0.45` | `.env` |
-| **`CLASS_NAMES`** | CSV, orden = class_id | `plastico,tela,organico,unicel,metal` | `.env` |
+| **`CLASS_NAMES`** | CSV, orden = class_id | `plastico,unicel,metal` | `.env` |
 | **`PUMP_TRIGGER_PHOTOS` / `PUMP_RUN_SECONDS`** | entero / segundos | `3` / `10` — **informativo**: espejar `pump_photos`/`pump_seconds` del ESP32 | `.env` + config remota del dispositivo |
 | **`CAPTURE_RETENTION`** | entero (0 = sin límite) | `2000` | `.env` |
 | **`DATABASE_PATH`** | Ruta SQLite | `data/REBA.db` | `.env` |
@@ -206,7 +208,7 @@ REBA/
 | Retención de capturas | **2000** | `.env` → `CAPTURE_RETENTION` |
 | Relé / bomba | GPIO **13**, relé activo **LOW**, bomba en **NC** | `PIN_RELE`, `RELE_ACTIVO_BAJO`, `BOMBA_EN_NC` (`#define`, requieren recompilar) |
 | TRIG / ECHO / FLASH | GPIO **14** / **15** / **4** | `PIN_TRIG` / `PIN_ECHO` / `PIN_FLASH` (`#define`) |
-| Clases | plastico, tela, organico, unicel, metal | `.env` → `CLASS_NAMES` |
+| Clases | plastico, unicel, metal | `.env` → `CLASS_NAMES` |
 
 > Mantén los valores del ESP32 (vía dashboard → Dispositivo) y del `.env` **alineados** para que el progreso de bomba del dashboard coincinda con el comportamiento real.
 

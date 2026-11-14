@@ -47,7 +47,7 @@ import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-CLASSES: Tuple[str, ...] = ("plastico", "tela", "organico", "unicel", "metal")
+CLASSES: Tuple[str, ...] = ("plastico", "unicel", "metal")
 
 DEFAULT_DATASET_URL = (
     "https://huggingface.co/datasets/qihang3426/ecosort-dataset"

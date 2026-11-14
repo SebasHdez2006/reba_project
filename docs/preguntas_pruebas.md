@@ -201,7 +201,7 @@ de prueba física · `[📄]` solo documental
 | # | Pregunta | Comportamiento esperado | Prueba | Res. |
 |---|----------|-------------------------|--------|------|
 | 121 | ¿Qué datasets alimentan el train? `[✔]` | synthetic 360, boost 180, taco 750, outdoor_eval 120; train combinado 1022 | `ls datasets/*/images` | ☐ |
-| 122 | ¿Mapeo TACO→REBA? `[✔]` | `TACO_TO_REBA`: 60 cats COCO→5 clases; sin equivalente = fondo | `download_taco.py` | ☐ |
+| 122 | ¿Mapeo TACO→REBA? `[✔]` | `TACO_TO_REBA`: 60 cats COCO→3 clases; sin equivalente = fondo | `download_taco.py` | ☐ |
 | 123 | ¿Aumentaciones outdoor? `[✔]` | brightness/gamma/shadow/sunflare/fog/rain/defocus/motionblur/HSV/gray/noise/jpeg/dropout + cutmix/mixup/erasing | `outdoor_transforms.py` | ☐ |
 | 124 | ¿Por qué solo pixel-level? `[✔]` | No cambian cajas → labels YOLO exactas | Revisión del pipeline | ☐ |
 | 125 | ¿Resume de entrenamiento? `[◐]` | `last.pt` + `resume=True`; interrumpido 3 veces; patience 15 | `runs/detect/REBA_outdoor_v2` | ☐ |

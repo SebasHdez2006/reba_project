@@ -50,7 +50,7 @@ python -m server.main
 | `MODEL_PATH` | `models/best.onnx` | Modelo ONNX |
 | `INFERENCE_CONFIDENCE` | `0.35` | Umbral conf. (afinado por `tune_confidence.py` = máx F1) |
 | `INFERENCE_IOU` | `0.45` | NMS IoU |
-| `CLASS_NAMES` | `plastico,tela,...` | Orden = class_id |
+| `CLASS_NAMES` | `plastico,unicel,metal` | Orden = class_id |
 | `PUMP_TRIGGER_PHOTOS` | `3` | Fotos por ciclo de bomba (**informativo**: = `pump_photos` del dispositivo) |
 | `PUMP_RUN_SECONDS` | `10` | Duración del ciclo (**informativo**: = `pump_seconds` del dispositivo) |
 | `DETECT_MIN_CM` / `DETECT_MAX_CM` | `0` / `23` | Rango ultrasónico del firmware (display) |
@@ -128,7 +128,7 @@ Config **pública**: clases, umbrales de inferencia, constantes de bomba, rango 
 
 ```json
 {
-  "counters": {"plastico": 12, "tela": 3, "...": 0},
+  "counters": {"plastico": 12, "unicel": 3, "...": 0},
   "percentages": {"plastico": 60.0, "...": 0},
   "total_objects": 20
 }
@@ -168,7 +168,7 @@ Serie temporal para la gráfica del dashboard: `{days, series: [{date, detection
 
 ### `GET /api/export/yolo?min_conf=0&limit=500`
 
-Descarga `reba_dataset_yolo.zip`: `images/*.jpg` (JPEG **original** del ESP32, sin cajas), `labels/*.txt` en formato YOLO (clase cx cy w h normalizado, desde `detections`), `data.yaml` con las 5 clases. `min_conf` filtra detecciones débiles; capturas sin detección quedan como background.
+Descarga `reba_dataset_yolo.zip`: `images/*.jpg` (JPEG **original** del ESP32, sin cajas), `labels/*.txt` en formato YOLO (clase cx cy w h normalizado, desde `detections`), `data.yaml` con las 3 clases. `min_conf` filtra detecciones débiles; capturas sin detección quedan como background.
 
 ### `GET /api/detections/latest`
 
