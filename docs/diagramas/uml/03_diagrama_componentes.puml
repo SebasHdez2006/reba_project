@@ -1,0 +1,94 @@
+@startuml 03_diagrama_componentes
+title REBA — Diagrama de componentes (vista de software)
+
+left to right direction
+skinparam componentStyle rectangle
+
+' ================== EDGE ==================
+node "ESP32-CAM (AI-Thinker)" as espNode {
+  component [fotos_nc.ino\n«firmware C++»] as fw
+  component [Cámara OV2640\n+ flash GPIO4] as camHW
+  component [HC-SR04 + divisor\nTRIG14/ECHO15] as srHW
+  component [Relé GPIO13 → bomba 12V NC] as relayHW
+  component [NVS Preferences\n+ WiFiManager portal] as nvsHW
+  fw --> camHW
+  fw --> srHW
+  fw --> relayHW
+  fw --> nvsHW
+}
+
+' ================== PC ==================
+node "PC — Servidor (Python 3.13)" as pcNode {
+  component [RebaAPI\n«FastAPI + Uvicorn :5000»] as api
+  component [process_upload\n«pipeline foto»] as pipe
+  component [InferenceEngine\n«ONNX YOLOv8 CPU»] as eng
+  component [Database\n«SQLite3 wrapper»] as dbComp
+  component [Settings\n«Pydantic .env»] as cfg
+  component [static/\n«dashboard SPA»] as stat
+  component [device_config\n«canal server→ESP32»] as devcfg
+  component [retention_loop\n«poda horaria»] as ret
+
+  api --> pipe
+  api --> devcfg
+  api --> ret
+  pipe --> eng
+  pipe --> dbComp
+  api --> cfg
+  eng --> cfg
+  api --> stat : sirve estáticos
+}
+
+' ================== ARTEFACTOS ==================
+artifact "models/best.onnx\n«YOLOv8n v2»" as onnxFile
+database "data/REBA.db\n«5 tablas»" as dbFile
+folder "datasets/ + ai_pipeline/\n«entrenamiento offline»" as dsFolder
+file ".env / requirements.txt" as envFile
+
+' ================== INTERFACES ==================
+interface "«HTTP» POST /upload\nGET /api/device/config\nPOST /api/device/ack" as iHttp
+interface "«REST» /api/* (~20 endpoints)" as iRest
+interface "«WS» /ws (capture·detections·pump_event)" as iWs
+interface "«predict(frame)»" as iPredict
+interface "«CRUD captures/detections/counters\npump_events/device_config»" as iCrud
+interface "«config clave=valor»" as iCfgTxt
+
+' ================== RELACIONES ==================
+fw ..> iHttp : requiere «cliente TCP plano»
+iHttp ..> api : provee «endpoints ESP32»
+
+stat ..> iRest : requiere
+stat ..> iWs : requiere
+iRest ..> api : provee
+iWs ..> api : provee
+
+pipe ..> iPredict : requiere
+iPredict ..> eng : provee
+pipe ..> iCrud : requiere
+iCrud ..> dbComp : provee
+
+api ..> iCfgTxt : provee «texto plano al ESP32»
+iCfgTxt ..> fw : consume en poll 60 s
+
+eng --> onnxFile : carga session
+dbComp --> dbFile : sqlite3
+cfg --> envFile : lee
+pipe ..> stat : «serve» (indirecto vía api)
+
+node "Smartphone / PC — Navegador" as browser {
+  component [Dashboard SPA\n«vanilla JS, sin build»] as dashUI
+  dashUI --> stat : GET / (HTML/JS/CSS)
+}
+
+' pipeline offline (no runtime)
+dsFolder ..> onnxFile : train_outdoor.py exporta
+note bottom of dsFolder
+  Bootstrap opcional: Openverse + OpenAI Vision.
+  Producción 100% offline — nunca en runtime.
+end note
+
+note right of api
+  Sin autenticación — red aislada REBA-AP (decisión documentada).
+  Validación JPEG: magic bytes FF D8 FF + tamaño + decode OpenCV.
+end note
+
+@enduml

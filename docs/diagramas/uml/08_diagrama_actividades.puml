@@ -1,0 +1,80 @@
+@startuml 08_diagrama_actividades
+title REBA — Diagrama de actividades (flujo E2E: detección → captura → upload → IA → dashboard)
+
+skinparam swimlaneStyle plain
+
+|ESP32-CAM «edge»|
+|Red Wi-Fi LAN|
+|Servidor PC «FastAPI :5000»|
+|Dashboard «navegador»|
+start
+:leerCm() cada 60 ms;
+if (¿dist ∈ [dist_min, dist_max]?) then (sí)
+  :¿2 lecturas seguidas\n«debounce»?;
+  if (sí) then
+    :flash GPIO4 ~150 ms;
+    :tomarFoto() → JPEG QVGA\n«validar magic FF D8 FF»;
+    :colaAgregar() «RAM, máx 6»;
+    :contar foto hacia bomba;
+  else (no)
+    :seguir sondeando;
+  endif
+else (no)
+  :¿3 lecturas fuera? → rearma;
+endif
+
+if (¿fotos ≥ pump_photos?) then (sí)
+  :correrBomba(pump_seconds=10)\n«relé GPIO13, no bloqueante si manual»;
+endif
+
+:¿cola no vacía?;
+if (sí) then
+  :enviarJPG() → POST /upload\n«httpSimple TCP plano»;
+  fork
+    :reintento cada 15 s\n«máx 25 intentos / 4xx → drop»;
+  fork again
+    :poll config c/60 s\n«GET /api/device/config»;
+  end fork
+endif
+|Red Wi-Fi LAN|
+:TCP :5000 «sin Internet»;
+|Servidor PC «FastAPI :5000»|
+:POST /upload recibe JPEG;
+if (¿magic bytes + tamaño + decode OK?) then (no)
+  :400/413 → ESP32 descarta foto;
+  stop
+else (sí)
+endif
+:cv2.imdecode → frame BGR;
+:InferenceEngine.predict()\n«ONNX letterbox 640 → NCHW → conf≥0.35 → NMS 0.45»;
+:detections[] → _draw_boxes;
+:INSERT captures (doble JPEG)\n+ detections + counters;
+:pump_progress() → ¿ciclo inferido?;
+:broadcast() → WS /ws;
+:responde 200 {capture_id, detections,\ninference_ms, photos_toward_pump};
+|Dashboard «navegador»|
+:WS recibe capture + detections;
+:actualiza visor, donut, contadores,\nprogreso bomba, pill device.online;
+if (¿orden pump_cmd pendiente?) then (sí)
+  :muestra pending_cmd en panel Bomba;
+endif
+stop
+
+note right
+  Rango configurable 0–23 cm (NVS).
+  HC-SR04: ECHO 5V → divisor 1k/2k → GPIO15 (3.3V).
+  Lecturas >450 cm o sin eco → -1 (ruido, ignorado).
+end note
+
+note right
+  Cada upload = heartbeat del dispositivo
+  (device.online si <150 s desde último contacto).
+  Foto sin detecciones también se guarda (background real).
+end note
+
+note right
+  2xx → la foto sale de la cola del ESP32.
+  Error → reintento ~15 s (la cola absorbe cortes de Wi-Fi).
+end note
+
+@enduml

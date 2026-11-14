@@ -1,0 +1,53 @@
+@startuml 13_interaccion_overview
+title REBA — Diagrama de visión general de interacción (interaction overview)
+
+' Aproximación UML: diagrama de actividad cuyos nodos
+' referencian a los diagramas de secuencia del sistema.
+
+|Edge ESP32|
+|Servidor PC|
+|Dashboard|
+|Background|
+start
+
+:Detección ultrasónica\n«ver secuencia §10 fases 1»;
+
+:Captura JPEG + cola RAM\n«flash 150 ms · máx 6»;
+
+if (¿hay conectividad\nWiFi + server?) then (no)
+  :Reintento c/15 s\n«anti poison-pill»;
+  stop
+else (sí)
+endif
+
+|Servidor PC|
+:Upload + validación JPEG\n«magic bytes · decode»;
+
+:Inferencia ONNX + persistencia\n«ver secuencia §10 fases 2»;
+
+:Broadcast WS + respuesta 200;
+
+|Dashboard|
+:Render captura + métricas\n«donut · contadores · pump»;
+
+if (¿fotos ≥ pump_photos\n¿o pump_cmd manual?) then (sí)
+  |Edge ESP32|
+  :Ciclo de bomba 10 s\n«relé NC · ver comunicación §11»;
+  :ACK → pending_cmd = null;
+else (no)
+endif
+
+|Background|
+:Poll config c/60 s\n«overrides + reversión auto»;
+:Poda retención c/1 h\n«CAPTURE_RETENTION»;
+
+stop
+
+note right
+  Nodos «acción» = llamada a un diagrama de interacción:
+  · secuencia §10 → flujo foto→upload→IA→WS
+  · comunicación §11 → activación manual de bomba
+  · tiempos §12   → periodos y deadlines del sistema
+end note
+
+@enduml

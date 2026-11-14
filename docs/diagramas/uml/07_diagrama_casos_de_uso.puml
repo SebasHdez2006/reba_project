@@ -1,0 +1,87 @@
+@startuml 07_diagrama_casos_de_uso
+title REBA — Diagrama de casos de uso
+
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Operador\n«usuario dashboard»" as op
+actor "Técnico\n«config/soporte»" as tech
+actor "Nodo ESP32-CAM\n«sistema edge»" as esp
+actor "Ingeniero IA\n«offline»" as eng
+
+rectangle "Sistema REBA" {
+
+  ' ---- Actor: Operador ----
+  usecase "UC-01 Ver captura en vivo\n«última foto + clases + conf»" as uc01
+  usecase "UC-02 Consultar analítica\n«KPIs · donut · actividad 7/14/30d · galería»" as uc02
+  usecase "UC-03 Gestionar dispositivo\n«WiFi, server_url, bomba, distancias»" as uc03
+  usecase "UC-04 Activar bomba manual\n«segundos 1-300 + 'Activar ahora'»" as uc04
+  usecase "UC-05 Exportar dataset YOLO\n«ZIP images+labels+data.yaml»" as uc05
+  usecase "UC-06 Ver historial bomba\n«pump_events + pending_cmd»" as uc06
+  usecase "UC-07 Consultar salud sistema\n«device.online, inference, contadores»" as uc07
+
+  ' ---- Actor: ESP32 (sistema) ----
+  usecase "UC-10 Detectar objeto\n«HC-SR04 0-23 cm, debounce 2/3»" as uc10
+  usecase "UC-11 Capturar foto\n«flash 150ms + JPEG QVGA»" as uc11
+  usecase "UC-12 Subir foto al server\n«POST /upload, cola, retry 15s»" as uc12
+  usecase "UC-13 Descargar config remota\n«GET /api/device/config c/60s»" as uc13
+  usecase "UC-14 Ejecutar bomba\n«auto: N fotos · manual: pump_cmd»" as uc14
+  usecase "UC-15 Confirmar comando\n«POST /api/device/ack»" as uc15
+
+  ' ---- Actor: Ingeniero IA ----
+  usecase "UC-20 Generar/curar datasets\n«sintético, TACO, EcoSort»" as uc20
+  usecase "UC-21 Entrenar y exportar ONNX\n«train_outdoor.py → best.onnx»" as uc21
+  usecase "UC-22 Evaluar modelo\n«offline + eval_upload_path + tune_conf»" as uc22
+
+  ' ---- Relaciones operador ----
+  op --> uc01
+  op --> uc02
+  op --> uc03
+  op --> uc04
+  op --> uc05
+  op --> uc06
+  op --> uc07
+
+  ' ---- Relaciones ESP32 ----
+  esp --> uc10
+  uc10 ..> uc11 : <<include>>
+  uc11 ..> uc12 : <<include>>
+  uc12 ..> uc13 : <<extend>> «mismo canal HTTP»
+  uc12 ..> uc14 : <<include>> «cada pump_photos fotos'
+  uc14 ..> uc15 : <<include>> «tras pump_cmd manual'
+  esp --> uc15
+
+  ' ---- Relaciones técnico ----
+  tech --> uc03 : «alta privilegio: mismas vías»
+  tech --> uc13 : «portal REBA-Setup / serie SET»
+
+  ' ---- Relaciones IA ----
+  eng --> uc20
+  uc20 ..> uc21 : <<include>>
+  uc21 ..> uc22 : <<include>>
+  uc22 ..> uc05 : <<extend>> «export YOLO = dataset real»
+
+  ' ---- Internas del sistema (no actor) ----
+  usecase "UC-30 Clasificar foto\n«ONNX YOLOv8 → 5 clases»" as uc30
+  usecase "UC-31 Persistir evidencia\n«doble JPEG + detections»" as uc31
+  usecase "UC-32 Notificar dashboard\n«WS capture/detections»" as uc32
+  usecase "UC-33 Poda retención\n«CAPTURE_RETENTION horaria»" as uc33
+  uc12 ..> uc30 : <<include>>
+  uc30 ..> uc31 : <<include>>
+  uc31 ..> uc32 : <<include>>
+  uc33 ..> uc31 : <<extend>>
+}
+
+note bottom of uc04
+  Bomba manual: el server NO acciona hardware directo —
+  encola pump_cmd (<unix_ts>:<s>, TTL 10 min) que el ESP32
+  recoge en su poll, ejecuta no-bloqueante y confirma por ack.
+end note
+
+note bottom of uc13
+  Tres vías de configuración sin reflashear:
+  dashboard → admin/device-config · portal REBA-Setup · serie SET.
+  Cambios WiFi/URL llevan backup + reversión automática.
+end note
+
+@enduml
