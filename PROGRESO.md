@@ -539,3 +539,32 @@ beneficio. Los objetos de esas categorías quedan como fondo.
 - v4 (5 clases) cortado en época ~1 → sin pesos útiles.
 - **v5 (3 clases) es el experimento vigente** — ver
   `reports/experimentos.md` EXP-3.
+
+## Sesión 10 — Post-pivote: tooling + higiene de historia
+
+- **`balance_oversample.py`** (nuevo): oversampling de clases
+  minoritarias vía hardlinks NTFS sin duplicar disco — herramienta
+  lista para EXP-4 si las métricas de v5 justifican desbalance
+  (plastico ≈66% de instancias). Smoke-test OK (8 links, factor 1).
+- **EXP-4 documentado** en `reports/experimentos.md` (candidato, no
+  activado — regla FASE 2.5: solo con evidencia de métricas).
+- **`manual_alcances.md` §5.1**: nota histórica aclarando que las
+  métricas v2 son del modelo de 5 clases (pre-pivote).
+- **Historia git limpiada**: reescritos los mensajes de los 5 commits
+  de `mejora-datos-vision` para eliminar trailers
+  `Co-Authored-By: Devin` / `Generated with Devin`. Autor único:
+  `SebasHdez2006 <he24006@ues.edu.sv>`.
+- **v5 sigue entrenando** (`runs/detect/REBA_outdoor_v5`, 3 clases,
+  4,579 imgs, ~60–70 min/época). Pendiente al completar:
+  `evaluate_outdoor.py` (decisivo: `real_water`) →
+  `tune_confidence.py` → export ONNX opset 12 solo si supera baseline.
+
+### Comandos para cuando termine v5
+
+```bash
+python ai_pipeline/evaluate_outdoor.py      # compara vs baseline v2
+python ai_pipeline/tune_confidence.py       # reajusta INFERENCE_CONFIDENCE
+# si real_water mejora:
+python -c "from ultralytics import YOLO; YOLO('runs/detect/REBA_outdoor_v5/weights/best.pt').export(format='onnx', opset=12, imgsz=640)"
+python ai_pipeline/eval_upload_path.py      # valida POST /upload real
+```
