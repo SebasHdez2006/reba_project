@@ -20,8 +20,6 @@
   // ---------------------------------------------------------------------------
   const CLASS_COLORS = {
     plastico: "#3ea6ff",
-    tela: "#c084fc",
-    organico: "#4ade80",
     unicel: "#67e8f9",
     metal: "#fbbf24",
   };

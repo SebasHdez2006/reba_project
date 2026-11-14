@@ -30,7 +30,7 @@ import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATASETS_ROOT = PROJECT_ROOT / "datasets"
-CLASSES = ("plastico", "tela", "organico", "unicel", "metal")
+CLASSES = ("plastico", "unicel", "metal")
 DATASET_DIRS = (
     "REBA_synthetic", "REBA_synthetic_boost", "REBA_synthetic_boost2",
     "REBA_taco", "REBA_ecosort",

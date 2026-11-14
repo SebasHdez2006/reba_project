@@ -61,7 +61,7 @@ Investigamos Openverse antes de descargar a gran escala. Las búsquedas devuelve
 | `plastic bottles river water` | ~180 resultados | CC BY 2.0 / CC BY-SA | Muy útil para la clase `plastico` |
 | `ocean trash water` | ~240 resultados | CC BY 2.0 / CC BY-SA | Escenas marítimas, playas y canalizaciones |
 | `styrofoam water floating` | ~43 resultados | CC BY / CC BY-SA | Útil para `unicel` |
-| `food waste water` | ~21 resultados | CC BY / PDM | Útil como fuente de `organico` |
+| `metal can floating water` | ~decenas | CC BY / CC0 | Útil para `metal` |
 
 Justificación: Openverse centraliza fuentes con atribución y licencia explícita, lo que reduce el riesgo legal frente a scraping libre de Internet.
 
@@ -73,10 +73,17 @@ Justificación: Openverse centraliza fuentes con atribución y licencia explíci
 | class_id | Nombre |
 |----------|--------|
 | 0 | plastico |
-| 1 | tela |
-| 2 | organico |
-| 3 | unicel |
-| 4 | metal |
+| 1 | unicel |
+| 2 | metal |
+
+> **Modelo de 3 clases (desde 2026-11-14).** Se eliminaron `tela` y
+> `organico`: no existía dataset público acuático multi-clase que las
+> cubriera y sus mAP eran inaceptables (`organico` ≈0.10–0.15). Los
+> objetos de esas categorías quedan como **fondo** — el modelo aprende a
+> ignorarlos (o a absorberlos en `plastico` si visualmente se parecen).
+> Las etiquetas originales de 5 clases están respaldadas en
+> `datasets/_backup_labels_5class/` y `ai_pipeline/filter_classes.py`
+> documenta la migración (reversible).
 
 El orden debe coincidir con `CLASS_NAMES` en `.env` y con las anotaciones YOLO.
 
@@ -84,27 +91,21 @@ El orden debe coincidir con `CLASS_NAMES` en `.env` y con las anotaciones YOLO.
 
 ### Definiciones de clase (guía de etiquetado y remapeo)
 
-Estas definiciones fijan el límite de cada clase y guían todo remapeo de
-datasets externos. Ante la duda entre dos clases, aplicar la primera que
-case en orden.
-
 | Clase | ES | EN | Incluye | NO incluye (va a fondo) |
 |---|---|---|---|---|
-| `plastico` | Plástico rígido o flexible sumergido/flotante | Rigid/flexible plastic | Botellas PET/PE, bolsas, film, envases, sorbete, cubiertos, tapitas, vasos duros, mascarillas, paquetes | Cartón/papel, vidrio, metal, unicel, tela, materia orgánica |
-| `tela` | Textil: prenda, tela suelta o deshilachada | Textile / fabric | Ropa (camisas, pantalones, ropa interior), trapos, sábanas, toallas, cuerda/fibra textil, zapatos de tela, toldo de tela | Plástico tipo lona, hule, caucho, metal, cuero (va a fondo salvo que sea claramente textil) |
-| `organico` | Materia orgánica natural flotante | Natural organic matter | Hojas, ramas, corteza, semillas, cáscaras, restos de comida/vegetales, flores, algas, madera/timber | Plástico oxodegradable ya fragmentado (es `plastico`), tierra/barro sola, objetos manufacturados |
+| `plastico` | Plástico rígido o flexible sumergido/flotante | Rigid/flexible plastic | Botellas PET/PE, bolsas, film, envases, sorbete, cubiertos, tapitas, vasos duros, mascarillas, paquetes | Cartón/papel, vidrio, metal, unicel, textiles, materia orgánica |
 | `unicel` | Poliestireno expandido / foam | Polystyrene foam | Vasos, contenedores y platos de foam, aislante de foam, foam fragmentado | Plásticos rígidos (vasos duros → `plastico`), gomaespuma no-PS si es dudoso (fondo) |
-| `metal` | Metal: envases y piezas | Metal / ferrous & non-ferrous | Latas (bebida/comida), aerosoles, tapones metálicos, piezas de alambre, clavos, Utensilios metálicos | Objetos mayormente plásticos con parte metálica pequeña (la caja cubre el objeto entero) |
+| `metal` | Metal: envases y piezas | Metal / ferrous & non-ferrous | Latas (bebida/comida), aerosoles, tapones metálicos, piezas de alambre, clavos, utensilios metálicos | Objetos mayormente plásticos con parte metálica pequeña |
+
+**Fondo explícito:** textiles (`tela`), materia orgánica (`organico`),
+vidrio, papel/cartón, hule/caucho y objetos irreconocibles NO se etiquetan
+— enseñan al modelo a no disparar sobre ellos.
 
 **Criterio de borde para remapeo externo:** si un dataset etiqueta por
 *material* (p. ej. "paper", "glass", "rubber"), mapear solo cuando el
-material sea inequívocamente uno de los 5; si etiqueta por *objeto*
-("shoe", "timber", "foodcontainer"), mapear por la clase dominante del
-objeto en ambiente acuático.
-
-**Desbalance conocido:** `tela` y `organico` no tienen datasets públicos
-acuáticos multi-clase; su principal fuente real serán las capturas
-ESP32-CAM (ver protocolo en `PROGRESO.md`).
+material sea inequívocamente uno de los 3; si etiqueta por *objeto*
+("bottle", "can", "foam cup"), mapear por la clase dominante del objeto
+en ambiente acuático.
 
 
 ---
@@ -145,7 +146,7 @@ python ai_pipeline/dataset_builder.py --input raw_images --output datasets/REBA
 |------|---------|-------------|
 | `--input` | (requerido) | Carpeta de imágenes crudas |
 | `--output` | `datasets/REBA` | Dataset YOLO de salida |
-| `--classes` | plastico,tela,... | Orden = class_id |
+| `--classes` | plastico,unicel,metal,context | Orden = class_id |
 | `--model` | gpt-4o-mini | Modelo Vision |
 | `--val-ratio` | 0.2 | Fracción validación |
 | `--test-ratio` | 0.1 | Fracción test |
@@ -217,7 +218,7 @@ tres herramientas:
 | `ai_pipeline/download_taco.py` | Descarga TACO (basura real "in the wild", formato COCO) y lo convierte a YOLO con las 5 clases REBA en `datasets/REBA_taco/`. Soporta `--limit 0` (todo), `--per-class` y `--prioritize-classes` para sesgar la descarga hacia clases escasas; reanuda por `manifest.jsonl`. |
 | `ai_pipeline/download_ecosort.py` | Descarga el dataset **EcoSort** de Hugging Face (`dataset.tar` ~1.5 GB, YOLO de 10 clases ya fusionado de Open Images + TACO + Roboflow) y lo remapea a las 5 clases REBA en `datasets/REBA_ecosort/`. Vidrio/cartón/papel quedan como fondo. `--limit`/`--val-limit`/`--seed` para subconjunto determinista; `--tar-file` reutiliza un tar local. |
 | `ai_pipeline/download_floatwaste.py` | Descarga **FloatWaste** (HF `OliviaWuYJ/sc-floatwaste`, CC BY 4.0 — 7,906 imgs de superficie de río, COCO). Remapea 25 categorías → REBA en `datasets/REBA_floatwaste/` (train priorizado a clases raras + `--negatives` de agua limpia) y **todo el split val → `datasets/REBA_real_val/`** = set de validación real acuático que NUNCA entra a entrenamiento. Re-encodea a JPEG ≤1600px. |
-| `ai_pipeline/generate_copypaste_dataset.py` | Genera `datasets/REBA_copypaste/` (~600 imgs): recorta instancias reales de todos los `REBA_*` y las pega sobre fondos de agua con escala/rotación/jitter/submersión parcial. Pesos de muestreo favorecen `tela`/`organico`. |
+| `ai_pipeline/generate_copypaste_dataset.py` | Genera `datasets/REBA_copypaste/` (~600 imgs): recorta instancias reales de todos los `REBA_*` y las pega sobre fondos de agua con escala/rotación/jitter/submersión parcial. |
 | `ai_pipeline/dedup_audit.py` | Auditoría de near-duplicados perceptuales (dHash 64-bit, Hamming≤6) entre todos los `REBA_*` → `reports/dedup_report.json`. Detecta fugas train↔val/test. |
 | `ai_pipeline/clean_real_val.py` | Elimina de `REBA_real_val` las imágenes con near-duplicado en train (FloatWaste reparte frames de video; el split oficial no es visualmente disjunto). |
 | `ai_pipeline/outdoor_transforms.py` | Define el pipeline albumentations compartido (entrenamiento y evaluación). |
@@ -240,13 +241,13 @@ cambian y el pipeline es seguro para detección.
 
 ### Mapeo de clases TACO → REBA
 
-Las 60 categorías COCO de TACO se mapean a las 5 clases en la tabla
+Las 60 categorías COCO de TACO se mapean a las 3 clases en la tabla
 `TACO_TO_REBA` de `download_taco.py` (botellas/etiquetas plásticas, bolsas,
-film, utensilios → `plastico`; cuerdas/calzado → `tela`; residuos de comida →
-`organico`; espuma/styrofoam → `unicel`; latas/foil/tapas metálicas → `metal`).
-Las categorías sin equivalente (vidrio, papel, cartón, cigarros, basura sin
-etiquetar) se ignoran — quedan como fondo, lo que enseña al modelo a no
-detectarlas.
+film, utensilios → `plastico`; espuma/styrofoam → `unicel`; latas/foil/
+tapas metálicas → `metal`). Cuerdas/calzado (`tela`) y residuos de comida
+(`organico`) quedaron **descartadas** al eliminar esas clases — ahora son
+fondo. Lo mismo para vidrio, papel, cartón, cigarros y basura sin etiquetar:
+quedan como fondo, lo que enseña al modelo a no detectarlas.
 
 ### Mapeo de clases EcoSort → REBA
 
@@ -254,8 +255,8 @@ EcoSort trae 10 clases propias; `download_ecosort.py` aplica la tabla
 `ECOSORT_TO_REBA`: `plastic_bottle`, `plastic_bag`, `plastic_food_container` y
 `snack_bag` → `plastico`; `aluminum_can`, `food_can` y `battery` → `metal`.
 `glass_bottle`, `cardboard_box` y `paper_sheet` se descartan (fondo). EcoSort
-no contiene `tela`/`organico`/`unicel` — por eso el refuerzo de esas clases
-sigue viniendo del sintético acuático y de TACO.
+no contiene `unicel` — el refuerzo de esa clase viene de FloatWaste
+(`D_polystyrene`) y del sintético acuático.
 
 Fuentes del dataset EcoSort (según su tarjeta en HF): Open Images V7 (CC BY),
 TACO (MIT/CC), `dmedhi/garbage-image-classification-detection` (CC BY 4.0),
@@ -273,30 +274,30 @@ cercano al despliegue: residuos **flotando en la superficie de ríos**
   PH_cup, H_*, DH_lid, F_facemask (la mayoría de las 25 categorías).
 - → `unicel`: `D_polystyrene` (2,308 cajas en el train subset).
 - → `metal`: `M_beveragecan`, `M_foodcan/tin`, `M_aerosol`.
-- → `organico`: `T_wood/timber` (madera flotante — materia orgánica natural).
-- → fondo: `P_cardboard`, `R_ball/balloon`, `G_beveragebottle`, `Other`.
-- `tela`: **inexistente en FloatWaste** — sigue viniendo de boosts
-  sintéticos, TACO y copy-paste.
+- → fondo: `P_cardboard`, `R_ball/balloon`, `G_beveragebottle`, `Other`,
+  `T_wood/timber` (madera — antes `organico`, ahora fondo).
 
 El split `val` de FloatWaste (796 imgs) se reserva completo como
 `REBA_real_val` — el set de validación real acuático. `clean_real_val.py`
 ya eliminó 345 imágenes con near-duplicados en train (frames de video
-del mismo tramo); quedan **415 imágenes limpias** (873 plastico, 171
-unicel, 57 metal, 20 organico, 0 tela — limitación honesta documentada).
+del mismo tramo); quedan **415 imágenes limpias** (~873 plastico,
+~171 unicel, ~57 metal tras el filtrado 3-clases — antes había 20
+`organico` que ahora son fondo).
 
 ### Copy-paste (`REBA_copypaste`)
 
-`generate_copypaste_dataset.py` ataca `tela`/`organico` pegando recortes
-reales (de todos los `REBA_*`) sobre fondos de agua limpia de FloatWaste
-y sintéticos, con escala/rotación/jitter/submersión parcial. 600 imágenes
-con ~594 `tela` y ~585 `organico` — casi duplica las instancias de esas
-clases en el train combinado.
+`generate_copypaste_dataset.py` pega recortes reales (de todos los
+`REBA_*`) sobre fondos de agua limpia de FloatWaste y sintéticos, con
+escala/rotación/jitter/submersión parcial. 600 imágenes de datos
+acuáticos sintéticos realistas. (Su propósito original era reforzar
+`tela`/`organico`; tras la migración a 3 clases conserva ~600
+instancias de `plastico`/`unicel`/`metal`.)
 
 ### Flujo completo outdoor
 
 ```bash
 python ai_pipeline/download_taco.py --limit 0 \
-    --prioritize-classes organico,tela,unicel   # TACO completo, prioriza escasas
+    --prioritize-classes unicel,metal             # TACO completo, prioriza escasas
 python ai_pipeline/download_ecosort.py --limit 800  # dataset.tar de HF → YOLO-REBA
 python ai_pipeline/download_floatwaste.py --limit 1500 --negatives 120
     # FloatWaste → REBA_floatwaste (train) + REBA_real_val (val limpio)
@@ -305,8 +306,8 @@ python ai_pipeline/dedup_audit.py               # auditoría global de duplicado
 python ai_pipeline/generate_synthetic_dataset.py \   # opcional: boost clases raras
     --output datasets/REBA_synthetic_boost2 \
     --n-train 240 --n-val 0 --n-test 0 \
-    --class-weights 1,3,6,2,1 --seed 1234
-python ai_pipeline/generate_copypaste_dataset.py --images 600   # tela/organico
+    --class-weights 1,2,1 --seed 1234            # orden: plastico,unicel,metal
+python ai_pipeline/generate_copypaste_dataset.py --images 600   # datos acuáticos
 python ai_pipeline/build_outdoor_eval.py --preview   # conjunto difícil
 python ai_pipeline/train_outdoor.py --epochs 50      # re-entrenar
 python ai_pipeline/evaluate_outdoor.py               # reporte comparativo
@@ -314,11 +315,14 @@ python ai_pipeline/tune_confidence.py                # umbral óptimo → .env
 ```
 
 Si existen `datasets/REBA_synthetic_boost*/` (carpetas `images/train` no vacías),
-`train_outdoor.py` las suma automáticamente al train combinado (recomendado para
-reforzar `organico` y `tela`, que son escasas en TACO y ausentes en EcoSort).
-Igual con `datasets/REBA_taco/` y `datasets/REBA_ecosort/`: basta con que la
-carpeta exista con formato YOLO y las 5 clases REBA — ver `OPTIONAL_TRAIN_SOURCES`
-en `train_outdoor.py` para registrar una fuente nueva.
+`train_outdoor.py` las suma automáticamente al train combinado. Igual con
+`datasets/REBA_taco/`, `REBA_ecosort/`, `REBA_floatwaste/` y
+`REBA_copypaste/`: basta con que la carpeta exista con formato YOLO y las
+3 clases REBA — ver `OPTIONAL_TRAIN_SOURCES` en `train_outdoor.py` para
+registrar una fuente nueva.
+
+`ai_pipeline/filter_classes.py` migró todo el dataset de 5 a 3 clases
+(eliminando `tela`/`organico`; backup en `datasets/_backup_labels_5class/`).
 
 `train_outdoor.py` archiva los pesos previos en `models/archive/` antes de
 sobrescribir, así `evaluate_outdoor.py` siempre tiene baseline.

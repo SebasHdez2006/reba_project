@@ -48,7 +48,7 @@ import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-CLASSES: Tuple[str, ...] = ("plastico", "tela", "organico", "unicel", "metal")
+CLASSES: Tuple[str, ...] = ("plastico", "unicel", "metal")
 
 DEFAULT_ANNOTATIONS_URL = (
     "https://raw.githubusercontent.com/pedropro/TACO/master/data/annotations.json"
@@ -89,11 +89,7 @@ TACO_TO_REBA: Dict[int, str] = {
     49: "plastico",  # Plastic utensils
     54: "plastico",  # Squeezable tube
     55: "plastico",  # Plastic straw
-    # tela (fibras / textiles flexibles)
-    51: "tela",      # Rope & strings
-    53: "tela",      # Shoe
-    # organico
-    25: "organico",  # Food waste
+    # (tela/organico eliminados del modelo -> quedan como fondo)
     # unicel (espuma / poliestireno expandido)
     22: "unicel",    # Foam cup
     46: "unicel",    # Foam food container
@@ -222,7 +218,7 @@ def download(args: argparse.Namespace) -> None:
     rng = random.Random(args.seed)
     rng.shuffle(image_ids)
 
-    # Prioriza imágenes que contienen clases escasas (tela, organico, …).
+    # Prioriza imágenes que contienen clases escasas.
     priority = {c.strip() for c in args.prioritize_classes.split(",") if c.strip()}
     if priority:
         def has_priority(img_id: int) -> bool:

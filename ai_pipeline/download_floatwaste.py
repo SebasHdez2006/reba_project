@@ -2,7 +2,7 @@
 
 FloatWaste: 7,906 imagenes de superficie de rio (Hobart, Sydney, Citarum),
 COCO bbox, CC BY 4.0. Dominio mas cercano al despliegue (residuos flotando
-en agua), pero sin clase `tela`.
+en agua), pero sin telas ni organicos (eliminados del modelo).
 
 Salida:
   datasets/REBA_floatwaste/   -> train subset (nunca toca val)
@@ -40,7 +40,7 @@ MAX_SIDE = 1600
 JPEG_Q = 92
 WORKERS = 8
 
-CLASS_NAMES = ["plastico", "tela", "organico", "unicel", "metal"]
+CLASS_NAMES = ["plastico", "unicel", "metal"]
 
 # FloatWaste category_id -> clase REBA (None = fondo, se descarta la caja)
 FLOATWASTE_TO_REBA = {
@@ -64,8 +64,8 @@ FLOATWASTE_TO_REBA = {
     19: "metal",      # M_foodcan/tin
     20: "metal",      # M_aerosol
     23: "plastico",   # F_facemask (polipropileno no tejido)
-    24: "organico",   # T_wood/timber
-    # 8 P_cardboard, 21 R_ball/balloon, 22 G_beveragebottle, 25 Other -> fondo
+    # 24 T_wood/timber -> organico eliminado: ahora fondo
+    # 8 P_cardboard, 21 R_ball/balloon, 22 G_beveragebottle, 24, 25 Other -> fondo
 }
 REBA_TO_ID = {n: i for i, n in enumerate(CLASS_NAMES)}
 
@@ -113,7 +113,7 @@ def select_train_images(coco: dict) -> list[dict]:
     anns_by_img: dict[int, list[dict]] = {}
     for a in coco["annotations"]:
         anns_by_img.setdefault(a["image_id"], []).append(a)
-    # peso inverso por clase mapeada (metal/unicel/organico pesan mas)
+    # peso inverso por clase mapeada (metal/unicel pesan mas)
     cls_totals: dict[str, int] = {}
     for a in coco["annotations"]:
         cls = FLOATWASTE_TO_REBA.get(a["category_id"])

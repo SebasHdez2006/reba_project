@@ -182,7 +182,7 @@ def main():
             if line[:1].isdigit() and ":" in line:
                 k, v = line.split(":", 1)
                 names[int(k.strip())] = v.strip()
-    n_classes = max(names) + 1 if names else 5
+    n_classes = max(names) + 1 if names else 3
     class_names = [names.get(i, f"clase_{i}") for i in range(n_classes)]
 
     # sanity: server arriba

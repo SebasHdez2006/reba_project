@@ -37,7 +37,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DATASETS = ROOT / "datasets"
 OUT = DATASETS / "REBA_copypaste"
 
-CLASS_NAMES = ["plastico", "tela", "organico", "unicel", "metal"]
+CLASS_NAMES = ["plastico", "unicel", "metal"]
 # Fuentes de objetos (dataset -> splits usados para el banco de recortes)
 OBJECT_SOURCES = [
     "REBA_floatwaste", "REBA_taco", "REBA_ecosort",
@@ -47,8 +47,7 @@ OBJECT_SOURCES = [
 BG_SOURCES = ["REBA_floatwaste", "REBA_synthetic"]
 
 # Pesos de muestreo por clase al elegir objetos (refuerza debiles)
-CLASS_WEIGHT = {"plastico": 0.8, "tela": 3.0, "organico": 3.0,
-                "unicel": 1.5, "metal": 0.8}
+CLASS_WEIGHT = {"plastico": 1.2, "unicel": 1.5, "metal": 1.2}
 
 MAX_CROPS_PER_CLASS = 1200   # limite de banco en memoria
 MIN_CROP_PX = 12             # lado minimo del recorte

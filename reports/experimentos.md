@@ -38,8 +38,19 @@ mAP50-95 por clase en `outdoor` (referencia de la misión):
 
 ## EXP-2 — v4: + FloatWaste (agua real) + copy-paste + negativos
 
-- **Dataset train final: 4,579 imágenes / 18,560 instancias**
-  (antes v3: 2,430 / ~7,700):
+> **PIVOT 2026-11-14 (tarde):** antes de que v4 completara la época 1 se
+> decidió migrar el modelo de **5 → 3 clases** (`plastico`, `unicel`,
+> `metal`) — `tela` y `organico` se eliminaron por falta de datos reales
+> que las cubrieran (0 instancias `tela` en todo lo público acuático;
+> `organico` mAP50-95 ≈0.10–0.15). v4 (5 clases) se cortó sin métricas;
+> el experimento vigente es **EXP-3 = v5 3-clases** con el mismo dataset
+> filtrado por `ai_pipeline/filter_classes.py` (backup de etiquetas
+> originales en `datasets/_backup_labels_5class/`).
+
+- **Dataset train final: 4,579 imágenes** (mismas fuentes; las cajas
+  `tela`/`organico` quedaron como fondo — 2,972 instancias eliminadas,
+  quedan ~15,588). Antes del filtrado eran 18,560 instancias (v3: 2,430
+  imgs / ~7,700):
 
   | Fuente | imgs train | aporte clave |
   |---|---|---|
@@ -51,19 +62,15 @@ mAP50-95 por clase en `outdoor` (referencia de la misión):
   | **REBA_floatwaste** | **1,549** | **superficie de río real**: 7,916 plastico, 2,308 unicel, 1,081 metal, 513 organico (madera) + 49 fondos de agua limpia |
   | **REBA_copypaste** | **600** | **594 tela + 585 organico** (recortes reales sobre agua) |
 
-- **Instancias train por clase:** plastico 10,352 · tela 1,025 ·
-  organico 1,678 · unicel 2,974 · metal 2,531.
-  `tela` 431→1,025 (+138%), `organico` 580→1,678 (+189%),
-  `unicel` 373→2,974 (+697%), `metal` 1,301→2,531 (+95%).
-  `plastico` crece a 10,352 (56% del total) — desbalance a vigilar en
-  las métricas por clase del set real.
+- **Instancias train por clase (pre-filtrado 5 clases):** plastico 10,352 ·
+  tela 1,025 · organico 1,678 · unicel 2,974 · metal 2,531.
+  `plastico` ~66% del total tras el filtrado — desbalance a vigilar.
 
 - **Set de validación real `real_water`:** `REBA_real_val` = 415 imágenes
   limpias de FloatWaste val (se eliminaron 345 con near-duplicados en
-  train — `dedup_audit.py` + `clean_real_val.py`). Composición:
-  873 plastico, 171 unicel, 57 metal, 20 organico, **0 tela**
-  (no existe dataset público acuático con tela — se evalúa en
-  `outdoor`/`clean` y pendientes capturas ESP32-CAM).
+  train — `dedup_audit.py` + `clean_real_val.py`). Composición tras
+  filtrado 3-clases: ~873 plastico, ~171 unicel, ~57 metal
+  (las 20 `organico` originales ahora son fondo).
 
 - **Auditoría de fugas:** `dedup_audit.py` (dHash, Hamming≤6) encontró
   18,206 pares near-dup globales: 4,572 eran FloatWaste train↔val
@@ -71,6 +78,20 @@ mAP50-95 por clase en `outdoor` (referencia de la misión):
   `REBA_synthetic` train↔val (limitación del generador procedural,
   documentada); el resto <120 pares coincidentes débiles.
 
-- **Run:** `runs/detect/REBA_outdoor_v4` — 50 epochs, patience 20,
-  batch 8, imgsz 640, CPU. ~573 iter/época → ~60-70 min/época estimado.
-- **Métricas:** pendiente.
+- **Run:** `runs/detect/REBA_outdoor_v4` — **CORTADO** al migrar a 3
+  clases (no llegó a época 1 completa; sin pesos útiles).
+
+## EXP-3 — v5: modelo de 3 clases sobre dataset filtrado
+
+- **Cambio:** ontología 5→3 clases en TODO el proyecto (server `.env`,
+  `CLASS_NAMES`, mappings de datasets, `data.yaml`, dashboard, docs,
+  diagramas). Etiquetas migradas por `filter_classes.py`
+  (0→plastico, 3→unicel, 4→metal; 1,2 eliminadas).
+- **Dataset train:** mismas 4,579 imágenes, ~15,588 instancias restantes
+  (plastico ~10.3k, unicel ~3.0k, metal ~2.5k — proporciones similares,
+  `plastico` sigue dominante ~66%).
+- **Set de validación `real_water`:** 415 imgs, ~1,101 instancias
+  (plastico ~873, unicel ~171, metal ~57).
+- **Run:** `runs/detect/REBA_outdoor_v5` — pendiente de lanzar.
+- **Métricas:** pendiente — comparación decisiva vs baseline v2 en
+  `real_water` + `outdoor` + `taco_real`.

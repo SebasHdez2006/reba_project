@@ -36,7 +36,7 @@ from outdoor_transforms import outdoor_train_transforms
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATASETS_ROOT = PROJECT_ROOT / "datasets"
-CLASSES = ("plastico", "tela", "organico", "unicel", "metal")
+CLASSES = ("plastico", "unicel", "metal")
 
 
 def archive_previous_model(path: Path, archive_dir: Path) -> None:
@@ -79,12 +79,12 @@ def write_combined_data_yaml(
 # Fuentes opcionales de train: (carpeta en datasets/, etiqueta para el log).
 # Se incluyen solo si `datasets/<nombre>/images/train` existe y no está vacío.
 OPTIONAL_TRAIN_SOURCES = (
-    ("REBA_synthetic_boost", "boost(organico/tela)"),
-    ("REBA_synthetic_boost2", "boost2(organico/tela/unicel)"),
+    ("REBA_synthetic_boost", "boost"),
+    ("REBA_synthetic_boost2", "boost2"),
     ("REBA_taco", "TACO"),
     ("REBA_ecosort", "EcoSort"),
     ("REBA_floatwaste", "FloatWaste"),
-    ("REBA_copypaste", "copy-paste(tela/organico)"),
+    ("REBA_copypaste", "copy-paste"),
 )
 
 

@@ -16,7 +16,7 @@ from typing import Dict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATASETS_ROOT = PROJECT_ROOT / "datasets"
-CLASSES = ("plastico", "tela", "organico", "unicel", "metal")
+CLASSES = ("plastico", "unicel", "metal")
 # Auto-descubre datasets/REBA_* con labels (excluye derivados/audit)
 DATASET_DIRS = tuple(
     sorted(p.name for p in DATASETS_ROOT.glob("REBA_*")

@@ -58,7 +58,7 @@ Guía práctica para operar el sistema día a día: abrir el dashboard, leer lo 
 ### Pestaña 2 — `Analítica`
 
 - **KPIs**: `TOTAL OBJETOS` (detecciones acumuladas) y `FOTOS RECIBIDAS` (fotos subidas por el ESP32).
-- **Gráfica de materiales (donut)**: distribución de las 5 clases — `plastico`, `tela`, `organico`, `unicel`, `metal`. Pasa el cursor (o toca) cada leyenda para ver conteo y porcentaje.
+- **Gráfica de materiales (donut)**: distribución de las 3 clases — `plastico`, `unicel`, `metal`. Pasa el cursor (o toca) cada leyenda para ver conteo y porcentaje.
 - **Gráfica de actividad**: barras apiladas de detecciones por día. Cambia el rango con `7 días` / `14 días` / `30 días`. Pasa el cursor sobre un día para ver el detalle por clase.
 - **Galería de capturas**: todas las fotos clasificadas, más recientes primero.
   - Escribe en `Filtrar por clase…` (ej. `plastico`) para filtrar.

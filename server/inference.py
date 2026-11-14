@@ -5,8 +5,8 @@ Modo final: YOLOv8 exportado a ONNX (`models/best.onnx`) vía onnxruntime.
 Sin fallback remoto: si no hay modelo, el sistema reporta error y sigue en
 modo local/offline.
 
-Clases (class_id 0..4 por defecto):
-    plastico, tela, organico, unicel, metal
+Clases (class_id 0..N-1, configurables vía CLASS_NAMES):
+    plastico, unicel, metal
 
 Uso:
     engine = InferenceEngine(settings)
