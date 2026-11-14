@@ -1,0 +1,3535 @@
+{
+  "threshold_hamming": 6,
+  "n_images": 5182,
+  "n_pairs_total": 18206,
+  "n_cross_split_leaks": 6282,
+  "n_internal_dupes": 11924,
+  "leak_summary": {
+    "REBA_floatwaste:train <-> REBA_real_val:val": 4572,
+    "REBA_synthetic:test <-> REBA_synthetic_boost2:train": 341,
+    "REBA_synthetic:train <-> REBA_synthetic:test": 324,
+    "REBA_synthetic:val <-> REBA_synthetic_boost2:train": 236,
+    "REBA_synthetic:test <-> REBA_synthetic_boost:train": 223,
+    "REBA_synthetic:train <-> REBA_synthetic:val": 212,
+    "REBA_synthetic:val <-> REBA_synthetic_boost:train": 150,
+    "REBA_synthetic:val <-> REBA_synthetic:test": 60,
+    "REBA_real_val:val <-> REBA_taco:train": 50,
+    "REBA_real_val:val <-> REBA_synthetic_boost2:train": 35,
+    "REBA_real_val:val <-> REBA_synthetic:train": 16,
+    "REBA_ecosort:train <-> REBA_real_val:val": 13,
+    "REBA_real_val:val <-> REBA_synthetic_boost:train": 13,
+    "REBA_ecosort:train <-> REBA_synthetic:test": 8,
+    "REBA_ecosort:train <-> REBA_taco:test": 7,
+    "REBA_ecosort:train <-> REBA_synthetic:val": 7,
+    "REBA_ecosort:val <-> REBA_taco:train": 4,
+    "REBA_ecosort:train <-> REBA_taco:val": 3,
+    "REBA_real_val:val <-> REBA_synthetic:test": 3,
+    "REBA_ecosort:train <-> REBA_ecosort:val": 2,
+    "REBA_ecosort:val <-> REBA_synthetic_boost2:train": 2,
+    "REBA_taco:train <-> REBA_taco:test": 1
+  },
+  "leaks": [
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_1_frame_0026.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_7_5_frame_0028.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_8_5_frame_0019.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_7_3_frame_0047.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_8_4_frame_0004.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_9_4_frame_0000.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_2_frame_0005.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_drain-TIMEL0026_2149-1361.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00017.jpg",
+      "b": "datasets/REBA_taco/images/val/taco_00002.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00018.jpg",
+      "b": "datasets/REBA_taco/images/test/taco_00102.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00054.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_8_3_frame_0029.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00057.jpg",
+      "b": "datasets/REBA_taco/images/val/taco_00244.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00064.jpg",
+      "b": "datasets/REBA_taco/images/test/taco_00089.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00116.jpg",
+      "b": "datasets/REBA_taco/images/test/taco_00093.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00128.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikijing_2024_october_9_3_frame_0005.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00128.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0034.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00128.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0036.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00139.jpg",
+      "b": "datasets/REBA_taco/images/test/taco_01049.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00221.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_11_2_frame_0013.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00279.jpg",
+      "b": "datasets/REBA_ecosort/images/val/eco_val_00701.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00325.jpg",
+      "b": "datasets/REBA_taco/images/val/taco_01020.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/val/val_0029.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/val/val_0033.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/val/val_0057.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/test/test_0012.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/test/test_0029.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/test/test_0034.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/test/test_0057.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00386.jpg",
+      "b": "datasets/REBA_taco/images/test/taco_01040.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00552.jpg",
+      "b": "datasets/REBA_ecosort/images/val/eco_val_00701.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00684.jpg",
+      "b": "datasets/REBA_taco/images/test/taco_01202.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00693.jpg",
+      "b": "datasets/REBA_synthetic/images/val/val_0024.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00759.jpg",
+      "b": "datasets/REBA_taco/images/test/taco_00267.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/val/val_0029.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/val/val_0033.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/val/val_0057.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/test/test_0012.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/test/test_0029.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/test/test_0034.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/test/test_0057.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/val/eco_val_00035.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0020.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/val/eco_val_00035.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0026.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/val/eco_val_00264.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00106.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/val/eco_val_00372.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_01471.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/val/eco_val_00731.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00088.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/val/eco_val_00739.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_01246.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_25_2_frame_0007.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_1_frame_0026.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_2_frame_0001.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_7_3_frame_0017.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_8_2_frame_0037.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_8_5_frame_0007.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_11_3_frame_0008.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_7_3_frame_0047.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_11_2_frame_0013.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_11_2_frame_0039.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_1_frame_0054.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_2_frame_0005.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_26_2_frame_0013.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_4_2_frame_0052.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_6_4_frame_0002.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_1_frame_0025.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_2_frame_0043.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_8_1_frame_0012.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_21_1_frame_0030.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_22_1_frame_0018.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_23_2_frame_0015.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_25_2_frame_0001.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_26_2_frame_0017.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_27_4_frame_0026.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_5_3_frame_0030.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_5_4_frame_0028.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_blacktowncreek-timel0009_13-904.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_drain-TIMEL0026_2149-1361.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_23_3_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_25_2_frame_0007.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_23_3_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_2_frame_0001.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_23_3_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_7_3_frame_0017.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_23_3_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_11_3_frame_0008.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_23_3_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_2_frame_0005.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_23_3_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_8_1_frame_0012.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_23_3_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_22_1_frame_0018.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_23_3_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_26_2_frame_0017.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_23_3_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_27_4_frame_0026.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_23_3_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_5_4_frame_0028.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_23_3_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_blacktowncreek-timel0009_13-904.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_23_3_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_drain-TIMEL0026_2149-1361.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_11_3_frame_0018.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_24_2_frame_0044.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0027.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikijing_2024_october_27_3_frame_0011.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0027.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikijing_2024_october_9_3_frame_0005.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0027.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikijing_2024_october_9_3_frame_0012.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0027.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_13_2_frame_0052.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0027.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_24_2_frame_0044.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0027.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0034.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0027.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_22_2_frame_0010.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0028.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikijing_2024_october_27_3_frame_0011.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0028.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikijing_2024_october_9_3_frame_0005.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0028.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikijing_2024_october_9_3_frame_0012.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0028.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_13_2_frame_0052.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0028.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_24_2_frame_0044.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0028.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0034.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0028.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_22_2_frame_0010.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0029.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikijing_2024_october_27_3_frame_0011.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0029.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikijing_2024_october_9_3_frame_0005.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0029.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikijing_2024_october_9_3_frame_0012.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0033.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikijing_2024_october_9_3_frame_0005.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0033.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikijing_2024_october_9_3_frame_0012.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0033.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_13_2_frame_0052.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0033.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_24_2_frame_0044.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0033.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_22_2_frame_0010.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0033.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_22_2_frame_0011.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_1_frame_0009.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_6_4_frame_0002.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_2_frame_0007.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_21_6_frame_0004.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_2_frame_0007.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_22_10_frame_0002.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_2_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_21_6_frame_0004.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_2_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_22_10_frame_0002.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_3_frame_0009.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_21_6_frame_0004.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_3_frame_0009.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_22_10_frame_0002.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_3_frame_0010.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_21_6_frame_0004.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_3_frame_0010.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_22_10_frame_0002.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_4_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0034.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_4_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0036.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_4_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_23_2_frame_0015.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_4_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_25_2_frame_0001.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_4_frame_0009.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_21_6_frame_0004.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_4_frame_0009.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_22_10_frame_0002.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_6_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0034.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_6_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0036.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_6_frame_0011.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_21_6_frame_0004.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_6_frame_0011.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_22_10_frame_0002.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_6_frame_0015.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_21_6_frame_0004.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_6_frame_0015.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_22_10_frame_0002.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_7_frame_0007.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0034.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_8_frame_0003.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0034.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_11_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_1_frame_0026.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_11_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_11_3_frame_0008.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_11_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_24_2_frame_0044.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_11_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_24_2_frame_0051.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_11_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_21_1_frame_0030.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_11_frame_0011.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_2_frame_0040.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_12_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_25_2_frame_0007.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_12_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_1_frame_0026.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_12_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_2_frame_0001.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_12_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_8_2_frame_0037.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_12_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0034.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_12_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0036.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_12_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_21_1_frame_0030.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_12_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_22_1_frame_0018.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_12_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_23_2_frame_0015.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_12_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_25_2_frame_0001.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_12_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_26_2_frame_0017.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_12_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_27_4_frame_0026.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_14_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_25_2_frame_0007.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_14_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_2_frame_0001.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_14_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_22_1_frame_0018.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_14_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_26_2_frame_0017.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_14_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_27_4_frame_0026.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_3_frame_0001.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_22_3_frame_0000.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_4_frame_0000.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_22_3_frame_0000.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_9_frame_0011.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_21_6_frame_0004.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_22_9_frame_0011.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_22_10_frame_0002.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_1_frame_0017.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_23_2_frame_0006.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0029.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_23_2_frame_0021.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_25_2_frame_0007.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_1_frame_0026.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_2_frame_0001.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_8_2_frame_0037.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_25_4_frame_0015.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_11_3_frame_0008.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_1_frame_0054.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_2_frame_0005.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_8_1_frame_0012.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_21_1_frame_0030.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_22_1_frame_0018.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_26_2_frame_0017.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_27_4_frame_0026.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_toongabbiecreek-TIMEL0027_1706-1225.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_toongabbiecreek-TIMEL0027_1706-751.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_toongabbiecreek-TIMEL0032_1711-948.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0037.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_25_2_frame_0007.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0037.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_1_frame_0026.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0037.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_2_frame_0001.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0037.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_25_4_frame_0015.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0037.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_11_3_frame_0008.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0037.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_21_1_frame_0030.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0037.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_22_1_frame_0018.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0037.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_26_2_frame_0017.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0037.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_27_4_frame_0026.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0037.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_toongabbiecreek-TIMEL0027_1706-1225.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0037.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_toongabbiecreek-TIMEL0027_1706-751.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_25_2_frame_0007.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_1_frame_0026.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_2_frame_0001.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_25_4_frame_0015.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_11_3_frame_0008.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_21_1_frame_0030.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_22_1_frame_0018.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_26_2_frame_0017.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_27_4_frame_0026.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_toongabbiecreek-TIMEL0027_1706-1225.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_toongabbiecreek-TIMEL0027_1706-751.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_2_frame_0032.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_25_2_frame_0007.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_2_frame_0032.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_1_frame_0026.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_2_frame_0032.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_2_frame_0001.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_2_frame_0032.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_8_2_frame_0037.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_2_frame_0032.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_25_4_frame_0015.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_2_frame_0032.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_8_5_frame_0007.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_2_frame_0032.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_11_3_frame_0008.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_2_frame_0032.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_7_3_frame_0047.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_2_frame_0032.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_1_frame_0054.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_2_frame_0032.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_2_frame_0005.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_2_frame_0032.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_8_1_frame_0012.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_2_frame_0032.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_21_1_frame_0030.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_2_frame_0032.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_22_1_frame_0018.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_2_frame_0032.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_26_2_frame_0017.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_2_frame_0032.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_27_4_frame_0026.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_2_frame_0032.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_5_4_frame_0028.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_2_frame_0032.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_blacktowncreek-timel0009_13-904.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_2_frame_0032.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_toongabbiecreek-TIMEL0032_1711-948.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_25_2_frame_0007.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_1_frame_0026.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_2_frame_0001.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_7_3_frame_0017.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_8_2_frame_0037.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_11_3_frame_0008.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_24_2_frame_0044.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_7_3_frame_0047.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_11_2_frame_0013.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_1_frame_0054.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_2_frame_0005.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_1_frame_0025.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_2_frame_0043.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_8_1_frame_0012.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_21_1_frame_0030.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_22_1_frame_0018.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_25_2_frame_0001.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_26_2_frame_0017.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_27_4_frame_0026.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_5_3_frame_0030.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_5_4_frame_0028.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_drain-TIMEL0026_2149-1361.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_25_2_frame_0007.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_1_frame_0026.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_2_frame_0001.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_7_3_frame_0017.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_8_2_frame_0037.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_24_3_frame_0030.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_8_5_frame_0007.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_8_5_frame_0019.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_11_3_frame_0008.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_24_2_frame_0044.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0034.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0036.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_7_3_frame_0047.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_8_4_frame_0004.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_11_2_frame_0013.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_11_2_frame_0039.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_11_3_frame_0032.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_11_3_frame_0037.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_1_frame_0054.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_2_frame_0005.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_24_2_frame_0051.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_26_2_frame_0013.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_27_4_frame_0001.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_6_4_frame_0002.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_1_frame_0025.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_2_frame_0040.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_2_frame_0043.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_8_1_frame_0012.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_21_1_frame_0030.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_22_1_frame_0018.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_23_2_frame_0015.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_25_2_frame_0001.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_26_2_frame_0017.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_27_4_frame_0026.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_5_3_frame_0030.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_5_4_frame_0028.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_blacktowncreek-timel0009_13-904.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_drain-TIMEL0020_1864-1432.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_drain-TIMEL0026_2149-1361.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_hobart_S7GLN.Hobart_S7GLN_2022_05_10_images_fieldwork_2022-05-23-15h29m19s392.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_25_2_frame_0007.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_1_frame_0026.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_2_frame_0001.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_7_3_frame_0017.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_8_2_frame_0037.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_8_5_frame_0007.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_11_3_frame_0008.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_7_3_frame_0047.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_11_2_frame_0013.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_11_2_frame_0039.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_1_frame_0054.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_2_frame_0005.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_4_2_frame_0052.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_1_frame_0025.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_2_frame_0043.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_8_1_frame_0012.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_21_1_frame_0030.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_22_1_frame_0018.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_23_2_frame_0015.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_25_2_frame_0001.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_26_2_frame_0017.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_27_4_frame_0026.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_5_3_frame_0030.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_5_4_frame_0028.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_blacktowncreek-timel0009_13-904.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_drain-TIMEL0026_2149-1361.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_3_frame_0018.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_1_frame_0026.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_3_frame_0018.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_7_5_frame_0028.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_3_frame_0018.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_8_5_frame_0019.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_3_frame_0018.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_9_4_frame_0000.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0003.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_25_4_frame_0015.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_25_2_frame_0007.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_1_frame_0026.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_2_frame_0001.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_25_4_frame_0015.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_22_1_frame_0018.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_26_2_frame_0017.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0012.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_27_4_frame_0026.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_25_2_frame_0007.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_1_frame_0026.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_2_frame_0001.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_8_2_frame_0037.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_25_4_frame_0015.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_11_3_frame_0008.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_1_frame_0054.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_2_frame_0005.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_8_1_frame_0012.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_21_1_frame_0030.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_22_1_frame_0018.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_26_2_frame_0017.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_27_4_frame_0026.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_toongabbiecreek-TIMEL0027_1706-1225.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_toongabbiecreek-TIMEL0027_1706-751.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_toongabbiecreek-TIMEL0032_1711-948.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_25_2_frame_0007.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_1_frame_0026.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_2_frame_0001.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_7_3_frame_0017.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_8_2_frame_0037.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikijing_2024_october_9_3_frame_0012.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_11_3_frame_0008.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_13_2_frame_0052.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_24_2_frame_0044.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_7_3_frame_0047.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_11_2_frame_0013.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_11_2_frame_0039.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_1_frame_0054.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_2_frame_0005.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_24_2_frame_0051.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_1_frame_0025.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_2_frame_0043.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_8_1_frame_0012.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_21_1_frame_0030.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_22_1_frame_0018.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_25_2_frame_0001.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_26_2_frame_0017.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_27_4_frame_0026.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_5_3_frame_0030.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_5_4_frame_0028.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_blacktowncreek-timel0009_13-904.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_drain-TIMEL0026_2149-1361.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_25_2_frame_0007.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_2_frame_0001.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_7_5_frame_0028.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_8_5_frame_0007.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_8_5_frame_0019.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_9_5_frame_0008.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_7_3_frame_0047.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_8_4_frame_0004.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_11_3_frame_0032.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_11_3_frame_0037.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_9_4_frame_0000.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_2_frame_0005.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_22_1_frame_0018.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_26_2_frame_0017.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_27_4_frame_0026.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_5_4_frame_0028.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_blacktowncreek-timel0009_13-904.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_blacktowncreek-timel0017_21-473.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_drain-TIMEL0009_1997-418.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_drain-TIMEL0009_1997-584.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_hobart_S7GLN.Hobart_S7GLN_2022_05_10_images_fieldwork_2022-05-23-15h29m19s392.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_25_2_frame_0007.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_1_frame_0026.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_2_frame_0001.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_8_2_frame_0037.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_8_5_frame_0007.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_8_5_frame_0019.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_11_3_frame_0008.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_7_3_frame_0047.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_8_4_frame_0004.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_11_3_frame_0032.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_11_3_frame_0037.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_1_frame_0054.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_2_frame_0005.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_8_1_frame_0012.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_21_1_frame_0030.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_22_1_frame_0018.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_26_2_frame_0017.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_27_4_frame_0026.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_5_4_frame_0028.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_blacktowncreek-timel0009_13-904.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_8_2_frame_0037.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_24_2_frame_0044.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0034.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0036.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_22_2_frame_0010.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_22_2_frame_0011.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_24_2_frame_0051.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_1_frame_0025.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_2_frame_0040.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_21_1_frame_0030.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_23_2_frame_0015.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0002.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_25_2_frame_0001.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_25_2_frame_0007.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_2_frame_0001.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_8_2_frame_0037.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_13_2_frame_0052.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_24_2_frame_0044.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0034.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0036.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_22_2_frame_0010.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_22_2_frame_0011.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_24_2_frame_0051.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_2_frame_0040.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_21_1_frame_0030.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_22_1_frame_0018.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_23_2_frame_0015.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_25_2_frame_0001.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_26_2_frame_0017.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_27_4_frame_0026.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_drain-TIMEL0020_1864-1432.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_8_frame_0014.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0034.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_8_frame_0016.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikijing_2024_october_9_3_frame_0005.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_8_frame_0016.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikijing_2024_october_9_3_frame_0012.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_8_frame_0016.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_11_3_frame_0008.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_8_frame_0016.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_13_2_frame_0052.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_8_frame_0016.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_24_2_frame_0044.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_8_frame_0016.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0034.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_8_frame_0016.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_22_2_frame_0010.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_8_frame_0016.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_24_2_frame_0051.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_8_frame_0016.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_2_frame_0040.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_8_frame_0016.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_21_1_frame_0030.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_8_frame_0016.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_25_2_frame_0001.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_5_9_frame_0008.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_8_2_frame_0037.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_5_9_frame_0008.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikijing_2024_october_9_3_frame_0005.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_5_9_frame_0008.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikijing_2024_october_9_3_frame_0012.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_5_9_frame_0008.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_13_2_frame_0052.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_5_9_frame_0008.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_24_2_frame_0044.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_5_9_frame_0008.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0034.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_5_9_frame_0008.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0036.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_5_9_frame_0008.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_22_2_frame_0010.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_5_9_frame_0008.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_22_2_frame_0011.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_5_9_frame_0008.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_24_2_frame_0051.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_5_9_frame_0008.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_6_4_frame_0002.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_5_9_frame_0008.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_2_frame_0040.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_5_9_frame_0008.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_21_1_frame_0030.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_5_9_frame_0008.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_23_2_frame_0015.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_5_9_frame_0008.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_25_2_frame_0001.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_25_2_frame_0007.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_1_frame_0026.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_2_frame_0001.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_8_2_frame_0037.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_8_5_frame_0007.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_11_3_frame_0008.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0034.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0036.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_7_3_frame_0047.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_1_frame_0054.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_23_2_frame_0005.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik_2024_october_6_4_frame_0002.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_2_frame_0040.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_8_1_frame_0012.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_21_1_frame_0030.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_22_1_frame_0018.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_23_2_frame_0015.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_25_2_frame_0001.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_26_2_frame_0017.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_27_4_frame_0026.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_5_4_frame_0028.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0021.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_blacktowncreek-timel0009_13-904.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0023.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_25_2_frame_0007.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0023.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_1_frame_0026.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0023.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_2_frame_0001.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0023.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_8_2_frame_0037.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0023.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_8_5_frame_0019.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0023.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik6_2024_october_25_2_frame_0036.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0023.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_21_1_frame_0030.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0023.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_22_1_frame_0018.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0023.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_26_2_frame_0017.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0023.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_27_4_frame_0026.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0023.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_drain-TIMEL0026_2149-597.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_7_5_frame_0007.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_8_5_frame_0007.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_7_5_frame_0007.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik7_2024_october_11_3_frame_0037.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_7_5_frame_0007.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_1_frame_0025.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_7_5_frame_0007.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarum_2024_october_22_2_frame_0043.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_7_5_frame_0007.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_confluencecikijingandcimande_2024_october_25_2_frame_0001.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_7_5_frame_0024.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikeruh_2024_october_27_1_frame_0026.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_7_5_frame_0024.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_cikijing_2024_october_25_2_frame_0002.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_7_5_frame_0024.jpg",
+      "b": "datasets/REBA_real_val/images/val/fw_bandung_citarik5_2024_october_7_5_frame_0028.jpg"
+    }
+  ],
+  "internal_sample": [
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_3_frame_0018.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_7_5_frame_0024.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_8_5_frame_0008.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_8_5_frame_0014.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_8_5_frame_0020.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_8_5_frame_0021.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_8_5_frame_0022.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik6_2024_october_11_3_frame_0045.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik6_2024_october_11_3_frame_0047.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik6_2024_october_7_3_frame_0034.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik6_2024_october_7_3_frame_0046.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik7_2024_october_11_3_frame_0011.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik7_2024_october_8_4_frame_0000.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik_2024_october_22_3_frame_0019.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik_2024_october_22_7_frame_0002.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik_2024_october_26_2_frame_0027.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik_2024_october_26_2_frame_0052.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik_2024_october_26_2_frame_0058.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik_2024_october_26_3_frame_0042.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00015.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik_2024_october_27_1_frame_0035.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00050.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00169.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00054.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_6_4_frame_0013.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00065.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00105.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00124.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00466.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00128.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_11_3_frame_0018.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00128.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0027.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00128.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_cikijing_2024_october_8_3_frame_0028.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00128.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_5_frame_0009.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00128.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_6_frame_0006.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00128.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_7_frame_0007.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00128.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_7_frame_0013.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00128.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_21_8_frame_0003.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00128.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00128.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_8_frame_0016.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00128.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik_2024_october_21_2_frame_0020.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00128.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik_2024_october_22_7_frame_0011.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00128.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_confluencecikijingandcimande_2024_october_24_3_frame_0003.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00129.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00331.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00151.jpg",
+      "b": "datasets/REBA_ecosort/images/train/eco_train_00295.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00151.jpg",
+      "b": "datasets/REBA_ecosort/images/train/eco_train_00406.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00151.jpg",
+      "b": "datasets/REBA_ecosort/images/train/eco_train_00608.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00160.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00973.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00171.jpg",
+      "b": "datasets/REBA_ecosort/images/train/eco_train_00221.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00194.jpg",
+      "b": "datasets/REBA_ecosort/images/train/eco_train_00747.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00194.jpg",
+      "b": "datasets/REBA_ecosort/images/train/eco_train_00782.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00197.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_01401.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00215.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00322.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00221.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik_2024_october_26_2_frame_0027.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00270.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00618.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00286.jpg",
+      "b": "datasets/REBA_ecosort/images/train/eco_train_00446.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00295.jpg",
+      "b": "datasets/REBA_ecosort/images/train/eco_train_00406.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00295.jpg",
+      "b": "datasets/REBA_ecosort/images/train/eco_train_00608.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00296.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_01160.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00306.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00372.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00310.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00310.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik_2024_october_21_3_frame_0006.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00311.jpg",
+      "b": "datasets/REBA_ecosort/images/train/eco_train_00747.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0002.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0015.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0028.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0041.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0062.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0078.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0086.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0140.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0176.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0193.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0203.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0210.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0238.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0001.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0002.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0058.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0064.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0068.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0071.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0080.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0082.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0144.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0153.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0178.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0011.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0040.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0042.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0043.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0063.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0076.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0096.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0102.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0106.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0110.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0119.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0126.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0162.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0165.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0166.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0189.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0192.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0193.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0206.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0212.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0213.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00352.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0234.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00361.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00514.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00367.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_01484.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00369.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_01045.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00398.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00455.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00406.jpg",
+      "b": "datasets/REBA_ecosort/images/train/eco_train_00608.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00424.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00357.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00437.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_01252.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00442.jpg",
+      "b": "datasets/REBA_ecosort/images/train/eco_train_00797.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00460.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_01193.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00487.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_01009.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00494.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00101.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00498.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00481.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00507.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00325.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00529.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_01066.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00531.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_01328.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00570.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00808.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00575.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_01113.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00614.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_01187.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00616.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00310.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00623.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00621.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00624.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00359.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00659.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_01103.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00661.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00769.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00662.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00004.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00670.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00868.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00674.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00339.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00693.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0029.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00693.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0072.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00712.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_01314.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00720.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00595.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00747.jpg",
+      "b": "datasets/REBA_ecosort/images/train/eco_train_00782.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0002.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0015.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0028.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0038.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0041.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0062.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0078.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0081.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0086.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0104.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0140.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0176.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0193.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0203.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0210.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic/images/train/train_0238.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0001.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0002.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0058.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0064.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0068.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0071.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0080.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0082.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0130.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0144.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0153.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost/images/train/train_0178.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0011.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0033.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0040.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0042.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0043.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0055.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0063.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0074.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0076.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0096.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0102.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0106.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0110.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0119.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0126.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0162.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0165.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0166.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0189.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0192.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0193.jpg"
+    },
+    {
+      "dist": 1,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0206.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0212.jpg"
+    },
+    {
+      "dist": 5,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0213.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00764.jpg",
+      "b": "datasets/REBA_synthetic_boost2/images/train/train_0234.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00771.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_00437.jpg"
+    },
+    {
+      "dist": 0,
+      "a": "datasets/REBA_ecosort/images/train/eco_train_00787.jpg",
+      "b": "datasets/REBA_taco/images/train/taco_01309.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_23_3_frame_0005.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_23_2_frame_0030.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_2_frame_0032.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0045.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_3_frame_0046.jpg"
+    },
+    {
+      "dist": 2,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_24_4_frame_0005.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_4_frame_0014.jpg"
+    },
+    {
+      "dist": 3,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0006.jpg"
+    },
+    {
+      "dist": 4,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_25_5_frame_0030.jpg"
+    },
+    {
+      "dist": 6,
+      "a": "datasets/REBA_floatwaste/images/train/fw_bandung_cikeruh_2024_october_11_2_frame_0045.jpg",
+      "b": "datasets/REBA_floatwaste/images/train/fw_bandung_citarik5_2024_october_4_3_frame_0014.jpg"
+    }
+  ]
+}

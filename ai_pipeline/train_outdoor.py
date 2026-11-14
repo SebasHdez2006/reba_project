@@ -83,6 +83,8 @@ OPTIONAL_TRAIN_SOURCES = (
     ("REBA_synthetic_boost2", "boost2(organico/tela/unicel)"),
     ("REBA_taco", "TACO"),
     ("REBA_ecosort", "EcoSort"),
+    ("REBA_floatwaste", "FloatWaste"),
+    ("REBA_copypaste", "copy-paste(tela/organico)"),
 )
 
 
