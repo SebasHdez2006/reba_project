@@ -1,0 +1,124 @@
+@startuml 02_diagrama_objetos
+title REBA — Diagrama de objetos (instancia en operación, t≈captura id=10)
+
+skinparam classAttributeIconSize 0
+
+' ---------- Dispositivo edge ----------
+object "esp32 : fotos_nc «sketch»" {
+  wifi_ssid = "REBA-AP"
+  server_url = "http://192.168.137.1:5000"
+  dist_min_cm = 0.0
+  dist_max_cm = 23.0
+  pump_photos = 3
+  pump_seconds = 10
+}
+object "sensor : HC-SR04" {
+  trig_gpio = 14
+  echo_gpio = 15   // vía divisor 1k+2k
+  dist_ultima_cm = 18.5
+}
+object "colaRAM : ColaFotos «RAM»" {
+  capacidad = 6
+  pendientes = 1
+  descarte = "más vieja"
+}
+object "bomba : BombaRelé «NC»" {
+  rele_gpio = 13
+  activo_bajo = true
+  estado = "reposo→ON"
+}
+object "nvs : Preferences «NVS»" {
+  namespace = "reba"
+  llaves = "wifi, srv, pump_*, dist_*"
+}
+
+esp32 --> sensor : leerCm() c/60 ms
+esp32 --> colaRAM : encola JPEGs
+esp32 --> bomba : corre ciclo 10 s
+esp32 --> nvs : persiste config
+
+' ---------- Servidor PC ----------
+object "server : RebaAPI «FastAPI»" {
+  bind = "0.0.0.0:5000"
+  uptime = "continuo"
+  device.online = true
+  device.ip = "192.168.137.161"
+  device.last_seen = "<150 s"
+}
+object "engine : InferenceEngine" {
+  backend = "onnx"
+  model = "models/best.onnx"
+  conf = 0.35
+  iou = 0.45
+  inference_ms = 92
+}
+object "db : Database" {
+  path = "data/REBA.db"
+  journal = "WAL"
+  foreign_keys = ON
+}
+object "sqlite : REBA.db «archivo»" {
+  captures = "N filas"
+  detections = "N filas"
+  counters / pump_events / device_config
+}
+object "onnxModel : best.onnx «YOLOv8n v2»" {
+  imgsz = 640
+  opset = 12
+  clases = "plastico,tela,organico,unicel,metal"
+}
+
+server --> engine : predict(frame)
+server --> db : CRUD
+engine --> onnxModel : session ONNX CPU
+db --> sqlite : sqlite3
+
+' ---------- Captura concreta ----------
+object "cap10 : Capture «id=10»" {
+  ts = "2026-11-13T…"
+  detection_count = 2
+  source = "onnx"
+  image_jpeg = "anotado"
+  image_orig_jpeg = "crudo ESP32"
+}
+object "det1 : Detection" {
+  class_name = "plastico"
+  confidence = 0.81
+  bbox = "xyxy px"
+}
+object "det2 : Detection" {
+  class_name = "metal"
+  confidence = 0.62
+}
+object "pumpEv : pump_event" {
+  kind = "manual"
+  seconds = 5
+  status = "ack OK"
+}
+object "devCfg : device_config «key/value»" {
+  pump_cmd = "<ts>:5 → borrado tras ack"
+}
+
+cap10 *-- det1
+cap10 *-- det2
+det1 ..> "plastico"
+det2 ..> "metal"
+sqlite *-- cap10
+sqlite *-- pumpEv
+sqlite *-- devCfg
+server --> cap10 : broadcast WS
+
+' ---------- Dashboard ----------
+object "dash : app.js «navegador»" {
+  ws = "conectado"
+  vista = "En vivo"
+  ultimaCaptura = "id=10"
+}
+dash ..> server : WS /ws + REST /api/*
+
+note bottom of esp32
+  Objeto real del banco: IP 192.168.137.161 en hotspot REBA-AP.
+  Cola con 1 foto pendiente de reintento al momento de la captura.
+end note
+
+@enduml

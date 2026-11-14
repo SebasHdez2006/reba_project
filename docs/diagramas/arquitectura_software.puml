@@ -1,0 +1,135 @@
+@startuml arquitectura_software
+!theme plain
+title REBA — Arquitectura de Software (detallada)
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName "Segoe UI"
+skinparam rectangle {
+  BackgroundColor<<layer>> #F4F6F8
+  BorderColor<<layer>> #8A97A5
+}
+skinparam component {
+  BackgroundColor #FFFFFF
+  BorderColor #3B4A5A
+}
+skinparam database {
+  BackgroundColor #FFF7E6
+  BorderColor #B8860B
+}
+skinparam cloud {
+  BackgroundColor #EAF3FF
+  BorderColor #2E6DA4
+}
+skinparam node {
+  BackgroundColor #F0FFF0
+  BorderColor #2E7D32
+}
+
+' ============================================================
+' CAPA DE PRESENTACIÓN — navegador en la LAN (sin build, offline)
+' ============================================================
+rectangle "CAPA DE PRESENTACIÓN\nDashboard web — HTML5 + CSS3 + JS vanilla (sin framework, sin build)\nSe sirve desde el propio FastAPI: http://<PC>:5000" <<layer>> as L1 {
+  component "static/index.html\n3 vistas: En vivo / Analítica / Dispositivo" as html
+  component "static/app.js\nCliente WS /ws, fetch REST, Canvas 2D (donut + barras),\ngalería paginada + lightbox, bomba manual, config remota" as appjs
+  component "static/styles.css + fonts/\nDesign system oscuro, Space Grotesk + JetBrains Mono woff2" as css
+  database "Navegador (PC o celular en LAN)" as browser
+  html --> appjs
+  html --> css
+  appjs --> browser : renderiza
+}
+
+' ============================================================
+' CAPA DE APLICACIÓN — PC, Python 3.10+, FastAPI + Uvicorn :5000
+' ============================================================
+rectangle "CAPA DE APLICACIÓN — Servidor PC (Python 3.13, FastAPI ≥0.115, Uvicorn ASGI, 0.0.0.0:5000)" <<layer>> as L2 {
+  component "server/main.py — API REST (~20 endpoints) + WebSocket /ws\n+ hosting de static/ + validación JPEG (magic bytes FF D8 FF, <2MB)" as main
+  component "server/config.py — Settings (Pydantic Settings, .env tipado)" as config
+  component "process_upload() — pipeline por foto:\ndecode OpenCV → inferencia → dibuja cajas →\npersiste doble JPEG → broadcast WS" as proc
+  component "Canal device_config (server→ESP32)\nGET /api/device/config (texto clave=valor, cada 60 s)\nPOST /api/admin/device-config (whitelist 8 claves)" as devcfg
+  component "pump_cmd — comando bomba manual\n<formato <unix_ts>:<s>, TTL 10 min,\ndedup en ESP32, ack por /api/device/ack" as pumpcmd
+  component "_retention_loop — poda horaria\nCAPTURE_RETENTION=2000 (ON DELETE CASCADE)" as retention
+  component "heartbeat device_state\nonline = último contacto <150 s" as heartbeat
+
+  main --> proc
+  main --> devcfg
+  main --> pumpcmd
+  main --> retention
+  main --> heartbeat
+  main --> config
+}
+
+' ============================================================
+' CAPA DE DOMINIO / SERVICIOS
+' ============================================================
+rectangle "CAPA DE DOMINIO / SERVICIOS" <<layer>> as L3 {
+  component "server/inference.py — InferenceEngine\nYOLOv8n → ONNX (opset 12), CPU onnxruntime\nletterbox 640, NCHW, conf≥0.35, NMS IoU 0.45\n~50–130 ms/frame · fallback source:none" as inference
+  component "server/database.py — Database (SQLite3)\nWAL + FK ON, thread-safe\ncaptures, detections, counters, pump_events, device_config" as db
+  component "Lógica de negocio\npump_progress() (conteo uploads→ciclo)\n_scale_detections / _draw_boxes / _normalize" as biz
+
+  main ..> inference : usa
+  main ..> db : usa
+  proc ..> inference : engine.predict(frame)
+  proc ..> db : insert_capture + detections + counters
+  proc ..> biz : pump_progress + broadcast
+}
+
+' ============================================================
+' CAPA DE INFRAESTRUCTURA / DATOS (todo local, offline)
+' ============================================================
+rectangle "CAPA DE INFRAESTRUCTURA / DATOS — 100% local, sin Internet" <<layer>> as L4 {
+  database "data/REBA.db — SQLite\ncaptures(image_jpeg anotado + image_orig_jpeg crudo)\ndetections · counters · pump_events · device_config" as sqlite
+  database "models/best.onnx — YOLOv8n outdoor v2\n(~6.5 MB, export opset12 simplify)" as onnx
+  folder "models/archive/ — pesos históricos p/ baseline" as archive
+  folder "datasets/ — REBA_synthetic(+boost/boost2) 660\nREBA_taco ~1293 · REBA_ecosort 800\nREBA_outdoor_eval 120 degradadas" as datasets
+  component "requirements.txt\nfastapi, uvicorn[standard], onnxruntime, opencv-python-headless,\nnumpy, pydantic-settings, httpx" as deps
+
+  db --> sqlite
+  inference --> onnx
+  inference ..> archive : baseline eval
+}
+
+' ============================================================
+' PIPELINE DE IA — OFFLINE (no participa en runtime)
+' ============================================================
+rectangle "PIPELINE DE IA — OFFLINE (bootstrap + reentrenamiento, nunca en producción)" <<layer>> as L5 {
+  component "ai_pipeline/\ngenerate_synthetic_dataset.py · download_taco.py\ndownload_ecosort.py · download_openverse_dataset.py (bootstrap)\ndataset_builder.py (OpenAI Vision, bootstrap)\noutdoor_transforms.py (albumentations)\nbuild_outdoor_eval.py · train_outdoor.py (YOLOv8n+early stop)\nevaluate_outdoor.py · eval_upload_path.py · tune_confidence.py" as aipipe
+  component "Stack IA\nUltralytics YOLOv8n · ONNX Runtime CPU\nAlbumentations · NumPy · OpenCV" as aistack
+  aipipe --> aistack
+  aistack --> onnx : exporta best.onnx
+  aipipe --> datasets : genera/consume
+}
+
+' ============================================================
+' EDGE — ESP32-CAM (cliente; no expone endpoints)
+' ============================================================
+node "NODO EDGE — ESP32-CAM AI-Thinker (C++ Arduino, core esp32 3.3.x)\nfotos_nc.ino — WiFi cliente, sin HTTP server" as esp {
+  component "Percepción: HC-SR04 (TRIG=14, ECHO=15÷1k/2k)\nleerCm() c/60 ms, debounce 2-in/3-out, rango 0–23 cm" as sensor
+  component "Captura: OV2640 → JPEG QVGA en DRAM\ntomarFoto(): flash GPIO4 150 ms → fb_get → magic JPEG" as cam
+  component "Cola RAM MAX_COLA=6 (descarta más vieja)\nanti poison-pill: 4xx o ≥25 intentos → drop\nreintento c/15 s" as cola
+  component "httpSimple() — TCP plano WiFiClient (sin mbedTLS, −122 KB)\nPOST /upload · GET /api/device/config c/60 s\nPOST /api/device/ack" as httpcli
+  component "Bomba: cada pump_photos(3) → rele GPIO13 10 s\nrelé NC activo-bajo · pump_cmd manual no-bloqueante" as bomba
+  component "Config NVS (Preferences) + WiFiManager portal REBA-Setup\nSET serie · validación estricta + reversión auto" as nvs
+  component "Robustez: millis() wrap-safe, bootCount RTC,\nhealth check cámara, clamps NVS, STATUS" as robust
+}
+
+' ============================================================
+' FLUJOS PRINCIPALES
+' ============================================================
+esp --> L2 : "1. POST /upload (JPEG+X-Evento)\nreintento c/15 s · heartbeat" 
+L2 --> esp : "2. GET /api/device/config c/60 s (overrides+\npump_cmd<10min) → POST /api/device/ack"
+L2 --> L1 : "3. WebSocket /ws: capture·detections·pump_event\nREST /api/* snapshot"
+L1 --> L2 : "4. fetch REST + WS ping 25 s"
+L5 ..> L4 : "entrena/exporta (offline, manual)"
+esp --> esp : "5. sensor→foto→cola→upload→bomba (loop autónomo)"
+
+note right of L2
+  Todo el tráfico es LAN 2.4 GHz — sin Internet.
+  Sin autenticación por decisión (red aislada REBA-AP).
+end note
+
+note bottom of esp
+  La ESP32 es solo cliente: sube fotos y hace poll de config.
+  La bomba y el trigger son 100% autónomos en el edge.
+end note
+
+@enduml

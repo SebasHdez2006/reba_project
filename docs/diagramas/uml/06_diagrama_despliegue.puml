@@ -1,0 +1,88 @@
+@startuml 06_diagrama_despliegue
+title REBA — Diagrama de despliegue (hardware + software)
+
+left to right direction
+skinparam nodeStyle rectangle
+
+' ================== DISPOSITIVO EDGE ==================
+node "ESP32-CAM AI-Thinker\n«hardware + firmware»" as esp {
+  artifact "fotos_nc.ino → firmware\n«binario flasheado, sin endpoints»" as fwBin
+  artifact "NVS (Preferences)\n«wifi_ssid, wifi_pass, server_url,\npump_photos, pump_seconds, dist_min/max»" as nvsCfg
+  component "HC-SR04\n«TRIG=GPIO14 · ECHO=GPIO15÷1k/2k»" as hc
+  component "OV2640 + flash GPIO4" as ov
+  component "Relé GPIO13 (activo-bajo, NC)\n→ bomba 12V" as relay
+  component "WiFi 2.4 GHz\n«cliente STA»" as wifi
+  fwBin --> hc
+  fwBin --> ov
+  fwBin --> relay
+  fwBin --> wifi
+  fwBin --> nvsCfg
+}
+
+' ================== ENERGÍA ==================
+node "Cadena de potencia\n«independiente del software»" as pwr {
+  component "Panel solar 5V → TP4056" as solar
+  component "18650 3.7V 2800mAh" as bat
+  component "XL6009 boost → 12.0V" as boost
+  component "Fuente 5V dedicada" as p5v
+  solar --> bat : carga
+  bat --> boost : sw ON
+  boost --> relay : +12V → COM→NC→bomba
+  p5v --> fwBin : 5V/GND (nunca desde boost)
+}
+
+' ================== RED ==================
+cloud "Red Wi-Fi 2.4 GHz LAN\n«sin Internet — REBA-AP hotspot\no router local»" as lan
+
+' ================== PC ==================
+node "PC — servidor + dashboard" as pc {
+  node "SO Windows" {
+    artifact "uvicorn server.main:app\n«proceso Python :5000»" as uvicorn
+    artifact "server/*.py + .venv\n«fastapi, onnxruntime, opencv, numpy,\npydantic-settings, sqlite3»" as pyDeps
+    artifact "models/best.onnx\n«YOLOv8n outdoor v2»" as onnxFile
+    artifact "data/REBA.db\n«SQLite WAL — 5 tablas»" as sqliteFile
+    artifact "static/\n«index.html app.js styles.css fonts/»" as staticDir
+    uvicorn --> pyDeps
+    uvicorn --> onnxFile
+    uvicorn --> sqliteFile
+    uvicorn --> staticDir
+  }
+  artifact ".env\n«HOST, PORT, MODEL_PATH,\nINFERENCE_*, CLASS_NAMES,\nCAPTURE_RETENTION»" as dotenv
+}
+
+' ================== CLIENTES ==================
+node "Navegador — dashboard" as clients {
+  node "Celular en REBA-AP" as phone {
+    artifact "http://192.168.137.1:5000\n«HTML/JS servido por la PC»" as phoneUI
+  }
+  node "Navegador en la PC" as pcBrowser {
+    artifact "http://localhost:5000" as pcUI
+  }
+}
+
+' ================== COMUNICACIONES ==================
+esp --> lan : "WiFi STA\nHTTP POST /upload (JPEG)\nGET /api/device/config c/60s\nPOST /api/device/ack"
+lan --> pc : "TCP :5000\nHTTP + WebSocket /ws"
+pc --> lan : "sirve static/ + REST + WS"
+lan --> phone : "HTTP :5000"
+lan --> pcBrowser : "HTTP :5000"
+
+note bottom of lan
+  Todo el tráfico es LAN — el sistema opera SIN Internet.
+  Firewall Windows debe permitir TCP 5000 entrante.
+  Sin autenticación: mitigado por red aislada REBA-AP.
+end note
+
+note bottom of esp
+  La ESP32 no expone endpoints: solo cliente.
+  Bomba/trigger autónomos aunque la PC esté apagada
+  (cola RAM ≤6 fotos, reintento 15 s, descarte anti poison-pill).
+end note
+
+note bottom of pwr
+  Regla crítica: ESP32 siempre a 5V dedicada;
+  bomba a 12V vía relé NC. Bomba ON si ESP32 pierde energía
+  (fail-open documentado; mitigado por batería compartida).
+end note
+
+@enduml

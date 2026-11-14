@@ -1,0 +1,55 @@
+@startuml 11_diagrama_comunicacion
+title REBA — Diagrama de comunicación (mensajes numerados — aproximación UML 2.x)
+' Nota: PlantUML no tiene tipo "communication" nativo;
+' se representa con mensajes numerados sobre líneas de vida,
+' que es la semántica del diagrama de comunicación UML 2.x.
+
+skinparam sequenceArrowThickness 2
+skinparam ParticipantPadding 30
+
+autonumber
+' Flujo: activación manual de bomba desde el dashboard
+
+participant "Operador" as op
+participant "Dashboard\n«app.js»" as dash
+participant "RebaAPI\n«FastAPI»" as api
+participant "device_config\n«SQLite kv»" as cfg
+participant "ESP32-CAM\n«fotos_nc»" as esp
+
+op -> dash : 1. "Activar ahora" (5 s)
+dash -> api : 2. POST /api/pump/run\n{"seconds": 5}
+activate api
+api -> api : 3. valida 1-300 s\n+ insert pump_event "manual"
+api -> cfg : 4. SET pump_cmd=<unix_ts>:5
+api --> dash : 5. 200 {cmd_id, event_id}
+deactivate api
+
+esp -> api : 6. GET /api/device/config\n«poll periódico 60 s»
+activate api
+api -> cfg : 7. SELECT overrides\n«pump_cmd solo si <10 min TTL»
+api --> esp : 8. pump_cmd=<ts>:5 + resto config
+deactivate api
+
+esp -> esp : 9. aplicarClaveRemota()\n«esEntero/esFloat + rango»
+esp -> esp : 10. dedup lastPumpCmdId (RTC_DATA_ATTR)\n11. bombaEncender() no-bloqueante\n12. deadline bombaManualFin = now+5 s
+esp -> esp : 13. loop() sigue vivo:\nsensor + cola + WiFi
+
+esp -> api : 14. POST /api/device/ack\n{"cmd_id": <ts>}
+activate api
+api -> cfg : 15. DELETE pump_cmd override
+api --> esp : 16. {"ok": true, "cleared": true}
+deactivate api
+
+dash -> api : 17. GET /api/pump/events\n«poll UI»
+api --> dash : 18. pending_cmd = null\n«orden confirmada»
+dash -> dash : 19. UI: bomba ON 5 s → OFF\n+ evento en registro
+
+note right of esp
+  Si el ESP32 está offline >10 min, el server
+  deja de servir pump_cmd (TTL) → no hay
+  "bomba fantasma". Si el ack se pierde,
+  el TTL lo expira y el dedup RTC evita
+  re-ejecución.
+end note
+
+@enduml
