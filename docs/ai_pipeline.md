@@ -164,7 +164,7 @@ Valores normalizados en \[0, 1\].
 
 ## 2. Entrenamiento — `train_outdoor.py`
 
-El entrenamiento oficial es **100% local** con `ai_pipeline/train_outdoor.py` (CPU). Combina el dataset sintético (+boost de clases raras) con el subconjunto real TACO, inyecta augmentations de intemperie vía Albumentations, usa early stopping por mAP50-95 y exporta `models/best.onnx` archivando los pesos previos en `models/archive/`.
+El entrenamiento oficial es **100% local** con `ai_pipeline/train_outdoor.py` (CPU). Combina el dataset sintético (+boosts de clases raras) con las fuentes reales presentes en `datasets/` — TACO y EcoSort — inyecta augmentations de intemperie vía Albumentations, usa early stopping por mAP50-95 y exporta `models/best.onnx` archivando los pesos previos en `models/archive/`.
 
 ```bash
 python ai_pipeline/train_outdoor.py --epochs 50   # desde la raíz REBA/
@@ -190,10 +190,11 @@ tres herramientas:
 
 | Script | Propósito |
 |--------|-----------|
-| `ai_pipeline/download_taco.py` | Descarga un subconjunto de **TACO** (basura real "in the wild", formato COCO) y lo convierte a YOLO con las 5 clases REBA en `datasets/REBA_taco/`. |
+| `ai_pipeline/download_taco.py` | Descarga TACO (basura real "in the wild", formato COCO) y lo convierte a YOLO con las 5 clases REBA en `datasets/REBA_taco/`. Soporta `--limit 0` (todo), `--per-class` y `--prioritize-classes` para sesgar la descarga hacia clases escasas; reanuda por `manifest.jsonl`. |
+| `ai_pipeline/download_ecosort.py` | Descarga el dataset **EcoSort** de Hugging Face (`dataset.tar` ~1.5 GB, YOLO de 10 clases ya fusionado de Open Images + TACO + Roboflow) y lo remapea a las 5 clases REBA en `datasets/REBA_ecosort/`. Vidrio/cartón/papel quedan como fondo. `--limit`/`--val-limit`/`--seed` para subconjunto determinista; `--tar-file` reutiliza un tar local. |
 | `ai_pipeline/outdoor_transforms.py` | Define el pipeline albumentations compartido (entrenamiento y evaluación). |
 | `ai_pipeline/build_outdoor_eval.py` | Genera `datasets/REBA_outdoor_eval/` — copias deterministas y severamente degradadas de val+test, para evaluar robustez. |
-| `ai_pipeline/train_outdoor.py` | Re-entrena YOLOv8n combinando sintético + boost de clases raras + TACO, con la aumentación outdoor inyectada vía `model.train(augmentations=...)`, early stopping (`patience`) y exportación ONNX con archivo de pesos previos. |
+| `ai_pipeline/train_outdoor.py` | Re-entrena YOLOv8n combinando sintético + boosts de clases raras + TACO + EcoSort (auto-descubre `OPTIONAL_TRAIN_SOURCES`), con la aumentación outdoor inyectada vía `model.train(augmentations=...)`, early stopping (`patience`) y exportación ONNX con archivo de pesos previos. |
 | `ai_pipeline/evaluate_outdoor.py` | Compara pesos previos (`models/archive/best_*.pt`) vs. nuevos en clean/outdoor/TACO y escribe `outdoor_training_report.md`. |
 | `ai_pipeline/eval_upload_path.py` | Evalúa el **path de producción real**: sube imágenes a `POST /upload` del server y compara detecciones contra ground-truth YOLO → `eval_upload_report.json`. |
 | `ai_pipeline/tune_confidence.py` | Barre `conf` sobre el conjunto difícil y recomienda `INFERENCE_CONFIDENCE` (máx. F1). |
@@ -219,23 +220,42 @@ Las categorías sin equivalente (vidrio, papel, cartón, cigarros, basura sin
 etiquetar) se ignoran — quedan como fondo, lo que enseña al modelo a no
 detectarlas.
 
+### Mapeo de clases EcoSort → REBA
+
+EcoSort trae 10 clases propias; `download_ecosort.py` aplica la tabla
+`ECOSORT_TO_REBA`: `plastic_bottle`, `plastic_bag`, `plastic_food_container` y
+`snack_bag` → `plastico`; `aluminum_can`, `food_can` y `battery` → `metal`.
+`glass_bottle`, `cardboard_box` y `paper_sheet` se descartan (fondo). EcoSort
+no contiene `tela`/`organico`/`unicel` — por eso el refuerzo de esas clases
+sigue viniendo del sintético acuático y de TACO.
+
+Fuentes del dataset EcoSort (según su tarjeta en HF): Open Images V7 (CC BY),
+TACO (MIT/CC), `dmedhi/garbage-image-classification-detection` (CC BY 4.0),
+Drinking Waste Classification de Kaggle (CC0) y tres datasets de Roboflow
+Universe (CC BY 4.0). Revisar licencias antes de redistribuir.
+
 ### Flujo completo outdoor
 
 ```bash
-python ai_pipeline/download_taco.py --limit 400      # bootstrap con Internet
+python ai_pipeline/download_taco.py --limit 0 \
+    --prioritize-classes organico,tela,unicel   # TACO completo, prioriza escasas
+python ai_pipeline/download_ecosort.py --limit 800  # dataset.tar de HF → YOLO-REBA
 python ai_pipeline/generate_synthetic_dataset.py \   # opcional: boost clases raras
-    --output datasets/REBA_synthetic_boost \
-    --n-train 180 --n-val 0 --n-test 0 \
-    --class-weights 1,3,4,1,1 --seed 777
+    --output datasets/REBA_synthetic_boost2 \
+    --n-train 240 --n-val 0 --n-test 0 \
+    --class-weights 1,3,6,2,1 --seed 1234
 python ai_pipeline/build_outdoor_eval.py --preview   # conjunto difícil
 python ai_pipeline/train_outdoor.py --epochs 50      # re-entrenar
 python ai_pipeline/evaluate_outdoor.py               # reporte comparativo
 python ai_pipeline/tune_confidence.py                # umbral óptimo → .env
 ```
 
-Si `datasets/REBA_synthetic_boost/` existe, `train_outdoor.py` lo suma
-automáticamente al train combinado (recomendado para reforzar `organico` y
-`tela`, que son escasas en TACO).
+Si existen `datasets/REBA_synthetic_boost*/` (carpetas `images/train` no vacías),
+`train_outdoor.py` las suma automáticamente al train combinado (recomendado para
+reforzar `organico` y `tela`, que son escasas en TACO y ausentes en EcoSort).
+Igual con `datasets/REBA_taco/` y `datasets/REBA_ecosort/`: basta con que la
+carpeta exista con formato YOLO y las 5 clases REBA — ver `OPTIONAL_TRAIN_SOURCES`
+en `train_outdoor.py` para registrar una fuente nueva.
 
 `train_outdoor.py` archiva los pesos previos en `models/archive/` antes de
 sobrescribir, así `evaluate_outdoor.py` siempre tiene baseline.

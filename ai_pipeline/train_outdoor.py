@@ -6,7 +6,8 @@ Entrenamiento YOLOv8n con aumentación de intemperie → ONNX.
 No cambia la arquitectura (sigue siendo YOLOv8n → ONNX) pero endurece los datos:
 
 1. Construye `datasets/REBA_outdoor/data.yaml` combinando el dataset sintético
-   con el subconjunto real TACO (si `datasets/REBA_taco` existe).
+   con las fuentes reales/opcionales presentes en `datasets/` (TACO, EcoSort,
+   boosts sintéticos de clases raras — ver OPTIONAL_TRAIN_SOURCES).
 2. Inyecta el pipeline outdoor de `outdoor_transforms.py` vía el parámetro
    nativo `augmentations` de Ultralytics (Albumentations aplicado on-the-fly
    en cada época, con manejo automático de cajas).
@@ -75,24 +76,25 @@ def write_combined_data_yaml(
     return out_path
 
 
-def build_dataset_yaml() -> Path:
-    """Combina sintético (+boost de clases raras) + TACO en datasets/REBA_outdoor."""
-    synthetic = DATASETS_ROOT / "REBA_synthetic"
-    boost = DATASETS_ROOT / "REBA_synthetic_boost"
-    taco = DATASETS_ROOT / "REBA_taco"
+# Fuentes opcionales de train: (carpeta en datasets/, etiqueta para el log).
+# Se incluyen solo si `datasets/<nombre>/images/train` existe y no está vacío.
+OPTIONAL_TRAIN_SOURCES = (
+    ("REBA_synthetic_boost", "boost(organico/tela)"),
+    ("REBA_synthetic_boost2", "boost2(organico/tela/unicel)"),
+    ("REBA_taco", "TACO"),
+    ("REBA_ecosort", "EcoSort"),
+)
 
+
+def build_dataset_yaml() -> Path:
+    """Combina sintético + fuentes opcionales presentes en datasets/."""
     train_dirs = [Path("REBA_synthetic/images/train")]
     parts = ["sintético"]
-    if (boost / "images" / "train").is_dir() and any(
-        (boost / "images" / "train").iterdir()
-    ):
-        train_dirs.append(Path("REBA_synthetic_boost/images/train"))
-        parts.append("boost(organico/tela)")
-    if (taco / "images" / "train").is_dir() and any(
-        (taco / "images" / "train").iterdir()
-    ):
-        train_dirs.append(Path("REBA_taco/images/train"))
-        parts.append("TACO")
+    for folder, label in OPTIONAL_TRAIN_SOURCES:
+        train_dir = DATASETS_ROOT / folder / "images" / "train"
+        if train_dir.is_dir() and any(train_dir.iterdir()):
+            train_dirs.append(Path(f"{folder}/images/train"))
+            parts.append(label)
     print("Dataset combinado: " + " + ".join(parts))
 
     yaml_path = DATASETS_ROOT / "REBA_outdoor" / "data.yaml"
