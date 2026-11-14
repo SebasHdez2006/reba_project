@@ -8,16 +8,15 @@ Interfaz servida por FastAPI desde `static/` — abrir por HTTP en **http://loca
 
 ## Módulos
 
-| Módulo | Qué hace |
-|--------|----------|
-| **Header** | Marca REBA, estado WebSocket (En vivo / Reconectando), pill del dispositivo (online/offline por heartbeat) |
-| **Última captura** | Foto anotada con cajas YOLO + conteo de detecciones, ms de inferencia y fuente del motor |
-| **Donut + leyenda** | % y conteo por clase (plastico, tela, organico, unicel, metal) + total acumulado |
-| **Galería completa** | Grid paginado (24/pág) de todas las capturas con filtro por clase y lightbox (imagen, hora, detecciones con confianza) |
-| **Panel Bomba** | Progreso automático `fotos/N` + control manual (segundos elegibles → "Activar ahora") + eventos recientes + orden pendiente (`pending_cmd`) |
-| **Panel Actividad** | Gráfica de barras apiladas por día/clase (7/14/30 días), auto-refresh |
-| **Exportar YOLO** | Descarga ZIP con imágenes originales + labels YOLO + `data.yaml` para reentrenar |
-| **Dispositivo ESP32-CAM** | Config remota clave=valor (WiFi, server_url, bomba, distancias) — se aplica en el próximo poll del firmware (≤60 s) |
+La app está organizada en **3 vistas** con navegación inferior fija en móvil (`<1024px`) y un grid de 12 columnas que muestra todo en escritorio (`≥1024px`):
+
+| Vista | Módulos |
+|-------|---------|
+| **En vivo** | **Última captura**: foto 4:3 con badge de clase + confianza, metadatos en mono (fecha, detecciones, inferencia ms, motor) y tira de 8 miniaturas recientes (tocable → actualiza la principal). **Panel Bomba**: progreso `fotos/N` en 2 columnas + barra segmentada + chips de duración manual (5/10/20/30 s u "Otro") + "Activar ahora" + acordeón "Registro de eventos" |
+| **Analítica** | **KPIs** (total objetos, fotos recibidas) + **donut** por clase con leyenda interactiva + **actividad** (barras apiladas por día/clase, 7/14/30 días, tooltips, rejilla visible) + **galería unificada** (filtro por clase + Exportar YOLO + paginación + lightbox) |
+| **Dispositivo** | **Config remota** del ESP32-CAM en 2 grupos (Red y servidor / Parámetros y sensores), unidades integradas en los inputs, mostrar/ocultar contraseña, ayuda desplegable y feedback "Guardado ✓" |
+
+El **header sticky** muestra marca REBA, pill del dispositivo (online/offline por heartbeat), pill WebSocket y último ping relativo. El botón **Exportar YOLO** descarga un ZIP con imágenes + labels YOLO + `data.yaml` para reentrenar.
 
 ---
 
@@ -35,9 +34,9 @@ Interfaz servida por FastAPI desde `static/` — abrir por HTTP en **http://loca
 
 Archivos:
 
-- `static/index.html` — estructura y secciones
-- `static/styles.css` — tema acuático oscuro, responsive móvil (grid colapsable, lightbox, táctil)
-- `static/app.js` — WS, canvas donut/gráficas, galería, lightbox, bomba manual, export YOLO, config remota
+- `static/index.html` — estructura: header, 3 vistas (`view-live`, `view-analytics`, `view-device`), bottom nav y lightbox
+- `static/styles.css` — design system oscuro plano (`#090D12`/`#111720`/`#18212E`), Space Grotesk + JetBrains Mono auto-hospedadas en `static/fonts/`, responsive móvil-first
+- `static/app.js` — WS, canvas donut/gráfica de actividad con tooltips, galería, lightbox, bomba manual (chips + barra segmentada), config remota
 
 ---
 
@@ -69,4 +68,4 @@ Archivos:
 | Texto / layout / tema | `index.html` / `styles.css` |
 | Rango de días de la gráfica | selector en el panel Actividad (7/14/30) |
 
-El dashboard usa fuentes del sistema y recursos servidos por la PC; no descarga contenido de Internet — funciona sin conexión externa.
+El dashboard usa Space Grotesk (interfaz) y JetBrains Mono (datos técnicos) servidas como woff2 locales desde `static/fonts/` — no descarga nada de Internet y funciona sin conexión externa.

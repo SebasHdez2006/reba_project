@@ -2,8 +2,8 @@
 """
 REBA — Entrenamiento robusto para condiciones a la intemperie.
 
-Variante de `train_local.py` que NO cambia la arquitectura (sigue siendo
-YOLOv8n → ONNX) pero endurece los datos:
+Entrenamiento YOLOv8n con aumentación de intemperie → ONNX.
+No cambia la arquitectura (sigue siendo YOLOv8n → ONNX) pero endurece los datos:
 
 1. Construye `datasets/REBA_outdoor/data.yaml` combinando el dataset sintético
    con el subconjunto real TACO (si `datasets/REBA_taco` existe).
@@ -14,7 +14,7 @@ YOLOv8n → ONNX) pero endurece los datos:
    (random erasing) y `cutmix`.
 4. Early stopping con `patience` — Ultralytics selecciona `best.pt` por
    fitness = mAP50-95 (peso 1.0 en Ultralytics ≥8.4), es decir, prioriza mAP.
-5. Exporta `models/best.onnx` igual que train_local.py, archivando los pesos
+5. Exporta `models/best.onnx` archivando los pesos
    previos en `models/archive/` (sirven de baseline para evaluate_outdoor.py).
 
 Uso (desde la raíz REBA/, con el venv activo):
@@ -25,17 +25,32 @@ from __future__ import annotations
 
 import argparse
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Sequence
 
 from ultralytics import YOLO
 
 from outdoor_transforms import outdoor_train_transforms
-from train_local import archive_previous_model
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATASETS_ROOT = PROJECT_ROOT / "datasets"
 CLASSES = ("plastico", "tela", "organico", "unicel", "metal")
+
+
+def archive_previous_model(path: Path, archive_dir: Path) -> None:
+    """Preserva una copia del modelo previo antes de sobrescribirlo."""
+    if not path.is_file():
+        return
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    archived = archive_dir / f"{path.stem}_{stamp}{path.suffix}"
+    shutil.copy2(path, archived)
+    meta = archive_dir / f"{path.stem}_{stamp}.json"
+    meta.write_text(
+        f'{{"source":"{path.as_posix()}","archived":"{archived.as_posix()}"}}',
+        encoding="utf-8",
+    )
 
 
 def write_combined_data_yaml(

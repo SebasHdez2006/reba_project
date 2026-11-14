@@ -162,48 +162,26 @@ Valores normalizados en \[0, 1\].
 
 ---
 
-## 2. Entrenamiento — `train_yolo.ipynb`
+## 2. Entrenamiento — `train_outdoor.py`
 
-El objetivo final es entrenar con artefactos locales; usa Colab solo si necesitas acelerar una iteración inicial.
+El entrenamiento oficial es **100% local** con `ai_pipeline/train_outdoor.py` (CPU). Combina el dataset sintético (+boost de clases raras) con el subconjunto real TACO, inyecta augmentations de intemperie vía Albumentations, usa early stopping por mAP50-95 y exporta `models/best.onnx` archivando los pesos previos en `models/archive/`.
 
-Notebook para **Google Colab + GPU T4**.
-
-
-### Pasos (resumen)
-
-1. Runtime → GPU.
-2. Ejecuta celdas de instalación (`ultralytics`, `onnx`).
-3. Sube un ZIP del dataset **o** monta Drive apuntando a `data.yaml`.
-4. Ajusta parámetros:
+```bash
+python ai_pipeline/train_outdoor.py --epochs 50   # desde la raíz REBA/
+```
 
 | Parámetro | Recomendado |
 |-----------|-------------|
-| `EPOCHS` | 50–100 (default notebook: 80) |
+| `EPOCHS` | 50 (early stop `patience=20` suele cortar antes) |
 | `IMGSZ` | 640 |
-| `BATCH` | 16 (8 si OOM) |
-| `MODEL` | `yolov8n.pt` |
+| `BATCH` | 8–16 (8 en CPU) |
+| `MODEL` | `yolov8n.pt` (Ultralytics lo descarga solo si falta) |
 
-5. Entrena → valida `best.pt`.
-6. Exporta ONNX (`opset=12`, `imgsz=640`).
-7. Si ya existían pesos previos, se copian a `models/archive/` antes de sobrescribir.
-8. Descarga y coloca el archivo en:
-
-
-```text
-REBA/models/best.onnx
-```
-
-### Comando mental de exportación
-
-```python
-best.export(format="onnx", imgsz=640, opset=12, simplify=True)
-```
-
-Compatible con `server/inference.py` (onnxruntime CPU).
+El detalle completo del pipeline outdoor está en §2b.
 
 ---
 
-## 2b. Pipeline outdoor (robustez a la intemperie) — `train_outdoor.py`
+## 2b. Pipeline outdoor (robustez a la intemperie) — detalle de `train_outdoor.py`
 
 El dataset sintético es muy limpio: fondos planos, objetos de color sólido, sin
 sombras ni oclusiones. Para que el modelo funcione a la intemperie (basura

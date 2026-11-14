@@ -1,1 +1,1 @@
-# Place best.onnx here after training (see ai_pipeline/train_yolo.ipynb)
+# Place best.onnx here after training (see ai_pipeline/train_outdoor.py)

@@ -2,22 +2,24 @@
 <html lang="es">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>REBA — Dashboard</title>
     <meta
       name="description"
       content="Dashboard local de la plataforma flotante REBA: fotos clasificadas con visión artificial y ciclos de bomba."
     />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <div class="app">
       <header class="topbar">
         <div class="brand">
-          <div class="brand-mark">REBA</div>
-          <div class="brand-sub">Recolección acuática autónoma · visión local</div>
+          <span class="brand-sigil" aria-hidden="true"></span>
+          <span class="brand-mark">REBA</span>
         </div>
-        <div class="topbar-status">
+        <div class="topbar-right">
+          <span id="lastPingText" class="ping-note" title="Último contacto del ESP32-CAM">—</span>
           <div id="deviceStatus" class="status-pill offline" title="Estado del ESP32-CAM (heartbeat)">
             <span class="status-dot" aria-hidden="true"></span>
             <span id="deviceStatusText">ESP32: —</span>
@@ -34,70 +36,50 @@
         <span id="alertText">Bomba activada.</span>
       </div>
 
-      <main class="grid">
-        <!-- Columna fotos -->
-        <section class="panel">
-          <div class="panel-header">
-            <h2>Capturas clasificadas</h2>
-            <span id="captureCount" class="status-pill">0 fotos</span>
-          </div>
-          <div class="panel-body">
-            <div class="capture-feature">
-              <img id="latestCaptureImage" alt="Última foto clasificada" hidden />
-              <p id="captureEmpty" class="capture-empty">
-                Esperando que la ESP32 envíe la primera foto.
-              </p>
-            </div>
-            <div class="capture-caption">
-              <strong id="latestCaptureClasses">Sin capturas</strong>
-              <span id="latestCaptureTime">Las fotos llegan por POST /upload.</span>
-            </div>
-            <div class="video-meta">
-              <span>Detecciones foto: <strong id="frameCount">0</strong></span>
-              <span>Inferencia: <strong id="inferMs">—</strong> ms</span>
-              <span>Motor: <strong id="inferSource">—</strong></span>
-            </div>
-            <div
-              id="captureGallery"
-              class="capture-gallery"
-              aria-label="Fotos clasificadas recientes"
-            ></div>
-          </div>
-        </section>
-
-        <!-- Columna métricas -->
-        <aside class="stack">
-          <section class="panel">
+      <main class="views">
+        <!-- ======================= EN VIVO ======================= -->
+        <section class="view view-live" id="view-live" role="tabpanel" aria-label="En vivo">
+          <section class="panel panel-capture">
             <div class="panel-header">
-              <h2>Materiales acumulados</h2>
+              <h2>Última captura</h2>
+              <span id="captureCount" class="status-pill">0 fotos</span>
             </div>
             <div class="panel-body">
-              <div class="kpi-row">
-                <div class="kpi">
-                  <span class="kpi-label">Total objetos</span>
-                  <div class="kpi-value" id="totalObjects">0</div>
-                </div>
-                <div class="kpi">
-                  <span class="kpi-label">Fotos recibidas</span>
-                  <div class="kpi-value" id="uploadsReceived">0</div>
-                </div>
+              <div class="capture-frame">
+                <img id="latestCaptureImage" alt="Última foto clasificada" hidden />
+                <span id="captureBadge" class="capture-badge" hidden>—</span>
+                <p id="captureEmpty" class="capture-empty">
+                  Esperando que la ESP32 envíe la primera foto.
+                </p>
               </div>
-
-              <div class="chart-wrap" aria-label="Distribución porcentual por material">
-                <canvas id="donutChart" width="280" height="280"></canvas>
-                <div class="chart-center">
-                  <div class="big" id="chartTotal">0</div>
-                  <div class="small">objetos</div>
-                </div>
+              <div class="capture-meta">
+                <span class="meta-item meta-classes">
+                  <span id="latestCaptureClasses">Sin capturas</span>
+                </span>
+                <span class="meta-item meta-mono">
+                  <span id="latestCaptureTime">—</span>
+                </span>
               </div>
-
-              <ul class="legend" id="classLegend">
-                <!-- Rellenado por app.js -->
-              </ul>
+              <div class="video-meta">
+                <span class="meta-item">
+                  <span class="meta-k">DET</span><strong id="frameCount">0</strong>
+                </span>
+                <span class="meta-item">
+                  <span class="meta-k">INFERENCIA</span><strong id="inferMs">—</strong><span class="meta-u">ms</span>
+                </span>
+                <span class="meta-item">
+                  <span class="meta-k">MOTOR</span><strong id="inferSource">—</strong>
+                </span>
+              </div>
+              <div
+                id="captureGallery"
+                class="capture-gallery"
+                aria-label="Fotos clasificadas recientes"
+              ></div>
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel panel-pump">
             <div class="panel-header">
               <h2>Bomba</h2>
               <span id="pumpState" class="status-pill">esperando fotos</span>
@@ -113,31 +95,80 @@
                   <div class="kpi-value" id="pumpDuration">— s</div>
                 </div>
               </div>
-              <p class="footer-note" style="margin: 0.5rem 0 0">
+              <div id="pumpSegBar" class="seg-bar" aria-hidden="true"></div>
+              <p class="footer-note pump-note">
                 La ESP32 enciende la bomba ~<span id="pumpSecondsInline">10</span> s
                 cada <span id="pumpTriggerInline">3</span> fotos tomadas.
-                Último ciclo inferido:
-                <strong id="lastPumpEvent">—</strong>
+                Último ciclo inferido: <strong id="lastPumpEvent">—</strong>
               </p>
 
               <div class="pump-manual">
-                <label class="pump-manual-label">
-                  Bomba manual (segundos)
+                <span class="pump-manual-label">Bomba manual</span>
+                <div class="chip-row" id="pumpChips" role="group" aria-label="Duración de la bomba manual">
+                  <button type="button" class="chip" data-seconds="5">5 s</button>
+                  <button type="button" class="chip" data-seconds="10">10 s</button>
+                  <button type="button" class="chip" data-seconds="20">20 s</button>
+                  <button type="button" class="chip" data-seconds="30">30 s</button>
+                  <button type="button" class="chip chip-other" id="pumpOtherBtn">Otro</button>
+                </div>
+                <div class="pump-custom" id="pumpCustomWrap" hidden>
                   <input type="number" id="manualPumpSeconds" min="1" max="300"
-                         value="10" />
-                </label>
-                <button type="button" id="manualPumpBtn" class="primary">
+                         value="10" inputmode="numeric" />
+                  <span class="unit">s</span>
+                </div>
+                <button type="button" id="manualPumpBtn" class="primary pump-go">
                   Activar ahora
                 </button>
+                <p id="manualPumpState" class="manual-state">
+                  Se entrega al ESP32 en su próximo poll (≤60 s).
+                </p>
               </div>
-              <p id="manualPumpState" class="footer-note" style="margin: 0.4rem 0 0">
-                Se entrega al ESP32 en su próximo poll (≤60 s).
-              </p>
-              <ul id="pumpEventsList" class="event-list"></ul>
+
+              <details class="event-log" id="pumpEventLog">
+                <summary>
+                  Registro de eventos
+                  <span class="event-count" id="pumpEventsCount">0</span>
+                </summary>
+                <ul id="pumpEventsList" class="event-list"></ul>
+              </details>
+            </div>
+          </section>
+        </section>
+
+        <!-- ======================= ANALÍTICA ======================= -->
+        <section class="view view-analytics" id="view-analytics" role="tabpanel" aria-label="Analítica" hidden>
+          <section class="panel panel-metrics">
+            <div class="panel-header">
+              <h2>Materiales acumulados</h2>
+            </div>
+            <div class="panel-body">
+              <div class="kpi-row">
+                <div class="kpi">
+                  <span class="kpi-label">Total objetos</span>
+                  <div class="kpi-value" id="totalObjects">0</div>
+                </div>
+                <div class="kpi">
+                  <span class="kpi-label">Fotos recibidas</span>
+                  <div class="kpi-value" id="uploadsReceived">0</div>
+                </div>
+              </div>
+
+              <div class="donut-layout">
+                <div class="chart-wrap" aria-label="Distribución porcentual por material">
+                  <canvas id="donutChart" width="220" height="220"></canvas>
+                  <div class="chart-center">
+                    <div class="big" id="chartTotal">0</div>
+                    <div class="small">objetos</div>
+                  </div>
+                </div>
+                <ul class="legend legend-side" id="classLegend">
+                  <!-- Rellenado por app.js -->
+                </ul>
+              </div>
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel panel-activity">
             <div class="panel-header">
               <h2>Actividad</h2>
               <select id="tsDays" class="ts-days" title="Rango de días">
@@ -147,91 +178,158 @@
               </select>
             </div>
             <div class="panel-body">
-              <canvas id="tsChart" width="520" height="180"></canvas>
+              <div class="chart-tip-wrap">
+                <canvas id="tsChart" width="520" height="180"></canvas>
+                <div id="tsTooltip" class="ts-tip" hidden></div>
+              </div>
               <ul id="tsLegend" class="legend ts-legend"></ul>
-              <p class="footer-note" style="margin: 0.4rem 0 0">
-                Detecciones por día y material (barras apiladas).
-              </p>
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel panel-gallery">
+            <div class="panel-header">
+              <h2>Galería de capturas</h2>
+              <div class="gallery-controls">
+                <input type="search" id="galleryFilter" class="gallery-filter"
+                       placeholder="Filtrar por clase (ej. plastico)…" />
+                <a class="btn ghost" href="/api/export/yolo"
+                   title="Descarga ZIP con images/ + labels/ en formato YOLO para reentrenar">
+                  <svg class="ico" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                    <path d="M8 2v8m0 0L5 7m3 3 3-3M3 13h10" fill="none" stroke="currentColor"
+                          stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  Exportar YOLO
+                </a>
+                <button type="button" id="galleryMore" class="btn ghost">Cargar más</button>
+              </div>
+            </div>
+            <div class="panel-body">
+              <div id="fullGallery" class="full-gallery"></div>
+              <p id="galleryEmpty" class="capture-empty" hidden>
+                Sin capturas todavía.
+              </p>
+            </div>
+          </section>
+        </section>
+
+        <!-- ======================= DISPOSITIVO ======================= -->
+        <section class="view view-device" id="view-device" role="tabpanel" aria-label="Dispositivo" hidden>
+          <section class="panel panel-device">
             <div class="panel-header">
               <h2>Dispositivo ESP32-CAM</h2>
               <span id="deviceConfigState" class="status-pill">—</span>
+              <details class="help">
+                <summary aria-label="Ayuda de configuración del dispositivo">?</summary>
+                <div class="help-body">
+                  <p>
+                    La ESP32 descarga esta configuración cada 60 s
+                    (<code>/api/device/config</code>) y la aplica en caliente.
+                    Si el WiFi nuevo falla, revierte solo a los anteriores.
+                  </p>
+                  <p>
+                    También puedes configurar la ESP32 por su AP
+                    <code>REBA-Setup</code> (se abre solo si no hay WiFi o tras
+                    ~10 min sin conexión).
+                  </p>
+                </div>
+              </details>
             </div>
             <div class="panel-body">
               <form id="deviceConfigForm" class="device-form">
-                <label>
-                  WiFi SSID
-                  <input type="text" id="cfgWifiSsid" autocomplete="off"
-                         placeholder="Red 2.4 GHz (vacío = sin cambio)">
-                </label>
-                <label>
-                  WiFi contraseña
-                  <input type="password" id="cfgWifiPass" autocomplete="new-password"
-                         placeholder="Vacío = sin cambio">
-                </label>
-                <label>
-                  URL del servidor
-                  <input type="text" id="cfgServerUrl"
-                         placeholder="http://192.168.1.3:5000">
-                </label>
+                <p class="form-group">Red y servidor</p>
+                <div class="field">
+                  <label class="field-label" for="cfgWifiSsid">WiFi SSID</label>
+                  <span class="input-affix">
+                    <input type="text" id="cfgWifiSsid" autocomplete="off"
+                           placeholder="Red 2.4 GHz (vacío = sin cambio)" />
+                  </span>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="cfgWifiPass">WiFi contraseña</label>
+                  <span class="input-affix">
+                    <input type="password" id="cfgWifiPass" autocomplete="new-password"
+                           placeholder="Vacío = sin cambio" />
+                    <button type="button" id="cfgPassToggle" class="affix-btn"
+                            aria-label="Mostrar contraseña">ver</button>
+                  </span>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="cfgServerUrl">URL del servidor</label>
+                  <span class="input-affix">
+                    <input type="text" id="cfgServerUrl"
+                           placeholder="http://192.168.1.3:5000" />
+                  </span>
+                </div>
+
+                <p class="form-group">Parámetros de operación y sensores</p>
                 <div class="device-form-row">
-                  <label>
-                    Fotos para bomba
-                    <input type="number" id="cfgPumpPhotos" min="1" max="20">
-                  </label>
-                  <label>
-                    Bomba (segundos)
-                    <input type="number" id="cfgPumpSeconds" min="1" max="120">
-                  </label>
+                  <div class="field">
+                    <label class="field-label" for="cfgPumpPhotos">Fotos para bomba</label>
+                    <span class="input-affix has-unit">
+                      <input type="number" id="cfgPumpPhotos" min="1" max="20" />
+                      <span class="unit">fotos</span>
+                    </span>
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="cfgPumpSeconds">Bomba</label>
+                    <span class="input-affix has-unit">
+                      <input type="number" id="cfgPumpSeconds" min="1" max="120" />
+                      <span class="unit">s</span>
+                    </span>
+                  </div>
                 </div>
                 <div class="device-form-row">
-                  <label>
-                    Dist. mín (cm)
-                    <input type="number" id="cfgDistMin" step="0.5" min="0">
-                  </label>
-                  <label>
-                    Dist. máx (cm)
-                    <input type="number" id="cfgDistMax" step="0.5" min="1">
-                  </label>
+                  <div class="field">
+                    <label class="field-label" for="cfgDistMin">Dist. mín</label>
+                    <span class="input-affix has-unit">
+                      <input type="number" id="cfgDistMin" step="0.5" min="0" />
+                      <span class="unit">cm</span>
+                    </span>
+                  </div>
+                  <div class="field">
+                    <label class="field-label" for="cfgDistMax">Dist. máx</label>
+                    <span class="input-affix has-unit">
+                      <input type="number" id="cfgDistMax" step="0.5" min="1" />
+                      <span class="unit">cm</span>
+                    </span>
+                  </div>
                 </div>
+
                 <div class="device-form-actions">
                   <button type="submit" class="primary">Guardar y aplicar</button>
                   <button type="button" id="deviceConfigReload">Recargar</button>
                 </div>
-                <p class="footer-note" style="margin: 0.5rem 0 0">
-                  La ESP32 descarga esta config cada 60 s (<code>/api/device/config</code>)
-                  y la aplica en caliente. Si el WiFi nuevo falla, revierte solo a los
-                  anteriores. También puedes configurar la ESP32 por su AP
-                  <code>REBA-Setup</code> (se abre solo si no hay WiFi o tras ~10 min sin conexión).
-                </p>
               </form>
             </div>
           </section>
-        </aside>
+        </section>
       </main>
 
-      <!-- Galería completa de capturas -->
-      <section class="panel gallery-panel">
-        <div class="panel-header">
-          <h2>Galería de capturas</h2>
-          <div class="gallery-controls">
-            <input type="search" id="galleryFilter" class="gallery-filter"
-                   placeholder="Filtrar por clase (ej. plastico)…" />
-            <a class="btn ghost" href="/api/export/yolo"
-               title="Descarga ZIP con images/ + labels/ en formato YOLO para reentrenar">Exportar YOLO</a>
-            <button type="button" id="galleryMore" class="btn ghost">Cargar más</button>
-          </div>
-        </div>
-        <div class="panel-body">
-          <div id="fullGallery" class="full-gallery"></div>
-          <p id="galleryEmpty" class="capture-empty" hidden>
-            Sin capturas todavía.
-          </p>
-        </div>
-      </section>
+      <nav class="bottom-nav" aria-label="Secciones del dashboard">
+        <button type="button" class="nav-tab is-active" data-view="live" aria-selected="true">
+          <svg class="nav-ico" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+            <path d="M2.5 10.5h3l1.8-5 3.4 9 1.8-5.4h5.5" fill="none" stroke="currentColor"
+                  stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>En vivo</span>
+        </button>
+        <button type="button" class="nav-tab" data-view="analytics" aria-selected="false">
+          <svg class="nav-ico" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+            <path d="M4 16.5v-5M9.3 16.5V6M14.6 16.5v-8.5M3 16.5h14" fill="none" stroke="currentColor"
+                  stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>Analítica</span>
+        </button>
+        <button type="button" class="nav-tab" data-view="device" aria-selected="false">
+          <svg class="nav-ico" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+            <rect x="5.5" y="5.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor"
+                  stroke-width="1.7"/>
+            <path d="M8 3v2.5M12 3v2.5M8 14.5V17M12 14.5V17M3 8h2.5M3 12h2.5M14.5 8H17M14.5 12H17"
+                  fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+          <span>Dispositivo</span>
+        </button>
+      </nav>
 
       <!-- Lightbox: detalle de una captura -->
       <div id="lightbox" class="lightbox" hidden>
@@ -245,8 +343,7 @@
 
       <p class="footer-note">
         REBA · Dashboard local · Parámetros configurables en
-        <code>.env</code> (servidor) y en el sketch <code>fotos_nc.ino</code> ·
-        Ver <code>docs/dashboard.md</code>
+        <code>.env</code> (servidor) y en el sketch <code>fotos_nc.ino</code>
       </p>
     </div>
 

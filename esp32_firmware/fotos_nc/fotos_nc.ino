@@ -42,8 +42,9 @@
 #include <Preferences.h>
 // NOTA: HTTPClient.h está PROHIBIDO en este firmware — enlaza
 // WiFiClientSecure/mbedTLS cuyo init estático provoca FB-OVF permanente
-// en el driver de cámara (ver test_cam2..5). El HTTP se hace con
-// WiFiClient (socket TCP plano) en httpSimple() más abajo.
+// en el driver de cámara (verificado en banco: con HTTPClient la cámara
+// daba "init OK pero sin frames"; con WiFiClient TCP plano funciona).
+// El HTTP se hace con WiFiClient en httpSimple() más abajo.
 
 // ---------------- Valores por defecto (se sobreescriben por config remota) ----------------
 // SRV_BASE: URL base del servidor FastAPI SIN /upload, ej. http://192.168.1.3:5000
@@ -525,7 +526,8 @@ camera_config_t configCamara(int frameSize) {
   // IMPORTANTE: memset a 0 — camera_config_t tiene campos que no se
   // asignan abajo (sccb_freq, dma_half, dma_thresh...). Sin esto quedan
   // con basura de stack y el driver SCCB/DMA falla de forma intermitente
-  // ("init OK pero sin frames" / FB-OVF). Ver test_cam4/5 vs 6/7.
+  // ("init OK pero sin frames" / FB-OVF). Verificado en banco: el mismo
+  // sketch con `= {}` captura frames de forma estable.
   camera_config_t config = {};
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer   = LEDC_TIMER_0;
@@ -549,8 +551,8 @@ camera_config_t configCamara(int frameSize) {
   config.pixel_format = PIXFORMAT_JPEG;
   config.grab_mode = CAMERA_GRAB_LATEST;
 
-  // Orden: QVGA/DRAM primero — es la config exacta verificada en test_cam2
-  // (frame real capturado). VGA/DRAM inicializa pero no entrega frames en
+  // Orden: QVGA/DRAM primero — verificado en banco con frame real
+  // (320x240). VGA/DRAM inicializa pero no entrega frames en
   // esta placa; un intento fallido seguido de esp_camera_deinit() deja el
   // sensor inutilizable para los intentos siguientes ("init OK sin frames").
   switch (frameSize) {

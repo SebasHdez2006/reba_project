@@ -39,6 +39,12 @@
     captureIds: new Set(),
     captureCount: 0,
     alertTimer: null,
+    captureDets: new Map(),   // captureId -> detections[] (confianza por clase)
+    currentCapture: null,     // captura mostrada en el visor principal
+    deviceLastSeen: null,     // epoch s del último heartbeat del ESP32
+    donutHover: null,         // clase resaltada en el donut (null = normal)
+    tsGeom: null,             // geometría de la gráfica de actividad (tooltips)
+    pumpSegCount: 0,          // segmentos renderizados en la barra de progreso
   };
 
   // ---------------------------------------------------------------------------
@@ -137,6 +143,7 @@
     setText("pumpSecondsInline", formatNum(runSeconds, 0));
     setText("pumpDuration", `${formatNum(runSeconds, 0)} s`);
     buildLegend(cfg.class_names || Object.keys(CLASS_COLORS));
+    buildPumpSegments(trigger);
   }
 
   function applyStats(stats) {
@@ -153,17 +160,38 @@
     const pill = $("deviceStatus");
     const txt = $("deviceStatusText");
     if (!pill || !txt) return;
+    state.deviceLastSeen = device.last_seen ?? null;
+    updatePingNote();
     if (device.online) {
       pill.classList.add("online");
       pill.classList.remove("offline");
-      txt.textContent = device.ip ? `ESP32: ${device.ip}` : "ESP32: en línea";
+      txt.textContent = device.ip ? `ESP32 · ${device.ip}` : "ESP32 · en línea";
       pill.title = `ESP32-CAM en línea${device.ip ? ` (${device.ip})` : ""}`;
     } else {
       pill.classList.remove("online");
       pill.classList.add("offline");
-      txt.textContent = "ESP32: sin señal";
+      txt.textContent = "ESP32 · sin señal";
       pill.title = "ESP32-CAM sin heartbeat (>150 s)";
     }
+  }
+
+  // "Ping · hace 2 min" — última vez que el ESP32 contactó al servidor
+  function updatePingNote() {
+    const el = $("lastPingText");
+    if (!el) return;
+    const last = state.deviceLastSeen;
+    if (!last) {
+      el.textContent = "Ping · sin contacto";
+      return;
+    }
+    const secs = Math.max(0, Date.now() / 1000 - last);
+    let rel;
+    if (secs < 60) rel = "ahora";
+    else if (secs < 3600) rel = `hace ${Math.floor(secs / 60)} min`;
+    else if (secs < 86400) rel = `hace ${Math.floor(secs / 3600)} h`;
+    else rel = `hace ${Math.floor(secs / 86400)} d`;
+    el.textContent = `Ping · ${rel}`;
+    el.title = `Último contacto del ESP32-CAM: ${new Date(last * 1000).toLocaleString()}`;
   }
 
   function applyDetections(payload) {
@@ -173,6 +201,15 @@
       payload.inference_ms != null ? formatNum(payload.inference_ms, 1) : "—"
     );
     setText("inferSource", payload.source || "—");
+
+    // Cachear detecciones por captura para el badge de confianza
+    const lc = payload?.latest_capture;
+    if (lc?.id != null && Array.isArray(payload?.detections)) {
+      state.captureDets.set(String(lc.id), payload.detections);
+      if (state.currentCapture && String(state.currentCapture.id) === String(lc.id)) {
+        updateCaptureBadge(state.currentCapture);
+      }
+    }
   }
 
   function applyCapture(capture, isNew = false) {
@@ -180,7 +217,6 @@
     const id = String(capture.id);
     const imageUrl = `/api/captures/${encodeURIComponent(id)}/image`;
     const classes = (capture.class_names || []).join(", ") || "Residuo detectado";
-    const timestamp = capture.ts ? new Date(capture.ts).toLocaleString() : "";
     const latestImage = $("latestCaptureImage");
     const emptyState = $("captureEmpty");
     if (latestImage) {
@@ -189,7 +225,17 @@
     }
     if (emptyState) emptyState.hidden = true;
     setText("latestCaptureClasses", classes);
-    setText("latestCaptureTime", timestamp);
+    setText("latestCaptureTime", formatCaptureTs(capture.ts));
+    // Metadatos técnicos de la captura mostrada (no solo de la última inferencia)
+    setText("frameCount", String(capture.detection_count ?? 0));
+    setText(
+      "inferMs",
+      capture.inference_ms != null ? formatNum(capture.inference_ms, 1) : "—"
+    );
+    setText("inferSource", capture.source || "—");
+    state.currentCapture = capture;
+    updateCaptureBadge(capture);
+    markActiveThumb(id);
 
     if (isNew && !state.captureIds.has(id)) state.captureCount += 1;
     state.captureIds.add(id);
@@ -200,21 +246,105 @@
     const card = document.createElement("div");
     card.className = "capture-card";
     card.dataset.captureId = id;
+    card._capture = capture;
     const image = document.createElement("img");
     image.src = imageUrl;
     image.alt = `Captura clasificada: ${classes}`;
     image.loading = "lazy";
-    const caption = document.createElement("span");
-    caption.textContent = classes;
-    card.append(image, caption);
+    const tag = document.createElement("span");
+    tag.className = "thumb-tag";
+    tag.textContent = formatHM(capture.ts) || `#${id}`;
+    card.append(image, tag);
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
+    card.setAttribute("aria-label", `Ver captura ${id}: ${classes}`);
+    card.addEventListener("click", () => applyCapture(capture));
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        applyCapture(capture);
+      }
+    });
     gallery.prepend(card);
-    while (gallery.children.length > 6) gallery.lastElementChild.remove();
+    while (gallery.children.length > 8) gallery.lastElementChild.remove();
 
     // Reflejar en la galería completa si no está duplicada
     if (!galleryState.items.some((c) => String(c.id) === id)) {
       galleryState.items.unshift(capture);
       renderGallery();
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Helpers de formato y badge de la captura mostrada
+  // -------------------------------------------------------------------------
+  function formatHM(ts) {
+    if (!ts) return "";
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return "";
+    const p = (n) => String(n).padStart(2, "0");
+    return `${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+
+  function formatCaptureTs(ts) {
+    if (!ts) return "—";
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return "—";
+    const p = (n) => String(n).padStart(2, "0");
+    return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+
+  function markActiveThumb(id) {
+    const strip = $("captureGallery");
+    if (!strip) return;
+    strip.querySelectorAll(".capture-card").forEach((c) => {
+      c.classList.toggle("is-active", c.dataset.captureId === String(id));
+    });
+  }
+
+  // Badge superpuesto: "CLASE · 94%" / "CLASE +N · 94%" / "SIN DETECCIÓN"
+  function updateCaptureBadge(capture) {
+    const badge = $("captureBadge");
+    if (!badge || !capture) return;
+    badge.hidden = false;
+    const id = String(capture.id);
+    const names = capture.class_names || [];
+    const count = capture.detection_count ?? names.length;
+    const dets = state.captureDets.get(id);
+
+    if (!count) {
+      badge.textContent = "Sin detección";
+      badge.classList.add("is-empty");
+      badge.style.background = "";
+      return;
+    }
+    if (dets && dets.length) {
+      const top = dets.reduce((a, b) => (b.confidence > a.confidence ? b : a), dets[0]);
+      const extra = dets.length > 1 ? ` +${dets.length - 1}` : "";
+      badge.textContent = `${top.class_name} · ${Math.round(top.confidence * 100)}%${extra}`;
+      badge.style.background = CLASS_COLORS[top.class_name] || "#8b96a3";
+      badge.classList.remove("is-empty");
+      return;
+    }
+    // Sin detalle de confianza todavía: resumir clases y pedir el detalle
+    badge.textContent =
+      names.slice(0, 2).map((n) => n.toUpperCase()).join(" + ") +
+      (names.length > 2 ? ` +${names.length - 2}` : "");
+    badge.style.background = "#2a3648";
+    badge.classList.remove("is-empty");
+    if (!state.captureDets.has(id)) fetchCaptureDetections(id);
+  }
+
+  async function fetchCaptureDetections(id) {
+    try {
+      const res = await fetch(`/api/captures/${id}/detections`);
+      if (!res.ok) return;
+      const data = await res.json();
+      state.captureDets.set(String(id), data.detections || []);
+      if (state.currentCapture && String(state.currentCapture.id) === String(id)) {
+        updateCaptureBadge(state.currentCapture);
+      }
+    } catch (_) { /* silencioso: el badge queda con el resumen de clases */ }
   }
 
   // ---------------------------------------------------------------------------
@@ -236,6 +366,7 @@
       "pumpState",
       current > 0 ? `${current}/${trigger} fotos` : "esperando fotos"
     );
+    updatePumpSegments(current, trigger);
 
     const last = pump.last_pump_event;
     setText(
@@ -244,10 +375,39 @@
     );
   }
 
+  // Barra segmentada: un segmento por foto hacia el ciclo; el siguiente
+  // paso queda marcado para anticipar el disparo de la bomba.
+  function buildPumpSegments(trigger) {
+    const bar = $("pumpSegBar");
+    if (!bar) return;
+    const n = Math.max(1, Math.min(24, trigger || 3));
+    bar.innerHTML = "";
+    for (let i = 0; i < n; i++) {
+      const seg = document.createElement("i");
+      seg.className = "seg";
+      bar.appendChild(seg);
+    }
+    state.pumpSegCount = n;
+  }
+
+  function updatePumpSegments(current, trigger) {
+    const want = Math.max(1, Math.min(24, trigger || 3));
+    if (want !== state.pumpSegCount) buildPumpSegments(trigger);
+    const bar = $("pumpSegBar");
+    if (!bar) return;
+    const segs = bar.children;
+    for (let i = 0; i < segs.length; i++) {
+      segs[i].classList.toggle("on", i < current);
+      segs[i].classList.toggle("next", i === current);
+    }
+  }
+
   function showPumpAlert(pump) {
     const banner = $("alertBanner");
     const alertText = $("alertText");
     if (!banner) return;
+    const log = $("pumpEventLog");
+    if (log) log.open = true;
     const seconds = pump.pump_run_seconds ?? state.config?.pump_run_seconds ?? 10;
     if (alertText) {
       alertText.textContent = `Bomba activada por la ESP32 (~${seconds} s).`;
@@ -299,6 +459,29 @@
     });
   }
 
+  // Leyenda interactiva: resalta el arco correspondiente en el donut
+  function bindDonutLegend() {
+    const legend = $("classLegend");
+    if (!legend) return;
+    legend.addEventListener("mouseover", (e) => {
+      const li = e.target.closest("li[data-class]");
+      state.donutHover = li ? li.dataset.class : null;
+      drawDonut(state.stats);
+    });
+    legend.addEventListener("mouseout", (e) => {
+      if (!legend.contains(e.relatedTarget)) {
+        state.donutHover = null;
+        drawDonut(state.stats);
+      }
+    });
+    legend.addEventListener("click", (e) => {
+      const li = e.target.closest("li[data-class]");
+      if (!li) return;
+      state.donutHover = state.donutHover === li.dataset.class ? null : li.dataset.class;
+      drawDonut(state.stats);
+    });
+  }
+
   function drawDonut(stats) {
     const canvas = $("donutChart");
     if (!canvas) return;
@@ -308,7 +491,7 @@
     const cx = w / 2;
     const cy = h / 2;
     const radius = Math.min(w, h) * 0.42;
-    const thickness = radius * 0.34;
+    const thickness = radius * 0.36;
 
     ctx.clearRect(0, 0, w, h);
 
@@ -319,23 +502,28 @@
     // Anillo vacío de fondo
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.strokeStyle = "rgba(255,255,255,0.07)";
     ctx.lineWidth = thickness;
     ctx.stroke();
 
     if (total <= 0) return;
 
+    const hi = state.donutHover;
+    const gap = 0.018; // separación angular entre segmentos
     let angle = -Math.PI / 2;
     names.forEach((name) => {
       const value = counters[name] || 0;
       if (value <= 0) return;
       const slice = (value / total) * Math.PI * 2;
+      const seg = Math.max(0.01, slice - gap * 2);
+      ctx.globalAlpha = hi && name !== hi ? 0.18 : 1;
       ctx.beginPath();
-      ctx.arc(cx, cy, radius, angle, angle + slice);
+      ctx.arc(cx, cy, radius, angle + gap, angle + gap + seg);
       ctx.strokeStyle = CLASS_COLORS[name] || "#ffffff";
       ctx.lineWidth = thickness;
       ctx.lineCap = "butt";
       ctx.stroke();
+      ctx.globalAlpha = 1;
       angle += slice;
     });
   }
@@ -370,7 +558,7 @@
         const input = $(inputId);
         if (input) input.value = items[key] ?? "";
       }
-      setDeviceConfigStatus("guardado", "online");
+      setDeviceConfigStatus("Cargado", "online");
     } catch (err) {
       console.warn("Device config unavailable", err);
       setDeviceConfigStatus("sin conexión", "offline");
@@ -402,7 +590,12 @@
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setDeviceConfigStatus(`aplicado (${data.applied.length})`, "online");
+      setDeviceConfigStatus(
+        data.applied.length || data.removed.length
+          ? "Guardado ✓"
+          : "Sin cambios",
+        "online"
+      );
     } catch (err) {
       console.warn("Save device config failed", err);
       setDeviceConfigStatus("error al guardar", "offline");
@@ -425,23 +618,50 @@
     const card = document.createElement("div");
     card.className = "capture-card";
     card.dataset.captureId = capture.id;
-    const classes = (capture.class_names || []).join(", ") || "sin clase";
-    const ts = capture.ts ? new Date(capture.ts).toLocaleString() : "";
+    const classes = capture.class_names || [];
+    const ts = capture.ts ? new Date(capture.ts) : null;
+    const hm = ts && !Number.isNaN(ts.getTime())
+      ? `${String(ts.getHours()).padStart(2, "0")}:${String(ts.getMinutes()).padStart(2, "0")}`
+      : "—";
     const img = document.createElement("img");
     img.src = `/api/captures/${encodeURIComponent(capture.id)}/image`;
-    img.alt = `Captura ${capture.id}: ${classes}`;
+    img.alt = `Captura ${capture.id}: ${classes.join(", ") || "sin clase"}`;
     img.loading = "lazy";
-    const meta = document.createElement("div");
-    meta.className = "g-meta";
-    const cls = document.createElement("span");
-    cls.className = "g-cls";
-    cls.textContent = classes;
-    const time = document.createElement("span");
-    time.className = "g-ts";
-    time.textContent = `#${capture.id} · ${ts}`;
-    meta.append(cls, time);
-    card.append(img, meta);
+
+    const badges = document.createElement("div");
+    badges.className = "g-badges";
+    const shown = classes.slice(0, 3);
+    for (const name of shown) {
+      const tag = document.createElement("span");
+      tag.className = "g-tag";
+      tag.style.background = CLASS_COLORS[name] || "#8b96a3";
+      tag.textContent = name;
+      badges.appendChild(tag);
+    }
+    if (classes.length > shown.length) {
+      const more = document.createElement("span");
+      more.className = "g-tag";
+      more.style.background = "rgba(255,255,255,0.14)";
+      more.style.color = "#c7d0dd";
+      more.textContent = `+${classes.length - shown.length}`;
+      badges.appendChild(more);
+    }
+    const idEl = document.createElement("span");
+    idEl.className = "g-id";
+    idEl.textContent = `#${capture.id} · ${hm}`;
+    badges.appendChild(idEl);
+
+    card.append(img, badges);
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
+    card.setAttribute("aria-label", `Ampliar captura ${capture.id}`);
     card.addEventListener("click", () => openLightbox(capture));
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openLightbox(capture);
+      }
+    });
     return card;
   }
 
@@ -529,11 +749,18 @@
     const stateEl = $("manualPumpState");
     const secs = parseInt(input?.value, 10);
     if (!secs || secs < 1 || secs > 300) {
-      if (stateEl) stateEl.textContent = "Segundos inválidos (1-300).";
+      if (stateEl) {
+        stateEl.textContent = "Segundos inválidos (1-300).";
+        stateEl.classList.remove("is-queued");
+      }
       return;
     }
     if (btn) btn.disabled = true;
-    if (stateEl) stateEl.textContent = "Encolando…";
+    const btnLabel = btn ? btn.textContent : "";
+    if (stateEl) {
+      stateEl.textContent = "Encolando…";
+      stateEl.classList.remove("is-queued");
+    }
     try {
       const res = await fetch("/api/pump/run", {
         method: "POST",
@@ -542,12 +769,24 @@
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-      if (stateEl) stateEl.textContent =
-        `Orden encolada (${secs} s) — el ESP32 la ejecuta en su próximo poll.`;
+      if (stateEl) {
+        stateEl.textContent =
+          `Comando en cola · el ESP32 lo recoge en su próximo poll (≤60 s).`;
+        stateEl.classList.add("is-queued");
+      }
+      if (btn) {
+        btn.textContent = "En cola ✓";
+        setTimeout(() => {
+          if (btn) btn.textContent = btnLabel || "Activar ahora";
+        }, 3500);
+      }
       loadPumpEvents();
     } catch (err) {
       console.warn("pump/run failed", err);
-      if (stateEl) stateEl.textContent = `Error: ${err.message}`;
+      if (stateEl) {
+        stateEl.textContent = `Error: ${err.message}`;
+        stateEl.classList.remove("is-queued");
+      }
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -563,16 +802,26 @@
       const data = await res.json();
       ul.replaceChildren();
       const pending = data.pending_cmd;   // "<ts>:<secs>" si hay orden sin ack
-      if (pending && stateEl && !stateEl.textContent.startsWith("Orden encolada")) {
+      if (pending && stateEl &&
+          !stateEl.textContent.startsWith("Comando en cola")) {
         const secs = pending.split(":")[1] || "?";
-        stateEl.textContent = `⏳ Orden pendiente de entrega: ${secs} s`;
+        stateEl.textContent = `⏳ Comando en cola (esperando poll) — ${secs} s`;
+        stateEl.classList.add("is-queued");
       }
-      for (const ev of data.items || []) {
+      const items = data.items || [];
+      if (!items.length) {
+        const li = document.createElement("li");
+        li.className = "empty";
+        li.textContent = "Sin eventos registrados";
+        ul.appendChild(li);
+      }
+      for (const ev of items) {
         const li = document.createElement("li");
         const ts = ev.ts ? new Date(ev.ts).toLocaleString() : "";
         li.innerHTML = `<strong>${ts}</strong> — ${ev.detail || `${ev.photos_trigger} fotos`}`;
         ul.appendChild(li);
       }
+      setText("pumpEventsCount", String(items.length));
     } catch (_) { /* silencioso: se reintenta en el próximo poll */ }
   }
 
@@ -598,7 +847,8 @@
     const dpr = window.devicePixelRatio || 1;
     const cssW = canvas.clientWidth || 520;
     const cssH = Math.round(cssW * 0.36);
-    if (canvas.width !== Math.round(cssW * dpr)) {
+    if (canvas.width !== Math.round(cssW * dpr) ||
+        canvas.height !== Math.round(cssH * dpr)) {
       canvas.width = Math.round(cssW * dpr);
       canvas.height = Math.round(cssH * dpr);
       canvas.style.height = `${cssH}px`;
@@ -607,6 +857,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const W = cssW, H = cssH;
     ctx.clearRect(0, 0, W, H);
+    const MONO = "'JetBrains Mono', monospace";
 
     const legend = $("tsLegend");
     if (legend) {
@@ -619,33 +870,51 @@
         legend.appendChild(li);
       }
     }
+
     if (!series.length) {
+      state.tsGeom = null;
       ctx.fillStyle = "rgba(255,255,255,0.4)";
-      ctx.font = "13px sans-serif";
-      ctx.fillText("Sin datos en el rango", 16, H / 2);
+      ctx.font = `11px ${MONO}`;
+      ctx.textAlign = "center";
+      ctx.fillText("SIN DATOS EN EL RANGO", W / 2, H / 2);
+      ctx.textAlign = "left";
       return;
     }
 
-    const padL = 30, padR = 8, padT = 12, padB = 26;
+    const padL = 36, padR = 8, padT = 14, padB = 26;
     const plotW = W - padL - padR, plotH = H - padT - padB;
     const totals = series.map((d) =>
       Object.values(d.detections || {}).reduce((s, n) => s + n, 0)
     );
     const maxV = Math.max(1, ...totals);
 
-    // rejilla horizontal + etiquetas Y
-    ctx.strokeStyle = "rgba(255,255,255,0.07)";
-    ctx.fillStyle = "rgba(255,255,255,0.45)";
-    ctx.font = "10px sans-serif";
-    for (let i = 0; i <= 3; i++) {
-      const y = padT + plotH - (plotH * i) / 3;
+    // Paso "bonito" para el eje Y: 1, 2 o 5 × 10^n (legible en rangos 0-5)
+    const rawStep = maxV / 4;
+    const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+    const norm = rawStep / mag;
+    const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+    const yMax = Math.max(step, Math.ceil(maxV / step) * step);
+
+    // Rejilla horizontal + etiquetas Y (monoespaciadas, tabulares)
+    ctx.font = `10px ${MONO}`;
+    ctx.textBaseline = "middle";
+    for (let v = 0; v <= yMax + 1e-6; v += step) {
+      const y = padT + plotH - (v / yMax) * plotH;
+      ctx.strokeStyle = "rgba(255,255,255,0.08)";
       ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
-      ctx.fillText(String(Math.round((maxV * i) / 3)), 4, y + 3);
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.textAlign = "right";
+      ctx.fillText(String(Math.round(v)), padL - 7, y);
     }
+    // Eje X base
+    ctx.strokeStyle = "rgba(255,255,255,0.16)";
+    ctx.beginPath(); ctx.moveTo(padL, padT + plotH); ctx.lineTo(W - padR, padT + plotH); ctx.stroke();
 
     const n = series.length;
     const slot = plotW / n;
-    const barW = Math.min(46, slot * 0.62);
+    const barW = Math.min(44, slot * 0.6);
+    const labelEvery = Math.max(1, Math.ceil(n / 10));
+    const geom = [];
 
     series.forEach((day, i) => {
       const x = padL + slot * i + (slot - barW) / 2;
@@ -653,18 +922,27 @@
       for (const cls of classNames) {
         const v = day.detections?.[cls] || 0;
         if (v <= 0) continue;
-        const bh = (v / maxV) * plotH;
+        const bh = (v / yMax) * plotH;
         const y = padT + plotH - acc - bh;
         ctx.fillStyle = CLASS_COLORS[cls] || "#888";
         ctx.fillRect(x, y, barW, bh);
         acc += bh;
       }
-      // etiqueta del día
-      ctx.fillStyle = "rgba(255,255,255,0.5)";
-      ctx.textAlign = "center";
-      ctx.fillText(day.date.slice(5), x + barW / 2, H - 8);
-      ctx.textAlign = "left";
+      // Etiqueta del día (dd/mm), espaciada para no saturar
+      if (i % labelEvery === 0 || i === n - 1) {
+        ctx.fillStyle = "rgba(255,255,255,0.45)";
+        ctx.textAlign = "center";
+        ctx.fillText(
+          `${day.date.slice(8, 10)}/${day.date.slice(5, 7)}`,
+          x + barW / 2,
+          H - 9
+        );
+      }
+      geom.push({ cx: x + barW / 2, day });
     });
+    ctx.textAlign = "left";
+
+    state.tsGeom = { geom, slot, classNames, wrapW: W };
   }
 
   // ---------------------------------------------------------------------------
@@ -688,7 +966,7 @@
 
   async function bootstrapCaptures() {
     try {
-      const response = await fetch("/api/captures?limit=6");
+      const response = await fetch("/api/captures?limit=8");
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       state.captureCount = data.total || 0;
@@ -696,7 +974,11 @@
       const gallery = $("captureGallery");
       if (gallery) gallery.replaceChildren();
       state.captureIds.clear();
-      for (const capture of data.items || []) applyCapture(capture);
+      // items llega DESC (más reciente primero): aplicar en orden inverso
+      // para que el visor principal y la tira queden con el más reciente arriba.
+      for (const capture of [...(data.items || [])].reverse()) {
+        applyCapture(capture);
+      }
     } catch (err) {
       console.warn("Capture history unavailable", err);
     }
@@ -747,6 +1029,159 @@
   const lb = $("lightbox");
   if (lb) lb.addEventListener("click", (e) => { if (e.target === lb) closeLightbox(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeLightbox(); });
+
+  // --- Navegación por pestañas (móvil / tablet) ---
+  function activateView(name) {
+    document.querySelectorAll(".view").forEach((v) => {
+      v.hidden = v.id !== `view-${name}`;
+    });
+    document.querySelectorAll(".nav-tab").forEach((b) => {
+      const on = b.dataset.view === name;
+      b.classList.toggle("is-active", on);
+      b.setAttribute("aria-selected", String(on));
+    });
+    const views = document.querySelector(".views");
+    if (views && window.innerWidth < 1024) {
+      views.scrollIntoView({ block: "start" });
+    }
+  }
+  document.querySelectorAll(".nav-tab").forEach((b) => {
+    b.addEventListener("click", () => activateView(b.dataset.view));
+  });
+
+  // --- Chips de duración de la bomba manual ---
+  const pumpChips = $("pumpChips");
+  const pumpCustomWrap = $("pumpCustomWrap");
+  const pumpOtherBtn = $("pumpOtherBtn");
+  const manualInput = $("manualPumpSeconds");
+  function setPumpChipSelected(chip) {
+    if (!pumpChips) return;
+    pumpChips.querySelectorAll(".chip").forEach((c) => {
+      c.classList.toggle("is-selected", c === chip);
+    });
+  }
+  if (pumpChips) {
+    pumpChips.querySelectorAll(".chip[data-seconds]").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        if (manualInput) manualInput.value = chip.dataset.seconds;
+        if (pumpCustomWrap) pumpCustomWrap.hidden = true;
+        setPumpChipSelected(chip);
+      });
+    });
+    // Chip preseleccionado según el valor inicial del input
+    const preset = [...pumpChips.querySelectorAll(".chip[data-seconds]")]
+      .find((c) => manualInput && c.dataset.seconds === manualInput.value);
+    if (preset) setPumpChipSelected(preset);
+  }
+  if (pumpOtherBtn) {
+    pumpOtherBtn.addEventListener("click", () => {
+      if (pumpCustomWrap) pumpCustomWrap.hidden = false;
+      setPumpChipSelected(pumpOtherBtn);
+      if (manualInput) {
+        manualInput.focus();
+        manualInput.select();
+      }
+    });
+  }
+
+  // --- Mostrar / ocultar contraseña WiFi ---
+  const passToggle = $("cfgPassToggle");
+  const passInput = $("cfgWifiPass");
+  if (passToggle && passInput) {
+    passToggle.addEventListener("click", () => {
+      const show = passInput.type === "password";
+      passInput.type = show ? "text" : "password";
+      passToggle.textContent = show ? "ocultar" : "ver";
+      passToggle.setAttribute(
+        "aria-label",
+        show ? "Ocultar contraseña" : "Mostrar contraseña"
+      );
+    });
+  }
+
+  // --- Tooltip de la gráfica de actividad (hover / touch) ---
+  const tsCanvas = $("tsChart");
+  const tsTip = $("tsTooltip");
+  if (tsCanvas && tsTip) {
+    const tipFor = (clientX) => {
+      const g = state.tsGeom;
+      if (!g) { tsTip.hidden = true; return; }
+      const rect = tsCanvas.getBoundingClientRect();
+      const x = clientX - rect.left;
+      let best = null, bestD = Infinity;
+      for (const b of g.geom) {
+        const d = Math.abs(b.cx - x);
+        if (d < bestD) { bestD = d; best = b; }
+      }
+      if (!best || bestD > g.slot) { tsTip.hidden = true; return; }
+
+      const day = best.day;
+      const dets = day.detections || {};
+      const rows = g.classNames.filter((c) => (dets[c] || 0) > 0);
+      const total = rows.reduce((s, c) => s + dets[c], 0);
+
+      tsTip.replaceChildren();
+      const dateEl = document.createElement("div");
+      dateEl.className = "tt-date";
+      dateEl.textContent = `${day.date.slice(8, 10)}/${day.date.slice(5, 7)}/${day.date.slice(0, 4)}`;
+      tsTip.appendChild(dateEl);
+
+      if (!rows.length) {
+        const empty = document.createElement("div");
+        empty.className = "tt-row";
+        const name = document.createElement("span");
+        name.className = "tt-name";
+        name.textContent = "Sin detecciones";
+        empty.appendChild(name);
+        tsTip.appendChild(empty);
+      }
+      for (const c of rows) {
+        const r = document.createElement("div");
+        r.className = "tt-row";
+        const dot = document.createElement("span");
+        dot.className = "tt-dot";
+        dot.style.background = CLASS_COLORS[c] || "#888";
+        const name = document.createElement("span");
+        name.className = "tt-name";
+        name.textContent = c;
+        const val = document.createElement("span");
+        val.className = "tt-val";
+        val.textContent = String(dets[c]);
+        r.append(dot, name, val);
+        tsTip.appendChild(r);
+      }
+      const t = document.createElement("div");
+      t.className = "tt-total";
+      const tLabel = document.createElement("span");
+      tLabel.textContent = "Total";
+      const tVal = document.createElement("span");
+      tVal.className = "tt-val";
+      tVal.textContent = String(total);
+      t.append(tLabel, tVal);
+      tsTip.appendChild(t);
+
+      tsTip.hidden = false;
+      const wrapW = tsCanvas.parentElement.clientWidth;
+      const left = Math.max(72, Math.min(wrapW - 72, best.cx));
+      tsTip.style.left = `${left}px`;
+    };
+    tsCanvas.addEventListener("pointermove", (e) => tipFor(e.clientX));
+    tsCanvas.addEventListener("pointerdown", (e) => tipFor(e.clientX));
+    tsCanvas.addEventListener("pointerleave", () => { tsTip.hidden = true; });
+  }
+
+  bindDonutLegend();
+
+  // Redibujar cuando las fuentes variables terminen de cargar
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => {
+      drawDonut(state.stats);
+      loadTimeseries();
+    });
+  }
+
+  // "Ping · hace X" se actualiza aunque el ESP32 no contacte seguido
+  setInterval(updatePingNote, 20000);
 
   bootstrapFromRest();
   bootstrapCaptures();

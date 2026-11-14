@@ -2,7 +2,7 @@
 
 Plataforma flotante autónoma de recolección de residuos acuáticos.
 
-La **ESP32-CAM** vigila el área de la cesta con un sensor ultrasónico (0–23 cm). Cuando un objeto entra al rango, enciende el flash, toma una foto JPEG y la envía por **HTTP POST** a la PC. Si no hay Wi-Fi o el servidor no responde, la foto queda en una **cola en PSRAM** y se reintenta después. Al acumular **3 fotos**, la bomba de 12 V corre durante **10 s** (relé cableado en **NC**). La PC recibe cada foto, la clasifica con **YOLOv8/ONNX local**, guarda imagen y detecciones en SQLite y actualiza el dashboard por WebSocket. Todo funciona en la red local, sin Internet.
+La **ESP32-CAM** vigila el área de la cesta con un sensor ultrasónico (0–23 cm). Cuando un objeto entra al rango, enciende el flash, toma una foto JPEG y la envía por **HTTP POST** a la PC. Si no hay Wi-Fi o el servidor no responde, la foto queda en una **cola en RAM** y se reintenta después. Al acumular **3 fotos**, la bomba de 12 V corre durante **10 s** (relé cableado en **NC**). La PC recibe cada foto, la clasifica con **YOLOv8/ONNX local**, guarda imagen y detecciones en SQLite y actualiza el dashboard por WebSocket. Todo funciona en la red local, sin Internet.
 
 
 ---
@@ -16,7 +16,7 @@ La **ESP32-CAM** vigila el área de la cesta con un sensor ultrasónico (0–23 
 ┌─────────────────────────────┐      POST /upload (JPEG + X-Evento)
 │  ESP32-CAM (fotos_nc.ino)   │ ────────────────────────────────►
 │  ultrasónico + flash +      │      reintento c/15 s si falla
-│  cola PSRAM (máx. 6)        │         ┌────────────────────────┐
+│  cola RAM (máx. 6)         │         ┌────────────────────────┐
 │                             │         │  PC — FastAPI (:5000)  │
 │  cada 3 fotos →             │         │  ├─ ONNX YOLOv8 local  │
 │  bomba ON 10 s (relé NC)    │         │  ├─ SQLite (fotos+clases)
@@ -36,24 +36,112 @@ La ESP32 y la PC deben estar conectadas a la **misma red Wi-Fi de 2.4 GHz** (no 
 
 ---
 
+## Stack tecnológico — herramientas utilizadas
+
+### Diseño e interfaz (dashboard `static/`)
+
+| Herramienta | Versión / tipo | Uso en REBA |
+|-------------|----------------|-------------|
+| HTML5 + CSS3 | Estándar, sin framework | Estructura semántica y design system propio (superficies planas, tokens `#090D12`/`#111720`/`#18212E`) |
+| JavaScript (vanilla) | ES2020+, sin build | Todo `app.js`: WebSocket, fetch, DOM, estado — cero dependencias externas |
+| Canvas 2D API | Nativo del navegador | Donut de materiales y barras apiladas de actividad (con DPR adaptable) |
+| WebSocket API | Nativo | Canal `/ws` en vivo (capturas, detecciones, eventos de bomba) |
+| SVG inline | — | Iconos de navegación, botón exportar, lightbox |
+| Space Grotesk + JetBrains Mono | woff2 variables auto-hospedadas (`static/fonts/`) | Interfaz y datos técnicos; `tabular-nums` en métricas. Sin CDN → funciona offline |
+| Diseño responsivo | Media queries CSS | Móvil primero: bottom nav <1024px, grid 12 col. ≥1024px |
+
+Referencias de diseño aplicadas: patrones de telemetría de Teenage Engineering, dashboards oscuros tipo Linear/Vercel y Grafana (elevación por luminancia, hairlines 1px, acento único).
+
+### Backend y servidor (`server/`)
+
+| Herramienta | Versión | Uso en REBA |
+|-------------|---------|-------------|
+| Python | 3.10+ (probado 3.13) | Runtime del servidor |
+| FastAPI | ≥0.115 | API REST + WebSocket + estáticos del dashboard |
+| Uvicorn | ≥0.32 (`[standard]`) | Servidor ASGI en `0.0.0.0:5000` |
+| SQLite | embebido, WAL + FK | `data/REBA.db`: captures (doble JPEG), detections, counters, pump_events, device_config |
+| Pydantic Settings | ≥2.5 | `.env` tipado (`server/config.py`) |
+| httpx | ≥0.27 | Cliente HTTP en scripts de evaluación |
+
+### Visión artificial e IA (`ai_pipeline/` + `server/inference.py`)
+
+| Herramienta | Versión | Uso en REBA |
+|-------------|---------|-------------|
+| Ultralytics YOLOv8n | ≥8.3 | Entrenamiento (`train_outdoor.py`) y exportación ONNX; pesos base `yolov8n.pt` |
+| ONNX Runtime | ≥1.19 | Inferencia CPU local en producción (~50–130 ms/foto) |
+| ONNX (`opset=12`, `simplify`) | ≥1.16 | Export del modelo; `onnxslim` para simplificar |
+| Albumentations | ≥1.4.15 | Pipeline de augmentations "outdoor" (brillo, sombra, niebla, lluvia, blur, HSV, dropout) |
+| NumPy | ≥1.26 | Pre/post-procesamiento de tensores |
+| OpenCV (headless) | ≥4.10 | Decodificación JPEG, validación magic bytes, dibujo de cajas anotadas |
+
+Scripts del pipeline: `train_outdoor.py` (entrena+exporta), `evaluate_outdoor.py` (compara pesos), `eval_upload_path.py` (evalúa el path real `/upload`), `tune_confidence.py` (umbral óptimo), `build_outdoor_eval.py` (set degradado), `download_taco.py` + `generate_synthetic_dataset.py` (datasets).
+
+### Datos y datasets (`datasets/`)
+
+| Herramienta / fuente | Uso en REBA |
+|----------------------|-------------|
+| `REBA_synthetic` (propio) | 240 tr / 60 val / 60 test — escenas acuáticas sintéticas generadas por script |
+| `REBA_synthetic_boost` (propio) | 180 train extra — refuerzo de clases raras (`organico` ×4, `tela` ×3) |
+| TACO (Trash Annotations in Context, real) | 750 imágenes vía `download_taco.py`, mapeadas a las 5 clases REBA |
+| `REBA_outdoor_eval` (propio) | 120 copias degradadas deterministas para medir robustez |
+| Formato YOLO | Labels `class cx cy w h` normalizados; export del dashboard en ZIP re-entrenable |
+| Openverse + OpenAI Vision | **Solo bootstrap opcional** (`download_openverse_dataset.py`, `dataset_builder.py`) — nunca en producción |
+
+### Firmware y embebido (`esp32_firmware/fotos_nc/`)
+
+| Herramienta | Versión | Uso en REBA |
+|-------------|---------|-------------|
+| Arduino IDE 2.x / arduino-cli | — | Compilación y flasheo del sketch |
+| Core `esp32` (Espressif) | 3.3.x, placa `esp32cam` | Framework Arduino para ESP32-CAM |
+| C++ (sketch `.ino`) | — | Todo el firmware: sensor, cámara, cola, HTTP, bomba, NVS |
+| WiFiManager | 2.x | Portal de aprovisionamiento `REBA-Setup` |
+| Preferences (NVS) | — | Persistencia de WiFi, `server_url`, bomba, distancias |
+| `WiFiClient` TCP plano | — | HTTP sin `HTTPClient.h`/mbedTLS (ahorra ~122 KB flash, evita FB-OVF) |
+
+### Hardware
+
+| Componente | Rol |
+|------------|-----|
+| AI-Thinker ESP32-CAM (OV2640) | Captura JPEG + Wi-Fi + lógica |
+| HC-SR04 | Trigger ultrasónico 0–23 cm (ECHO vía divisor 1k+2k) |
+| Relé 1 canal + bomba 12 V | Conmuta ciclos de bombeo (cableado NC) |
+| XL6009 + TP4056 + 18650 + panel solar | Potencia: boost a 12 V y carga solar |
+| Fuente 5 V dedicada | Alimentación del ESP32 (nunca desde el boost) |
+
+### Desarrollo y verificación
+
+| Herramienta | Uso en REBA |
+|-------------|-------------|
+| Git | Control de versiones del repo |
+| VS Code | Editor del proyecto |
+| curl | Pruebas de `/upload`, `/api/*` y comandos serie |
+| Playwright (MCP) | Verificación automatizada del dashboard (viewports 375×812 y 1280×800, consola, tooltips, contraste) |
+| Multímetro | Ajuste del boost a 12 V y verificación de conmutación del relé |
+
+---
+
 ## Datos que debes configurar
 
-| Dato | Formato | Default / ejemplo | Dónde se usa |
-|------|---------|-------------------|--------------|
-| **IP del PC (server)** | IPv4, ej. `192.168.1.50`. Obtenerla: `ipconfig` (Windows) → "Dirección IPv4" de la Wi-Fi conectada a la misma red | `192.168.1.50` | `SERVIDOR_URL` en el firmware |
-| **`SERVIDOR_URL`** (firmware) | `http://<IP_PC>:<PUERTO>/upload` | `http://192.168.1.50:5000/upload` | `fotos_nc.ino` — cambiarla requiere **reflashear** |
-| **`WIFI_SSID` / `WIFI_PASS`** (firmware) | Cadena literal C. **Solo 2.4 GHz** (el ESP32 no soporta 5 GHz); evita comillas `"` o `\` en el nombre/clave | `"TU_RED_WIFI"` / `"TU_CONTRASENA"` | `fotos_nc.ino` |
-| **`HOST` / `PORT`** (server) | `0.0.0.0` (escucha en toda la LAN) / entero | `0.0.0.0` / `5000` | `.env` — el puerto **debe coincidir** con `SERVIDOR_URL` |
+| Dato | Formato | Default / ejemplo | Dónde se configura |
+|------|---------|-------------------|--------------------|
+| **IP del PC (server)** | IPv4, ej. `192.168.1.50`. Obtenerla: `ipconfig` (Windows) → "Dirección IPv4" de la Wi-Fi conectada a la misma red | `192.168.1.3` | `server_url` del ESP32 (NVS) — **sin reflashear**: dashboard → Dispositivo, portal `REBA-Setup` o serie `SET server_url=…` |
+| **`server_url`** (ESP32) | `http://<IP_PC>:<PUERTO>` (sin `/upload` — el firmware lo agrega) | `http://192.168.1.3:5000` | NVS `srv` + overrides remotos |
+| **`wifi_ssid` / `wifi_pass`** (ESP32) | Cadena; **solo 2.4 GHz** (el ESP32 no soporta 5 GHz) | — | Portal `REBA-Setup`, serie o dashboard → Dispositivo |
+| **`HOST` / `PORT`** (server) | `0.0.0.0` (escucha en toda la LAN) / entero | `0.0.0.0` / `5000` | `.env` — el puerto **debe coincidir** con `server_url` del ESP32 |
 | **Dashboard** | `http://<IP_PC o localhost>:<PUERTO>` | `http://localhost:5000` | Navegador en la misma LAN |
 | **`MODEL_PATH`** | Ruta relativa o absoluta al `.onnx` | `models/best.onnx` | `.env` |
-| **`INFERENCE_CONFIDENCE` / `INFERENCE_IOU`** | 0.0–1.0 | `0.45` / `0.45` | `.env` |
+| **`INFERENCE_CONFIDENCE` / `INFERENCE_IOU`** | 0.0–1.0 | `0.35` / `0.45` | `.env` |
 | **`CLASS_NAMES`** | CSV, orden = class_id | `plastico,tela,organico,unicel,metal` | `.env` |
-| **`PUMP_TRIGGER_PHOTOS` / `PUMP_RUN_SECONDS`** | entero / segundos | `3` / `10` — **informativo**: reflejar `FOTOS_PARA_BOMBA` / `TIEMPO_BOMBA_MS` | `.env` + firmware |
-| **Rango ultrasónico** | cm | `0–23` (`DIST_MIN_CM` / `DIST_MAX_CM`) | firmware + `.env` (`DETECT_*_CM`, display) |
-| **Pines** | GPIO | RELAY=13, TRIG=14, ECHO=15 (divisor), FLASH=4 | firmware |
+| **`PUMP_TRIGGER_PHOTOS` / `PUMP_RUN_SECONDS`** | entero / segundos | `3` / `10` — **informativo**: espejar `pump_photos`/`pump_seconds` del ESP32 | `.env` + config remota del dispositivo |
+| **`CAPTURE_RETENTION`** | entero (0 = sin límite) | `2000` | `.env` |
+| **`DATABASE_PATH`** | Ruta SQLite | `data/REBA.db` | `.env` |
+| **Rango ultrasónico** | cm | `0–23` (`dist_min_cm`/`dist_max_cm` en el ESP32; `DETECT_*_CM` en `.env` para display) | config remota + `.env` |
+| **Pines** | GPIO | RELAY=13, TRIG=14, ECHO=15 (divisor), FLASH=4 | `#define` en `fotos_nc.ino` (compilados) |
 | **Contrato `/upload`** | `POST`, body = JPEG binario, `Content-Type: image/jpeg`, header opcional `X-Evento: ingreso`. Respuesta **2xx** → la foto sale de la cola del ESP32 | — | firmware + server |
 
-> **Recomendación:** configura una **IP estática o reserva DHCP** para el PC en el router — la IP queda grabada en el firmware y cambiarla implica reflashear.
+> **Sin reflasheo:** desde el firmware v2, WiFi, `server_url`, bomba y distancias se cambian en caliente por portal `REBA-Setup`, comandos serie o el panel **Dispositivo** del dashboard — con validación estricta y reversión automática si la config nueva falla. Solo los pines y la lógica NC/ACTIVE-LOW requieren recompilar.
+>
+> **Recomendación:** configura una **IP estática o reserva DHCP** para el PC en el router — la URL queda guardada en el ESP32.
 
 ---
 
@@ -65,31 +153,42 @@ REBA/
 ├── .env.example              ← plantilla de configuración del servidor
 ├── requirements.txt
 ├── docs/
+│   ├── manual_implementacion.md ← implementación E2E (hardware→campo)
+│   ├── manual_uso.md         ← operación del dashboard
+│   ├── manual_alcances.md    ← alcance, limitaciones y métricas
 │   ├── hardware.md           ← esquema eléctrico, BOM, relé NC, divisor ECHO
-│   ├── firmware.md           ← flasheo, constantes, contrato /upload
+│   ├── firmware.md           ← flasheo, NVS, comandos serie, pump_cmd
 │   ├── server.md             ← instalación, API, WebSocket
-│   ├── ai_pipeline.md        ← dataset y entrenamiento Colab/local
-│   └── dashboard.md          ← uso de la UI
+│   ├── ai_pipeline.md        ← dataset y entrenamiento outdoor
+│   ├── dashboard.md          ← referencia técnica del frontend
+│   └── componentes.md        ← función/decisión/uso por componente
 ├── esp32_firmware/
 │   └── fotos_nc/
-│       └── fotos_nc.ino      ← sketch desplegado (EDITAR constantes aquí)
+│       └── fotos_nc.ino      ← sketch (pines #define; config en NVS)
 ├── ai_pipeline/
 │   ├── generate_synthetic_dataset.py
 │   ├── download_openverse_dataset.py
+│   ├── download_taco.py      ← subset TACO real → YOLO
 │   ├── dataset_builder.py
-│   ├── train_local.py
-│   └── train_yolo.ipynb
+│   ├── outdoor_transforms.py ← augmentations de intemperie
+│   ├── build_outdoor_eval.py ← eval set degradado
+│   ├── train_outdoor.py      ← entrenamiento actual (sintético+TACO)
+│   ├── evaluate_outdoor.py   ← comparación de pesos
+│   ├── eval_upload_path.py   ← eval por path real /upload
+│   └── tune_confidence.py    ← umbral óptimo de confianza
 ├── server/
 │   ├── config.py             ← settings (.env)
 │   ├── main.py               ← POST /upload + API + WS + estáticos
 │   ├── inference.py          ← motor ONNX local
 │   └── database.py           ← SQLite (captures, detections, pump_events)
 ├── static/
-│   ├── index.html
-│   ├── app.js
-│   └── styles.css
+│   ├── index.html            ← 3 vistas: En vivo / Analítica / Dispositivo
+│   ├── app.js                ← WS, gráficas canvas, galería, bomba, config remota
+│   ├── styles.css            ← design system oscuro, móvil primero
+│   ├── fonts/                ← Space Grotesk + JetBrains Mono (woff2 locales)
+│   └── favicon.svg
 └── models/
-    └── best.onnx             ← modelo entrenado (generado por train_local.py)
+    └── best.onnx             ← modelo outdoor v2 (train_outdoor.py → ONNX)
 ```
 
 ---
@@ -98,15 +197,16 @@ REBA/
 
 | Parámetro | Default | Dónde cambiarlo |
 |-----------|---------|-----------------|
-| Rango de detección | **0–23 cm** | `fotos_nc.ino` → `DIST_MIN_CM`/`DIST_MAX_CM` y `.env` → `DETECT_*_CM` |
-| Fotos para activar bomba | **3** | `FOTOS_PARA_BOMBA` (firmware) y `PUMP_TRIGGER_PHOTOS` (`.env`) |
-| Duración del ciclo de bomba | **10 s** | `TIEMPO_BOMBA_MS` (firmware) y `PUMP_RUN_SECONDS` (`.env`) |
-| Cola de fotos sin Wi-Fi | **6** (descarta la más vieja) | `MAX_COLA` |
-| Relé / bomba | GPIO **13**, relé activo **LOW**, bomba en **NC** | `PIN_RELE`, `RELE_ACTIVO_BAJO`, `BOMBA_EN_NC` |
-| TRIG / ECHO / FLASH | GPIO **14** / **15** / **4** | `PIN_TRIG` / `PIN_ECHO` / `PIN_FLASH` |
+| Rango de detección | **0–23 cm** | ESP32: `dist_min_cm`/`dist_max_cm` (dashboard/portal/serie) y `.env` → `DETECT_*_CM` (display) |
+| Fotos para activar bomba | **3** | ESP32: `pump_photos` (dashboard/portal/serie) y `.env` → `PUMP_TRIGGER_PHOTOS` (informativo) |
+| Duración del ciclo de bomba | **10 s** | ESP32: `pump_seconds` (dashboard/portal/serie) y `.env` → `PUMP_RUN_SECONDS` (informativo) |
+| Cola de fotos sin Wi-Fi | **6** (descarta la más vieja) | `MAX_COLA` (`#define` en `fotos_nc.ino`, requiere recompilar) |
+| Retención de capturas | **2000** | `.env` → `CAPTURE_RETENTION` |
+| Relé / bomba | GPIO **13**, relé activo **LOW**, bomba en **NC** | `PIN_RELE`, `RELE_ACTIVO_BAJO`, `BOMBA_EN_NC` (`#define`, requieren recompilar) |
+| TRIG / ECHO / FLASH | GPIO **14** / **15** / **4** | `PIN_TRIG` / `PIN_ECHO` / `PIN_FLASH` (`#define`) |
 | Clases | plastico, tela, organico, unicel, metal | `.env` → `CLASS_NAMES` |
 
-> Mantén los valores del firmware y del `.env` **alineados** para que el progreso de bomba del dashboard coincida con el comportamiento real.
+> Mantén los valores del ESP32 (vía dashboard → Dispositivo) y del `.env` **alineados** para que el progreso de bomba del dashboard coincinda con el comportamiento real.
 
 ---
 
@@ -115,11 +215,14 @@ REBA/
 ### 1. Firmware ESP32-CAM
 
 1. Abre `esp32_firmware/fotos_nc/fotos_nc.ino` en Arduino IDE.
-2. Edita el bloque de constantes: `WIFI_SSID`, `WIFI_PASS`, `SERVIDOR_URL` (IP de tu PC + `:5000/upload`).
-3. Placa: **AI Thinker ESP32-CAM**. Sube el sketch.
-4. Abre Serial Monitor (115200): verás "Conectado. IP del ESP32-CAM" y dos destellos del flash.
+2. Placa: **AI Thinker ESP32-CAM**. Sube el sketch — **no hay constantes WiFi/URL que editar** (viven en NVS).
+3. Configura WiFi + `server_url` por una de estas vías (todas sin reflashear):
+   - **Portal** `REBA-Setup`: se abre solo si no hay credenciales → celular a `http://192.168.4.1`.
+   - **Serie** (115200): `SET wifi_ssid=…`, `SET wifi_pass=…`, `SET server_url=http://<IP_PC>:5000`.
+   - **Dashboard** → panel `Dispositivo` → `Guardar y aplicar` (una vez el server esté arriba).
+4. Abre Serial Monitor (115200): verás "Conectado. IP del ESP32-CAM" y `REBA listo`.
 
-Detalle: [docs/firmware.md](docs/firmware.md) · Cableado: [docs/hardware.md](docs/hardware.md)
+Guía completa de implementación: [docs/manual_implementacion.md](docs/manual_implementacion.md) · Cableado: [docs/hardware.md](docs/hardware.md) · Firmware: [docs/firmware.md](docs/firmware.md)
 
 ### 2. Servidor PC
 
@@ -136,7 +239,7 @@ pip install -r requirements.txt
 copy .env.example .env    # o: cp .env.example .env
 ```
 
-Arranque (el puerto debe coincidir con `SERVIDOR_URL`):
+Arranque (el puerto debe coincidir con `server_url` del ESP32):
 
 ```bash
 uvicorn server.main:app --host 0.0.0.0 --port 5000
@@ -156,33 +259,42 @@ Detalle: [docs/server.md](docs/server.md)
 
 ### 3. Modelo de visión
 
-`models/best.onnx` ya está incluido tras entrenar con `ai_pipeline/train_local.py`. Si falta, el servidor arranca igual pero reporta `backend: none` en `/api/health` y no clasifica.
+`models/best.onnx` ya está incluido — es el modelo **outdoor v2** entrenado con `ai_pipeline/train_outdoor.py`. Si falta, el servidor arranca igual pero reporta `backend: none` en `/api/health` y no clasifica.
 
-1. Genera un dataset sintético con `ai_pipeline/generate_synthetic_dataset.py` o usa fotos reales ya curadas (las capturas guardadas en SQLite sirven como dataset real).
-2. Entrena con `ai_pipeline/train_local.py` → exporta `models/best.onnx`.
+1. Genera un dataset sintético con `ai_pipeline/generate_synthetic_dataset.py` o usa fotos reales ya curadas (las capturas guardadas en SQLite sirven como dataset real; **Exportar YOLO** del dashboard las empaqueta).
+2. Entrena con `ai_pipeline/train_outdoor.py` → exporta `models/best.onnx`.
 
 Detalle: [docs/ai_pipeline.md](docs/ai_pipeline.md)
 
 ---
 
-## Endpoints ESP32 → servidor (contrato)
+## Endpoints del ESP32 → servidor (contrato)
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | POST | `/upload` | Foto JPEG por ingreso. Body binario, `Content-Type: image/jpeg`, header `X-Evento: ingreso`. 2xx = foto entregada (sale de la cola). |
+| GET | `/api/device/config` | Config clave=valor que el ESP32 descarga cada 60 s (heartbeat + `pump_cmd` pendiente) |
+| POST | `/api/device/ack` | ACK del ESP32 tras ejecutar `pump_cmd` |
 
 ## Endpoints servidor (resumen)
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
-| GET | `/api/health` | Estado del motor ONNX y contadores de uploads |
+| GET | `/api/health` | Estado del motor ONNX, contadores y `device.online` |
 | GET | `/api/config` | Config pública (clases, umbrales, constantes de bomba) |
 | GET | `/api/stats` | Contadores y % por clase |
+| GET | `/api/stats/timeseries` | Detecciones/día por clase para la gráfica (7/14/30 días) |
 | GET | `/api/pump-status` | Progreso inferido hacia el próximo ciclo de bomba |
 | GET | `/api/pump-events` | Historial de ciclos de bomba inferidos |
-| GET | `/api/captures` | Fotos clasificadas (metadatos) |
-| GET | `/api/captures/{id}/image` | JPEG anotado de una captura |
-| GET | `/api/detections/history` | Historial de detecciones |
+| POST | `/api/pump/run` | Encola ciclo de bomba manual (`{"seconds": N}`) para el ESP32 |
+| GET | `/api/pump/events` | Historial + `pending_cmd` (orden encolada sin confirmar) |
+| GET/POST | `/api/admin/device-config` | Overrides de config del ESP32 (los edita el dashboard) |
+| GET | `/api/captures` | Fotos clasificadas (paginado) |
+| GET | `/api/captures/latest` | Metadatos de la última captura |
+| GET | `/api/captures/{id}/image` | JPEG anotado (`?orig=1` = crudo del ESP32) |
+| GET | `/api/captures/{id}/detections` | Detecciones de una captura (lightbox) |
+| GET | `/api/detections/history` · `/api/detections/latest` | Historial / última inferencia |
+| GET | `/api/export/yolo` | ZIP con imágenes + labels YOLO + `data.yaml` |
 | WS | `/ws` | Tiempo real al dashboard (`hello`, `capture`, `detections`, `pump_event`) |
 
 ---
@@ -198,13 +310,26 @@ Detalle: [docs/ai_pipeline.md](docs/ai_pipeline.md)
 
 ## Documentación
 
+### Manuales
+
+| Documento | Contenido |
+|-----------|-----------|
+| [docs/manual_implementacion.md](docs/manual_implementacion.md) | **Implementación**: hardware → firmware → servidor → verificación E2E → campo |
+| [docs/manual_uso.md](docs/manual_uso.md) | **Uso**: operación del dashboard, vistas, procedimientos, señales de falla |
+| [docs/manual_alcances.md](docs/manual_alcances.md) | **Alcances**: qué hace/no hace el sistema, métricas, limitaciones, roadmap |
+
+### Referencia técnica
+
 | Documento | Contenido |
 |-----------|-----------|
 | [docs/hardware.md](docs/hardware.md) | BOM, esquema eléctrico, relé NC, divisor |
-| [docs/firmware.md](docs/firmware.md) | Flasheo, constantes, contrato `/upload` |
-| [docs/server.md](docs/server.md) | venv, `.env`, API, payloads WS |
-| [docs/ai_pipeline.md](docs/ai_pipeline.md) | Datasets, entrenamiento, ONNX |
-| [docs/dashboard.md](docs/dashboard.md) | Lectura de la UI |
+| [docs/firmware.md](docs/firmware.md) | Flasheo, constantes, comandos serie, `pump_cmd` |
+| [docs/server.md](docs/server.md) | venv, `.env`, API REST/WS completa, SQLite |
+| [docs/ai_pipeline.md](docs/ai_pipeline.md) | Datasets, entrenamiento outdoor, ONNX, reentrenamiento |
+| [docs/dashboard.md](docs/dashboard.md) | Referencia técnica del frontend (vistas, módulos, WS) |
+| [docs/componentes.md](docs/componentes.md) | Función + decisión + uso de cada componente |
+| [PROGRESO.md](PROGRESO.md) | Bitácora de sesiones de desarrollo |
+| [outdoor_training_report.md](outdoor_training_report.md) | Métricas del modelo outdoor |
 
 ---
 
