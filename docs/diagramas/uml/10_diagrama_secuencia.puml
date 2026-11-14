@@ -1,0 +1,89 @@
+@startuml 10_diagrama_secuencia
+title REBA — Diagrama de secuencia (flujo principal: foto → clasificación → dashboard)
+
+skinparam sequenceArrowThickness 2
+autonumber
+
+actor "Residuo/Objeto" as obj
+participant "HC-SR04" as sr
+participant "ESP32-CAM\n«fotos_nc»" as esp
+participant "WiFi LAN\n«TCP :5000»" as lan
+participant "RebaAPI\n«FastAPI /upload»" as api
+participant "process_upload" as pipe
+participant "InferenceEngine\n«ONNX CPU»" as eng
+participant "Database\n«SQLite»" as db
+participant "Dashboard\n«/ws»" as dash
+
+== Fase 1 — Detección y captura (edge, autónomo) ==
+obj -> sr : entra a 0–23 cm
+loop "cada 60 ms"
+  esp -> sr : pulseIn(TRIG=14, ECHO=15)
+  sr --> esp : distancia cm (o -1 ruido)
+end
+esp -> esp : debounce: 2 lecturas dentro\n«ignora salpicaduras»
+esp -> esp : flash GPIO4 ~150 ms
+esp -> esp : tomarFoto() → JPEG QVGA DRAM
+esp -> esp : colaAgregar() «RAM máx 6»
+
+== Fase 2 — Upload ==
+esp -> lan : POST /upload\n«Content-Type: image/jpeg\nX-Evento: ingreso»\nbody = JPEG binario"
+lan -> api : forward TCP
+api -> api : validar: magic FF D8 FF · ≤2 MB
+
+alt "¿body inválido?"
+  api --> esp : 400/413
+  esp -> esp : descarta foto «anti poison-pill»
+else "¿JPEG válido?"
+  api -> pipe : process_upload(body, evento)
+  pipe -> pipe : cv2.imdecode → frame BGR 320×240
+  pipe -> eng : predict(frame)
+  eng -> eng : letterbox 640 → NCHW float32
+  eng -> eng : ONNX session → raw outputs
+  eng -> eng : conf≥0.35 + NMS IoU 0.45
+  eng --> pipe : InferenceResult\n«detections[], inference_ms, source»
+  pipe -> pipe : _draw_boxes(frame, dets)
+  pipe -> db : insert_capture(2 JPEG:\nanotado + orig)\n+ insert_detections + counters
+  db --> pipe : capture_id
+  pipe -> pipe : pump_progress() → photos_since_pump
+  pipe -> api : broadcast({type: detections,\nstats, pump})
+  api --> dash : WS push «capture» + «detections»
+  dash -> dash : actualiza visor, donut,\ncontadores, progreso bomba
+  api --> esp : 200 OK\n«{ok, capture_id, detections[],\ninference_ms, photos_toward_pump,\npump_cycle_triggered}»
+  esp -> esp : saca foto de la cola
+  esp -> esp : contador++ → ¿≥ pump_photos(3)?
+  opt "sí → ciclo de bomba"
+    esp -> esp : correrBomba(10 s)\n«relé NC, GPIO13»
+    esp -> api : pump_event inferido compartido
+  end
+end
+
+== Fase 3 — Fallo de red (camino alterno) ==
+alt "¿server no responde / sin WiFi?"
+  esp -> esp : foto queda en cola «reintenta c/15 s»
+  esp -> esp : ¿HTTP 4xx o ≥25 intentos?\n→ descarta
+else "¿cola con pendientes?"
+  esp -> lan : reenvío automático c/15 s
+end
+
+== Fase 4 — Config remota (paralela, cada 60 s) ==
+esp -> api : GET /api/device/config\n«heartbeat + overrides + pump_cmd<10min»
+api --> esp : "wifi_*, server_url, pump_*,\ndist_*, pump_cmd=<ts>:<s>?"
+esp -> esp : aplicarClaveRemota()\n«validación estricta»
+opt "pump_cmd nuevo y válido"
+  esp -> esp : bombaEncender() NO bloqueante\n+ dedup lastPumpCmdId (RTC)
+  esp -> api : POST /api/device/ack {cmd_id}
+  api -> db : DELETE override pump_cmd
+end
+
+note right of esp
+  Todo el firmware es NO bloqueante:
+  durante el ciclo de bomba el sensor,
+  la cola y el WiFi siguen operativos.
+end note
+
+note right of eng
+  ~50–130 ms/frame en CPU (medido: 92 ms media,
+  p95 121 ms en eval_upload_path sobre TACO test).
+end note
+
+@enduml

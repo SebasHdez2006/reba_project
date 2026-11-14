@@ -1,0 +1,170 @@
+@startuml 01_diagrama_clases
+title REBA — Diagrama de clases (núcleo del sistema)
+
+left to right direction
+
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+
+package "server/ — Python 3.13 · FastAPI" {
+
+  class "Settings\n(server/config.py)" <<BaseSettings>> {
+    + host : str = "0.0.0.0"
+    + port : int = 5000
+    + model_path : str = "models/best.onnx"
+    + inference_confidence : float = 0.35
+    + inference_iou : float = 0.45
+    + class_names : str = "plastico,tela,organico,unicel,metal"
+    + pump_trigger_photos : int = 3
+    + pump_run_seconds : float = 10.0
+    + detect_min_cm / detect_max_cm : float = 0 / 23
+    + database_path : str = "data/REBA.db"
+    + capture_retention : int = 2000
+    + {static} get_settings() : Settings
+    + class_list : List[str> «property»
+    + model_path_abs / database_path_abs / static_dir : Path «property»
+    + public_dict() : dict
+  }
+
+  class "Detection\n(server/inference.py) «dataclass»" {
+    + class_id : int
+    + class_name : str
+    + confidence : float
+    + x1, y1, x2, y2 : float
+    + to_dict() : dict
+  }
+
+  class "InferenceResult\n(server/inference.py) «dataclass»" {
+    + detections : List<Detection>
+    + source : str  // onnx | none
+    + inference_ms : float
+    + error : str?
+    + count : int «property»
+    + to_dict() : dict
+  }
+
+  class "InferenceEngine\n(server/inference.py)" {
+    - settings : Settings
+    - session : ort.InferenceSession?
+    - input_name / input_shape
+    - backend : str = "none"
+    + __init__(settings: Settings)
+    - _init_onnx()
+    + predict(frame_bgr) : InferenceResult
+    - _letterbox(frame, size=(640,640))
+    - _preprocess(frame)
+    - _predict_onnx(frame) : List<Detection>
+    - _postprocess_yolov8(outputs) : List<Detection>
+    + status() : dict
+  }
+
+  class "Database\n(server/database.py)" {
+    - path : Path
+    - _conn : sqlite3.Connection?
+    + connect() / close()
+    - _init_schema()
+    + insert_capture(ts, image_jpeg, image_orig_jpeg, source, ms, dets) : int
+    + insert_detections(capture_id, dets)
+    + get_captures(limit, offset) : List<dict>
+    + get_latest_capture() : dict?
+    + get_capture_image(id) / get_capture_image_orig(id) : bytes?
+    + get_capture_detections(id) : List<dict>
+    + get_captures_for_export(min_conf, limit)
+    + get_stats_timeseries(days) : List<dict>
+    + count_captures() / capture_exists(id) : bool
+    + prune_captures(keep) : int
+    + insert_pump_event(ts, kind, seconds?, photos?)
+    + get_pump_events(limit) / get_latest_pump_event()
+    + get_counters() / get_stats() : dict
+    + get_detection_history(limit)
+    + get_device_config() / set_device_config(k,v) / delete_device_config(k)
+    + export_json_snapshot() : str
+  }
+
+  class "RebaAPI «module main.py»\nFastAPI app + endpoints" {
+    + {static} POST /upload : upload_photo()
+    + {static} GET /api/health|config|stats|pump-status|pump-events
+    + {static} GET /api/stats/timeseries · /api/export/yolo
+    + {static} GET /api/captures[...] · /api/detections[...]
+    + {static} GET/POST /api/admin/device-config
+    + {static} GET /api/device/config → text/plain
+    + {static} POST /api/device/ack · /api/pump/run
+    + {static} WS /ws : websocket_endpoint()
+    + {static} lifespan(app) — arranque + retention_loop
+    - process_upload(body, evento) : dict
+    - _draw_boxes(frame, dets) : frame
+    - _scale_detections / _normalize
+    - pump_progress() : dict
+    - broadcast(msg) — a todos los WS
+    - _touch_device(request) — heartbeat
+    - device_status() : dict
+  }
+
+  ' --- Relaciones internas del paquete server ---
+  "RebaAPI «module main.py»" *--> "InferenceEngine" : usa
+  "RebaAPI «module main.py»" *--> "Database" : usa
+  "RebaAPI «module main.py»" *--> "Settings" : lee
+  "InferenceEngine" *--> "Settings" : config
+  "InferenceEngine" ..> "Detection" : crea
+  "InferenceEngine" ..> "InferenceResult" : crea
+  "Database" ..> "REBA.db «SQLite»" : persiste
+}
+
+package "esp32_firmware/fotos_nc/ — C++ Arduino · ESP32-CAM" {
+  class "fotos_nc «sketch»" {
+    + setup() / loop()
+    - leerCm() : float        // HC-SR04, c/60 ms
+    - tomarFoto() : bool      // flash + OV2640 → JPEG
+    - colaAgregar(buf,len) / colaEnviar()
+    - enviarJPG(datos,tam) : int
+    - httpSimple(method,url,...) : int   // TCP plano
+    - ingresoDetectado()
+    - correrBomba(seg?) / bombaEncender() / bombaApagar()
+    - procesarCmdBomba()      // pump_cmd no-bloqueante
+    - cargarConfig() / guardarClave(k,v)  // NVS
+    - aplicarClaveRemota(k,v) : bool      // validación estricta
+    - aplicarConfigRemota(body) / consultarConfigRemota()
+    - iniciarPortal() / revisarPortal()   // WiFiManager REBA-Setup
+    - iniciarCamara() / asegurarWiFi()
+    - ejecutarComandoSerial(cmd) / procesarSerial() / STATUS
+    - parseHttpUrl(url,...) : bool
+    - revisarReversionSrv() / aplicarWifiRemoto()
+  }
+}
+
+package "static/ — Dashboard vanilla JS" {
+  class "app.js «módulo»" {
+    - state : {config, stats, pump, ws, captures...}
+    + connectWs() / handleMessage(msg)
+    + applyConfig/applyStats/applyDetections/applyCapture/applyPumpStatus
+    + drawDonut(stats) / drawActivityChart()
+    + renderGallery() / openLightbox(id) / fetchCaptureDetections(id)
+    + updateCaptureBadge(capture)
+    + pump manual: chips 5/10/20/30s + "Activar ahora"
+    + device config form → POST /api/admin/device-config
+    + export YOLO → GET /api/export/yolo
+  }
+}
+
+' --- Relaciones entre paquetes (contratos) ---
+fotos_nc "fotos_nc «sketch»" ..> "RebaAPI «module main.py»" : HTTP/WiFi\nPOST /upload · GET config · POST ack
+"app.js «módulo»" ..> "RebaAPI «module main.py»" : REST /api/* + WS /ws
+
+note bottom of "InferenceEngine"
+  ONNX Runtime CPU — models/best.onnx (YOLOv8n, 5 clases).
+  ~50–130 ms/frame. Sin fallback remoto: source=none si falta el modelo.
+end note
+
+note bottom of "Database"
+  SQLite WAL + FK. Doble JPEG por captura:
+  image_jpeg anotado (dashboard) + image_orig_jpeg crudo (reentrenar).
+  Retención horaria CAPTURE_RETENTION=2000.
+end note
+
+note bottom of fotos_nc
+  Cliente puro: no expone endpoints.
+  Cola RAM MAX_COLA=6 · reintento 15 s · anti poison-pill (4xx/≥25).
+  Config 100% en NVS — WiFi, server_url, bomba, distancias sin reflashear.
+end note
+
+@enduml

@@ -1,0 +1,82 @@
+@startuml 04_diagrama_estructura_compuesta
+title REBA — Diagrama de estructura compuesta (internos de RebaAPI / process_upload)
+
+skinparam componentStyle rectangle
+
+component "RebaAPI «FastAPI app — proceso uvicorn»" {
+
+  ' ---- Puertos del sistema completo ----
+  portin "«HTTP in :5000»" as pinHTTP
+  portout "«WS events out»" as poutWS
+  portout "«device config txt»" as poutCFG
+  portout "«static files»" as poutStatic
+
+  ' ---- Partes: endpoints ----
+  component "upload_photo()\n«POST /upload»" as partUpload
+  component "REST router /api/*\n«~15 GET + 4 POST»" as partREST
+  component "device_config handlers\n«GET txt · admin GET/POST»" as partDevCfg
+  component "pump_cmd service\n«/api/pump/run · /ack»" as partPump
+  component "export_yolo()\n«ZIP dataset»" as partExport
+  component "websocket_endpoint()\n«/ws handshake + push»" as partWS
+
+  ' ---- Partes: pipeline interno ----
+  component "process_upload()" as partPipe {
+    component "validar JPEG\n«magic bytes + tamaño + decode»" as vVal
+    component "InferenceEngine.predict\n«ONNX letterbox→NCHW→NMS»" as vInf
+    component "_draw_boxes + _scale_detections" as vDraw
+    component "persistencia\n«captures + detections + counters»" as vDB
+    component "pump_progress()\n«conteo→ciclo inferido»" as vPump
+    vVal --> vInf : frame BGR
+    vInf --> vDraw : detections[]
+    vDraw --> vDB : doble JPEG
+    vDB --> vPump : photos_since_pump
+  }
+
+  ' ---- Partes: servicios de fondo ----
+  component "_retention_loop()\n«cada 1 h → prune_captures»" as partRet
+  component "broadcast()\n«fan-out a clientes WS»" as partBC
+  component "device_state\n«heartbeat <150 s»" as partDev
+  component "Settings (.env)" as partCfg
+
+  ' ---- Conectores ----
+  pinHTTP --> partUpload
+  pinHTTP --> partREST
+  pinHTTP --> partDevCfg
+  pinHTTP --> partPump
+  pinHTTP --> partExport
+  pinHTTP --> partWS
+
+  partUpload --> partPipe : body JPEG
+  partPipe --> partBC : capture/detections/pump_event
+  partBC --> partWS : encola mensaje
+  partWS --> poutWS
+
+  partDevCfg --> poutCFG : clave=valor
+  partPump --> partDevCfg : escribe pump_cmd
+  partDevCfg --> partDev : touch
+  partUpload --> partDev : touch (heartbeat)
+
+  partREST --> partPipe : lecturas (stats/captures/timeseries)
+  partREST --> partBC : snapshot inicial
+  partExport --> partPipe : get_captures_for_export
+
+  partRet --> partPipe : prune_captures
+  partPipe --> partCfg : umbrales/clases
+  partRet --> partCfg : CAPTURE_RETENTION
+
+  poutStatic --> partREST : monta static/
+}
+
+note bottom of partPipe
+  Orden estricto por upload:
+  1) validar → 2) inferir → 3) dibujar → 4) persistir → 5) broadcast.
+  Cada paso tolera fallo parcial: foto se guarda aunque ONNX falle (source:none).
+end note
+
+note bottom of partDevCfg
+  device_config = tabla key/value con whitelist de 8 claves.
+  pump_cmd solo se sirve si <10 min (TTL anti bomba fantasma).
+  El firmware re-valida TODO al aplicar — el server confía pero no obedece.
+end note
+
+@enduml

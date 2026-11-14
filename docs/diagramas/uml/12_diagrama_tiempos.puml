@@ -1,0 +1,81 @@
+@startuml 12_diagrama_tiempos
+title REBA — Diagrama de tiempos (restricciones temporales del sistema)
+
+' Aproximación: ejes de tiempo con los deadlines reales del firmware/server.
+' PlantUML no tiene "timing diagram" nativo → se sintetiza con
+' secuencia anotada por timestamps + tabla de periodos.
+
+autonumber
+
+participant "HC-SR04\n«sensor»" as sr
+participant "ESP32-CAM\n«loop()»" as esp
+participant "Cola RAM\n«máx 6»" as cola
+participant "Servidor PC\n«FastAPI»" as api
+participant "ONNX\n«CPU»" as onnx
+participant "Dashboard\n«/ws»" as dash
+
+== t=0 — Ingreso de objeto ==
+sr -> esp : t≈0 ms — eco válido <23 cm
+esp -> esp : t≈60–120 ms — debounce\n(2 lecturas dentro)
+
+== t≈0.5 s — Captura ==
+esp -> esp : flash ON 150 ms
+esp -> esp : fb_get + magic JPEG\n«QVGA ~3.7 KB»
+esp -> cola : encola (si no hay envío inmediato)
+
+== t≈0.6–1.7 s — Upload + inferencia ==
+esp -> api : POST /upload «JPEG»
+activate api
+api -> api : validación ~ms\n«magic + tamaño + decode»
+api -> onnx : predict(frame)
+activate onnx
+onnx --> api : dets[] · ~92 ms media\n«p95 121 ms»
+deactivate onnx
+api -> api : draw + persist\n«SQLite WAL»
+api -> dash : WS push «capture+detections»
+api --> esp : 200 OK «sale de cola»
+deactivate api
+esp -> esp : contador++ «fotos/N»
+
+== Periodicidad (ciclo de vida) ==
+loop "cada 60 ms"
+  esp -> sr : leerCm()
+end
+loop "cada 15 s"
+  esp -> api : reintento cola «si pendientes»
+end
+loop "cada 60 s"
+  esp -> api : GET /api/device/config\n«heartbeat + overrides»
+end
+loop "cada 30 s"
+  dash -> api : GET /api/health\n«device.online <150 s»
+end
+loop "cada 25 s"
+  dash -> api : WS ping keepalive
+end
+loop "cada 1 h"
+  api -> api : retention_loop\n«prune_captures(2000)»
+end
+
+== Eventos de bomba (duraciones) ==
+opt "3 fotos acumuladas"
+  esp -> esp : correrBomba 10 s\n«relé NC energizado→apagar»
+  note right of esp
+    Bomba manual (pump_cmd):
+    TTL server 10 min · dedup RTC ·
+    ejecución NO bloqueante · ack →
+    borra override.
+  end note
+end
+
+== Tabla de periodos ==
+note right of api
+  Resumen de tiempos:
+  sensor 60 ms · debounce ~120 ms · flash 150 ms
+  inferencia ~92 ms (p95 121 ms) · upload→200 ≈1 s total
+  reintento 15 s · config poll 60 s · device online <150 s
+  bomba auto 10 s · pump_cmd TTL 10 min · retención 1 h
+  WS ping 25 s · health poll 30 s · serie STATUS on-demand
+end note
+
+@enduml

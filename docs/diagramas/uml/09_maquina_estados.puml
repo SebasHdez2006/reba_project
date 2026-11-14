@@ -1,0 +1,63 @@
+@startuml 09_maquina_estados
+title REBA — Diagrama de máquina de estados (ciclo de vida de una captura/foto)
+
+[*] --> ObjetoEnRango : "HC-SR04 ∈ [min,max] c/ debounce"
+
+state ObjetoEnRango {
+  [*] --> SinConfirmar
+  SinConfirmar --> Confirmado : "2 lecturas dentro"
+  SinConfirmar --> Esperando : "ruido / fuera de rango"
+  Esperando --> SinConfirmar : "vuelve a rango"
+  Confirmado --> [*] : dispara ingresoDetectado()
+}
+
+ObjetoEnRango --> Capturando : flash ON 150 ms
+Capturando --> Encolada : "JPEG válido → cola RAM"
+Capturando --> Descartada : "magic JPEG inválido / fb_get falla"
+
+state Encolada {
+  [*] --> EsperandoEnvio
+  EsperandoEnvio --> IntentandoEnvio : "colaEnviar()"
+}
+
+IntentandoEnvio --> Entregada : "HTTP 2xx → sale de cola"
+IntentandoEnvio --> EnReintento : "timeout / 5xx / sin WiFi"
+EnReintento --> IntentandoEnvio : "15 s después"
+IntentandoEnvio --> Descartada : "HTTP 4xx o ≥25 intentos\n«anti poison-pill»"
+EnReintento --> Descartada : "cola llena → suelta la más vieja"
+
+Entregada --> ProcesandoEnServer : "mismo objeto lógico cruza la red"
+
+state ProcesandoEnServer {
+  [*] --> Validando
+  Validando --> Rechazada : "400/413 → no persiste"
+  Validando --> Inferida : "decode OK"
+  Inferida --> Persistida : "doble JPEG + detections + counters"
+  Persistida --> [*]
+}
+
+Persistida --> Notificada : "broadcast WS"
+Notificada --> [*] : "dashboard actualizado"
+
+Descartada --> [*]
+Rechazada --> [*]
+
+note right of Encolada
+  La cola es SOLO RAM (máx 6): un reboot/brownout
+  pierde las pendientes — aceptable (evidencia transitoria).
+  Límite documentado en PROGRESO.md sesión 4.
+end note
+
+note right of IntentandoEnvio
+  Reintento cada 15 s. Se descarta en:
+  - HTTP 4xx (servidor rechazó el contenido)
+  - ≥25 intentos acumulados
+  - cola llena → drop de la foto más vieja
+end note
+
+note bottom of ProcesandoEnServer
+  Aunque ONNX falle (source:none) la foto SE PERSISTE
+  como evidencia — nunca se pierde la captura por IA.
+end note
+
+@enduml

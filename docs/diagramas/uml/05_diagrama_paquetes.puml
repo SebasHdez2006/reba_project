@@ -1,0 +1,112 @@
+@startuml 05_diagrama_paquetes
+title REBA — Diagrama de paquetes (organización del repositorio)
+
+left to right direction
+skinparam packageStyle rectangle
+
+package "REBA/ — raíz del proyecto" {
+
+  package "server/ «backend Python»" {
+    package "config.py" as pCfg
+    package "inference.py" as pInf
+    package "database.py" as pDB
+    package "main.py" as pMain
+    package "__init__.py" as pInit
+  }
+
+  package "static/ «frontend dashboard»" {
+    package "index.html" as pHtml
+    package "app.js" as pApp
+    package "styles.css" as pCss
+    package "fonts/ woff2" as pFonts
+    package "favicon.svg" as pFav
+  }
+
+  package "esp32_firmware/" {
+    package "fotos_nc/fotos_nc.ino" as pFw
+  }
+
+  package "ai_pipeline/ «entrenamiento offline»" {
+    package "train_outdoor.py" as pTrain
+    package "outdoor_transforms.py" as pAug
+    package "generate_synthetic_dataset.py" as pSynth
+    package "download_taco.py / download_ecosort.py" as pDl
+    package "dataset_builder.py (bootstrap)" as pBuild
+    package "evaluate_outdoor.py / eval_upload_path.py / tune_confidence.py" as pEval
+    package "build_outdoor_eval.py" as pEvalSet
+  }
+
+  package "models/" {
+    package "best.onnx / best.pt" as pModel
+    package "archive/" as pArchive
+  }
+
+  package "datasets/" {
+    package "REBA_synthetic(+boost,boost2)" as pSyn
+    package "REBA_taco" as pTaco
+    package "REBA_ecosort" as pEco
+    package "REBA_outdoor_eval" as pOutEval
+  }
+
+  package "data/" {
+    package "REBA.db «SQLite»" as pSqlite
+  }
+
+  package "docs/ «documentación»" {
+    package "manuales ×3 + referencia ×6" as pDocs
+    package "diagramas/ «este pitch»" as pDiagrams
+  }
+
+  package "runs/ «runs YOLO»" {
+    package "detect/REBA_outdoor_v2/weights" as pRuns
+  }
+}
+
+' --- Dependencias internas (imports reales) ---
+pMain --> pInf : import
+pMain --> pDB : import
+pMain --> pCfg : import
+pInf --> pCfg : import Settings
+pCfg --> pInit : package init
+pInf --> pModel : carga best.onnx (runtime)
+pDB --> pSqlite : abre data/REBA.db
+pMain --> pHtml : sirve estáticos (StaticFiles)
+pApp --> pHtml : script principal
+pHtml --> pCss : <link>
+pHtml --> pApp : <script>
+pHtml --> pFonts : @font-face
+pApp --> pFav : <link icon>
+
+' --- Dependencias del pipeline IA ---
+pTrain --> pAug : augmentations outdoor
+pTrain --> pSyn : dataset sintético
+pTrain --> pTaco : dataset real TACO
+pTrain --> pEco : dataset real EcoSort
+pTrain --> pModel : exporta best.onnx
+pTrain --> pArchive : archiva pesos previos
+pDl --> pTaco : descarga→YOLO
+pDl --> pEco : descarga→YOLO
+pSynth --> pSyn : genera escenas
+pEval --> pOutEval : eval degradado
+pEval --> pModel : compara pesos
+pEvalSet --> pOutEval : construye
+pBuild --> pSyn : bootstrap (opcional)
+
+' --- Dependencias edge / runtime ---
+pFw ..> pMain : cliente HTTP «POST /upload · GET config · POST ack»
+pFw ..> pSqlite : «indirecto vía server»
+pApp ..> pMain : «runtime: REST + WS /ws»
+pDocs --> pDiagrams : resume en diagramas
+
+note bottom of pFw
+  No depende de ningún paquete del repo en compilación:
+  es Arduino-C++ autónomo; su "dependencia" es el contrato HTTP del server.
+end note
+
+note bottom of pTrain
+  train_outdoor.py auto-descubre fuentes:
+  OPTIONAL_TRAIN_SOURCES = synthetic, boost*, taco, ecosort.
+  Train v2 = 1022 imágenes → best.pt → export ONNX.
+end note
+
+@enduml
