@@ -82,6 +82,30 @@ El orden debe coincidir con `CLASS_NAMES` en `.env` y con las anotaciones YOLO.
 
 > Nota: el final del proyecto debe operar sin consultar repositorios remotos; solo con archivos ya presentes en disco.
 
+### Definiciones de clase (guía de etiquetado y remapeo)
+
+Estas definiciones fijan el límite de cada clase y guían todo remapeo de
+datasets externos. Ante la duda entre dos clases, aplicar la primera que
+case en orden.
+
+| Clase | ES | EN | Incluye | NO incluye (va a fondo) |
+|---|---|---|---|---|
+| `plastico` | Plástico rígido o flexible sumergido/flotante | Rigid/flexible plastic | Botellas PET/PE, bolsas, film, envases, sorbete, cubiertos, tapitas, vasos duros, mascarillas, paquetes | Cartón/papel, vidrio, metal, unicel, tela, materia orgánica |
+| `tela` | Textil: prenda, tela suelta o deshilachada | Textile / fabric | Ropa (camisas, pantalones, ropa interior), trapos, sábanas, toallas, cuerda/fibra textil, zapatos de tela, toldo de tela | Plástico tipo lona, hule, caucho, metal, cuero (va a fondo salvo que sea claramente textil) |
+| `organico` | Materia orgánica natural flotante | Natural organic matter | Hojas, ramas, corteza, semillas, cáscaras, restos de comida/vegetales, flores, algas, madera/timber | Plástico oxodegradable ya fragmentado (es `plastico`), tierra/barro sola, objetos manufacturados |
+| `unicel` | Poliestireno expandido / foam | Polystyrene foam | Vasos, contenedores y platos de foam, aislante de foam, foam fragmentado | Plásticos rígidos (vasos duros → `plastico`), gomaespuma no-PS si es dudoso (fondo) |
+| `metal` | Metal: envases y piezas | Metal / ferrous & non-ferrous | Latas (bebida/comida), aerosoles, tapones metálicos, piezas de alambre, clavos, Utensilios metálicos | Objetos mayormente plásticos con parte metálica pequeña (la caja cubre el objeto entero) |
+
+**Criterio de borde para remapeo externo:** si un dataset etiqueta por
+*material* (p. ej. "paper", "glass", "rubber"), mapear solo cuando el
+material sea inequívocamente uno de los 5; si etiqueta por *objeto*
+("shoe", "timber", "foodcontainer"), mapear por la clase dominante del
+objeto en ambiente acuático.
+
+**Desbalance conocido:** `tela` y `organico` no tienen datasets públicos
+acuáticos multi-clase; su principal fuente real serán las capturas
+ESP32-CAM (ver protocolo en `PROGRESO.md`).
+
 
 ---
 
@@ -192,10 +216,14 @@ tres herramientas:
 |--------|-----------|
 | `ai_pipeline/download_taco.py` | Descarga TACO (basura real "in the wild", formato COCO) y lo convierte a YOLO con las 5 clases REBA en `datasets/REBA_taco/`. Soporta `--limit 0` (todo), `--per-class` y `--prioritize-classes` para sesgar la descarga hacia clases escasas; reanuda por `manifest.jsonl`. |
 | `ai_pipeline/download_ecosort.py` | Descarga el dataset **EcoSort** de Hugging Face (`dataset.tar` ~1.5 GB, YOLO de 10 clases ya fusionado de Open Images + TACO + Roboflow) y lo remapea a las 5 clases REBA en `datasets/REBA_ecosort/`. Vidrio/cartón/papel quedan como fondo. `--limit`/`--val-limit`/`--seed` para subconjunto determinista; `--tar-file` reutiliza un tar local. |
+| `ai_pipeline/download_floatwaste.py` | Descarga **FloatWaste** (HF `OliviaWuYJ/sc-floatwaste`, CC BY 4.0 — 7,906 imgs de superficie de río, COCO). Remapea 25 categorías → REBA en `datasets/REBA_floatwaste/` (train priorizado a clases raras + `--negatives` de agua limpia) y **todo el split val → `datasets/REBA_real_val/`** = set de validación real acuático que NUNCA entra a entrenamiento. Re-encodea a JPEG ≤1600px. |
+| `ai_pipeline/generate_copypaste_dataset.py` | Genera `datasets/REBA_copypaste/` (~600 imgs): recorta instancias reales de todos los `REBA_*` y las pega sobre fondos de agua con escala/rotación/jitter/submersión parcial. Pesos de muestreo favorecen `tela`/`organico`. |
+| `ai_pipeline/dedup_audit.py` | Auditoría de near-duplicados perceptuales (dHash 64-bit, Hamming≤6) entre todos los `REBA_*` → `reports/dedup_report.json`. Detecta fugas train↔val/test. |
+| `ai_pipeline/clean_real_val.py` | Elimina de `REBA_real_val` las imágenes con near-duplicado en train (FloatWaste reparte frames de video; el split oficial no es visualmente disjunto). |
 | `ai_pipeline/outdoor_transforms.py` | Define el pipeline albumentations compartido (entrenamiento y evaluación). |
 | `ai_pipeline/build_outdoor_eval.py` | Genera `datasets/REBA_outdoor_eval/` — copias deterministas y severamente degradadas de val+test, para evaluar robustez. |
-| `ai_pipeline/train_outdoor.py` | Re-entrena YOLOv8n combinando sintético + boosts de clases raras + TACO + EcoSort (auto-descubre `OPTIONAL_TRAIN_SOURCES`), con la aumentación outdoor inyectada vía `model.train(augmentations=...)`, early stopping (`patience`) y exportación ONNX con archivo de pesos previos. |
-| `ai_pipeline/evaluate_outdoor.py` | Compara pesos previos (`models/archive/best_*.pt`) vs. nuevos en clean/outdoor/TACO y escribe `outdoor_training_report.md`. |
+| `ai_pipeline/train_outdoor.py` | Re-entrena YOLOv8n combinando sintético + boosts + TACO + EcoSort + FloatWaste + copy-paste (auto-descubre `OPTIONAL_TRAIN_SOURCES`), con la aumentación outdoor inyectada vía `model.train(augmentations=...)`, early stopping (`patience`) y exportación ONNX con archivo de pesos previos. |
+| `ai_pipeline/evaluate_outdoor.py` | Compara pesos previos (`models/archive/best_*.pt`) vs. nuevos en clean/outdoor/TACO/**real_water** (`REBA_real_val` — FloatWaste val limpio de fugas) y escribe `outdoor_training_report.md`. |
 | `ai_pipeline/eval_upload_path.py` | Evalúa el **path de producción real**: sube imágenes a `POST /upload` del server y compara detecciones contra ground-truth YOLO → `eval_upload_report.json`. |
 | `ai_pipeline/tune_confidence.py` | Barre `conf` sobre el conjunto difícil y recomienda `INFERENCE_CONFIDENCE` (máx. F1). |
 
@@ -234,16 +262,51 @@ TACO (MIT/CC), `dmedhi/garbage-image-classification-detection` (CC BY 4.0),
 Drinking Waste Classification de Kaggle (CC0) y tres datasets de Roboflow
 Universe (CC BY 4.0). Revisar licencias antes de redistribuir.
 
+### Mapeo de clases FloatWaste → REBA
+
+FloatWaste (`OliviaWuYJ/sc-floatwaste`, CC BY 4.0) aporta el dominio más
+cercano al despliegue: residuos **flotando en la superficie de ríos**
+(Hobart, Sydney, Citarum). Sus 25 categorías COCO se remapean en la tabla
+`FLOATWASTE_TO_REBA` de `download_floatwaste.py`:
+
+- → `plastico`: Packaging, Other_packaging, S_*, PS_string, P_foodcontainer,
+  PH_cup, H_*, DH_lid, F_facemask (la mayoría de las 25 categorías).
+- → `unicel`: `D_polystyrene` (2,308 cajas en el train subset).
+- → `metal`: `M_beveragecan`, `M_foodcan/tin`, `M_aerosol`.
+- → `organico`: `T_wood/timber` (madera flotante — materia orgánica natural).
+- → fondo: `P_cardboard`, `R_ball/balloon`, `G_beveragebottle`, `Other`.
+- `tela`: **inexistente en FloatWaste** — sigue viniendo de boosts
+  sintéticos, TACO y copy-paste.
+
+El split `val` de FloatWaste (796 imgs) se reserva completo como
+`REBA_real_val` — el set de validación real acuático. `clean_real_val.py`
+ya eliminó 345 imágenes con near-duplicados en train (frames de video
+del mismo tramo); quedan **415 imágenes limpias** (873 plastico, 171
+unicel, 57 metal, 20 organico, 0 tela — limitación honesta documentada).
+
+### Copy-paste (`REBA_copypaste`)
+
+`generate_copypaste_dataset.py` ataca `tela`/`organico` pegando recortes
+reales (de todos los `REBA_*`) sobre fondos de agua limpia de FloatWaste
+y sintéticos, con escala/rotación/jitter/submersión parcial. 600 imágenes
+con ~594 `tela` y ~585 `organico` — casi duplica las instancias de esas
+clases en el train combinado.
+
 ### Flujo completo outdoor
 
 ```bash
 python ai_pipeline/download_taco.py --limit 0 \
     --prioritize-classes organico,tela,unicel   # TACO completo, prioriza escasas
 python ai_pipeline/download_ecosort.py --limit 800  # dataset.tar de HF → YOLO-REBA
+python ai_pipeline/download_floatwaste.py --limit 1500 --negatives 120
+    # FloatWaste → REBA_floatwaste (train) + REBA_real_val (val limpio)
+python ai_pipeline/clean_real_val.py            # quita fugas train↔val
+python ai_pipeline/dedup_audit.py               # auditoría global de duplicados
 python ai_pipeline/generate_synthetic_dataset.py \   # opcional: boost clases raras
     --output datasets/REBA_synthetic_boost2 \
     --n-train 240 --n-val 0 --n-test 0 \
     --class-weights 1,3,6,2,1 --seed 1234
+python ai_pipeline/generate_copypaste_dataset.py --images 600   # tela/organico
 python ai_pipeline/build_outdoor_eval.py --preview   # conjunto difícil
 python ai_pipeline/train_outdoor.py --epochs 50      # re-entrenar
 python ai_pipeline/evaluate_outdoor.py               # reporte comparativo

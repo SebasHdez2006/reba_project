@@ -44,6 +44,9 @@ EVAL_SETS = [
     ("clean", "REBA_synthetic", "test"),
     ("outdoor", "REBA_outdoor_eval", "val"),
     ("taco_real", "REBA_taco", "test"),
+    # Set de validacion real acuatico (FloatWaste val, nunca entrenado).
+    # Es el set que decide el despliegue. Se omite si no existe.
+    ("real_water", "REBA_real_val", "val"),
 ]
 
 

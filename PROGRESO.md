@@ -412,3 +412,76 @@ dirigido a clases débiles + un repo externo, sin tocar servidor/firmware.
   no existe dataset público acuático multi-clase con ellas — las capturas
   reales del ESP32-CAM (export YOLO del dashboard) son la fuente clave
   a futuro.
+
+## Sesión 8 — Fases 0-2: auditoría + datasets acuáticos + dedup (14-nov)
+
+Misión formal: mejorar el modelo priorizando `tela`/`organico`, con
+validación en set real separado. Rama `mejora-datos-vision`.
+
+### Auditoría (FASE 0)
+
+- Baseline guardado en `reports/baseline/baseline_eval.md` (v2 outdoor:
+  clean 0.681 / outdoor 0.591 / taco_real 0.083 mAP50-95).
+- `audit_labels.py`, `audit_pixels.py`, `dataset_stats.py`:
+  sin etiquetas malformadas ni fuera de rango; sin stems duplicados
+  entre splits; stats completas en `reports/dataset_stats.json`.
+- **Definiciones de clase escritas** en `docs/ai_pipeline.md` (qué es
+  `organico` y `tela`, qué queda como fondo).
+
+### Catálogo de datasets (FASE 1)
+
+`datasets/CATALOGO.md` — ~30 candidatos verificados con licencia y
+veredicto. Usados: **FloatWaste** (HF, CC BY 4.0), más TACO/EcoSort ya
+integrados. Pendientes humanos: Garbage Classification 3 (Roboflow
+bloquea sin API key — única fuente pública de `cloth`+`biodegradable`
+reales), FloW (requiere solicitud), capturas ESP32-CAM.
+
+### Integración (FASE 2)
+
+- **`download_floatwaste.py` (nuevo)**: FloatWaste COCO→YOLO-REBA.
+  25 categorías remapeadas (Packaging/S_*/H_*→plastico, D_polystyrene→
+  unicel, M_*→metal, T_wood→organico). Salida: `REBA_floatwaste`
+  **1,549 train** (incl. 49 fondos de agua limpia) + **`REBA_real_val`
+  760→415 val** = set de validación real acuático.
+- **`generate_copypaste_dataset.py` (nuevo)**: 600 imgs copy-paste de
+  recortes reales sobre fondos de agua → **594 tela + 585 organico**
+  (casi duplica esas clases en train).
+- **`dedup_audit.py` + `clean_real_val.py` (nuevos)**: dHash perceptual.
+  Hallazgo crítico: FloatWaste train↔val compartía **4,572 near-dup**
+  (frames de video) → 345 imágenes contaminadas eliminadas de
+  `real_val`. Quedan 415 limpias (873 plastico, 171 unicel, 57 metal,
+  20 organico, **0 tela** — no existe fuente pública acuática con tela).
+- `evaluate_outdoor.py`: nuevo conjunto `real_water` (= `REBA_real_val`,
+  nunca entrenado) — **es el set que decide el despliegue**.
+- `train_outdoor.py`: `OPTIONAL_TRAIN_SOURCES` +FloatWaste +copypaste.
+
+### Dataset v4 (train combinado)
+
+**4,579 imágenes / 18,560 instancias** (v3 tenía 2,430):
+plastico 10,352 · tela 1,025 · organico 1,678 · unicel 2,974 · metal 2,531.
+`tela` +138%, `organico` +189%, `unicel` +697% vs v3.
+
+### Entrenamiento
+
+- v3 (TACO+boost2+EcoSort) **cortado en época ~2** (~36 min/época CPU) al
+  completarse v4 — superconjunto estricto; pesos parciales preservados.
+- **v4 EN CURSO**: `runs/detect/REBA_outdoor_v4`, 50 epochs patience 20,
+  ~573 iter/época (~60-70 min/época estimado en CPU i5-1135G7).
+- Pendiente: `evaluate_outdoor.py` (con `real_water`) → comparar vs
+  baseline → `tune_confidence.py` → ONNX solo si supera en set real →
+  archivar `models/best.*` previos.
+
+### Qué debe hacer el humano
+
+1. **Capturas ESP32-CAM reales** (la fuente definitiva para `tela`/
+   `organico`/`unicel` en dominio exacto): protocolo — 20-30 fotos por
+   clase, objetos a 5-23 cm, agua con/sin reflejos, luz mañana/tarde/
+   nublado, parcial y totalmente sumergidos; exportar YOLO desde el
+   dashboard cuando el servidor esté corriendo.
+2. **Garbage Classification 3** (Roboflow): descargar zip YOLOv8 desde
+   universe.roboflow.com/material-identification/garbage-classification-3
+   (necesita cuenta gratuita/API key — bloquea scraping). Aporta
+   `cloth`→tela y `biodegradable`→organico reales.
+3. **FloW dataset**: solicitud en github.com/ORCAUBOAT/FloW-Dataset.
+4. Si v4 tarda demasiado: dejar la PC encendida; el run reanuda con
+   `YOLO("runs/detect/REBA_outdoor_v4/weights/last.pt").train(resume=True)`.
