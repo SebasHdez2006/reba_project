@@ -365,3 +365,50 @@ detecciones contra etiquetas YOLO ground-truth (IoU≥0.5, AP@0.5 VOC-101pts).
   hotspot no existe, el portal `REBA-Setup` se reabre solo).
 - HC-SR04: pendiente cableado físico (TRIG→14, ECHO→15 divisor 1k/2k).
 - Última captura real: id=10 en SQLite (firmware endurecido, source=onnx).
+
+## Sesión 7 — Ampliación del dataset (14-nov)
+
+### Motivación
+
+El eval outdoor mostró desbalance severo: `organico` mAP50-95 = 0.095 y
+`plastico` -0.097 vs baseline. TACO aportaba 863 cajas de `plastico` pero
+solo 5 de `organico` y 25 de `tela` en train. Se decidió ampliar datos
+dirigido a clases débiles + un repo externo, sin tocar servidor/firmware.
+
+### Datos nuevos
+
+- **TACO completo**: `download_taco.py --limit 0 --prioritize-classes
+  organico,tela,unicel` → ~1293 imágenes mapeables (antes 750). Reanuda por
+  manifest; prioriza las clases escasas.
+- **`REBA_synthetic_boost2` (nuevo, propio)**: 240 train acuáticas con
+  `--class-weights 1,3,6,2,1` (organico ×6, tela ×3, unicel ×2) —
+  distribución resultante: organico 298, tela 135, unicel 88 cajas.
+- **EcoSort (nuevo, externo)**: `download_ecosort.py` descarga
+  `qihang3426/ecosort-dataset` de Hugging Face (`dataset.tar` ~1.5 GB,
+  formato YOLO de 10 clases fusionado de Open Images + TACO + Roboflow +
+  CC0) y remapea a REBA: plastic_*→plastico, cans/battery→metal;
+  glass/cardboard/paper→fondo. Resultado: **718 train + 82 val**
+  (`datasets/REBA_ecosort/`, manifest + summary + data.yaml).
+  Descartados como fuente: IWHR floater (1 sola clase "floater", sin
+  clases REBA), Ku-YOLO (es TACO re-etiquetado), Waste-Identifier (clf).
+
+### Código
+
+- `ai_pipeline/download_ecosort.py` (nuevo): descarga tar → extrae a temp →
+  remapea labels → subconjunto determinista (`--limit/--val-limit/--seed`,
+  `--tar-file` para reusar tar local).
+- `train_outdoor.py`: `build_dataset_yaml()` refactorizado con
+  `OPTIONAL_TRAIN_SOURCES` — auto-incluye cualquier
+  `datasets/REBA_*/images/train` registrado (sintético + boost + boost2 +
+  TACO + EcoSort). Val/test siguen siendo los sintéticos limpios.
+- Verificado: `data.yaml` combinado genera las 5 fuentes correctamente.
+
+### Pendiente
+
+- Reentrenar con `train_outdoor.py` cuando TACO termine de descargar
+  (~2700+ imágenes train esperadas) → `evaluate_outdoor.py` →
+  `tune_confidence.py` → ajustar `.env` si cambia el óptimo.
+- Las clases `tela`/`organico`/`unicel` siguen dependiendo del sintético:
+  no existe dataset público acuático multi-clase con ellas — las capturas
+  reales del ESP32-CAM (export YOLO del dashboard) son la fuente clave
+  a futuro.

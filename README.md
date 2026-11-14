@@ -74,15 +74,16 @@ Referencias de diseño aplicadas: patrones de telemetría de Teenage Engineering
 | NumPy | ≥1.26 | Pre/post-procesamiento de tensores |
 | OpenCV (headless) | ≥4.10 | Decodificación JPEG, validación magic bytes, dibujo de cajas anotadas |
 
-Scripts del pipeline: `train_outdoor.py` (entrena+exporta), `evaluate_outdoor.py` (compara pesos), `eval_upload_path.py` (evalúa el path real `/upload`), `tune_confidence.py` (umbral óptimo), `build_outdoor_eval.py` (set degradado), `download_taco.py` + `generate_synthetic_dataset.py` (datasets).
+Scripts del pipeline: `train_outdoor.py` (entrena+exporta), `evaluate_outdoor.py` (compara pesos), `eval_upload_path.py` (evalúa el path real `/upload`), `tune_confidence.py` (umbral óptimo), `build_outdoor_eval.py` (set degradado), `download_taco.py` + `download_ecosort.py` + `generate_synthetic_dataset.py` (datasets).
 
 ### Datos y datasets (`datasets/`)
 
 | Herramienta / fuente | Uso en REBA |
 |----------------------|-------------|
 | `REBA_synthetic` (propio) | 240 tr / 60 val / 60 test — escenas acuáticas sintéticas generadas por script |
-| `REBA_synthetic_boost` (propio) | 180 train extra — refuerzo de clases raras (`organico` ×4, `tela` ×3) |
-| TACO (Trash Annotations in Context, real) | 750 imágenes vía `download_taco.py`, mapeadas a las 5 clases REBA |
+| `REBA_synthetic_boost` + `REBA_synthetic_boost2` (propio) | 180 + 240 train extra — refuerzo de clases raras (`organico`, `tela`, `unicel`) |
+| TACO (Trash Annotations in Context, real) | ~1300 imágenes vía `download_taco.py`, mapeadas a las 5 clases REBA |
+| EcoSort (Hugging Face, real) | 718 tr / 82 val vía `download_ecosort.py` — basura real fusionada (Open Images + TACO + Roboflow), remapeada a `plastico`/`metal` |
 | `REBA_outdoor_eval` (propio) | 120 copias degradadas deterministas para medir robustez |
 | Formato YOLO | Labels `class cx cy w h` normalizados; export del dashboard en ZIP re-entrenable |
 | Openverse + OpenAI Vision | **Solo bootstrap opcional** (`download_openverse_dataset.py`, `dataset_builder.py`) — nunca en producción |
@@ -169,6 +170,7 @@ REBA/
 │   ├── generate_synthetic_dataset.py
 │   ├── download_openverse_dataset.py
 │   ├── download_taco.py      ← subset TACO real → YOLO
+│   ├── download_ecosort.py   ← EcoSort (HF) → YOLO-REBA
 │   ├── dataset_builder.py
 │   ├── outdoor_transforms.py ← augmentations de intemperie
 │   ├── build_outdoor_eval.py ← eval set degradado
