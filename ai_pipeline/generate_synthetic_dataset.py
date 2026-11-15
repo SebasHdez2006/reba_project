@@ -2,7 +2,7 @@
 """
 Genera un dataset YOLO sintético para bootstrap del modelo REBA.
 
-Crea fondos tipo agua + objetos por clase (plastico, tela, organico, unicel, metal)
+Crea fondos tipo agua + objetos por clase (plastico, unicel, metal)
 con anotaciones YOLO normalizadas. Suficiente para entrenar YOLOv8n localmente
 cuando no hay fotos reales ni API OpenAI.
 
@@ -21,7 +21,7 @@ from typing import Optional
 import cv2
 import numpy as np
 
-CLASSES = ("plastico", "tela", "organico", "unicel", "metal")
+CLASSES = ("plastico", "unicel", "metal")
 IMG_SIZE = 640
 
 
@@ -68,48 +68,6 @@ def draw_plastico(img: np.ndarray, rng: random.Random) -> tuple[int, int, int, i
     cv2.addWeighted(overlay, 0.85, img, 0.15, 0, img)
     y0 = max(0, y1 - h // 8)
     return x1, y0, x1 + w, y1 + h
-
-
-def draw_tela(img: np.ndarray, rng: random.Random) -> tuple[int, int, int, int]:
-    """Trapo / tela (morado-rosa, polígono irregular)."""
-    cx = rng.randint(80, IMG_SIZE - 80)
-    cy = rng.randint(80, IMG_SIZE - 80)
-    pts = []
-    for a in range(0, 360, 40):
-        r = rng.randint(35, 90)
-        rad = np.deg2rad(a + rng.randint(-15, 15))
-        pts.append([int(cx + r * np.cos(rad)), int(cy + r * np.sin(rad))])
-    pts_arr = np.array(pts, dtype=np.int32)
-    color = (rng.randint(160, 230), rng.randint(60, 140), rng.randint(160, 240))
-    overlay = img.copy()
-    cv2.fillPoly(overlay, [pts_arr], color)
-    # pliegues
-    for _ in range(3):
-        p1 = (rng.randint(cx - 40, cx + 40), rng.randint(cy - 40, cy + 40))
-        p2 = (rng.randint(cx - 40, cx + 40), rng.randint(cy - 40, cy + 40))
-        cv2.line(overlay, p1, p2, tuple(max(0, c - 40) for c in color), 2)
-    cv2.addWeighted(overlay, 0.8, img, 0.2, 0, img)
-    x1, y1 = pts_arr[:, 0].min(), pts_arr[:, 1].min()
-    x2, y2 = pts_arr[:, 0].max(), pts_arr[:, 1].max()
-    return int(x1), int(y1), int(x2), int(y2)
-
-
-def draw_organico(img: np.ndarray, rng: random.Random) -> tuple[int, int, int, int]:
-    """Restos orgánicos (verde-marrón, manchas)."""
-    x1 = rng.randint(20, IMG_SIZE - 140)
-    y1 = rng.randint(20, IMG_SIZE - 140)
-    w = rng.randint(50, 120)
-    h = rng.randint(40, 110)
-    overlay = img.copy()
-    for _ in range(rng.randint(3, 7)):
-        ox = x1 + rng.randint(0, w)
-        oy = y1 + rng.randint(0, h)
-        rw = rng.randint(12, 35)
-        rh = rng.randint(10, 30)
-        color = (rng.randint(20, 80), rng.randint(80, 160), rng.randint(40, 100))
-        cv2.ellipse(overlay, (ox, oy), (rw, rh), rng.randint(0, 180), 0, 360, color, -1)
-    cv2.addWeighted(overlay, 0.9, img, 0.1, 0, img)
-    return x1, y1, x1 + w, y1 + h
 
 
 def draw_unicel(img: np.ndarray, rng: random.Random) -> tuple[int, int, int, int]:
@@ -165,7 +123,7 @@ def draw_metal(img: np.ndarray, rng: random.Random) -> tuple[int, int, int, int]
     return x1, y1, x1 + w, y1 + h
 
 
-DRAWERS = (draw_plastico, draw_tela, draw_organico, draw_unicel, draw_metal)
+DRAWERS = (draw_plastico, draw_unicel, draw_metal)
 
 
 def clip_box(x1, y1, x2, y2) -> tuple[int, int, int, int]:
@@ -262,9 +220,9 @@ def main() -> None:
     p.add_argument("--seed", type=int, default=42)
     p.add_argument(
         "--class-weights", type=str, default=None,
-        help="Pesos por clase separados por coma (orden: plastico,tela,"
-             "organico,unicel,metal). Úsalo para boosts de clases raras, "
-             "ej. '1,3,4,1,1'.",
+        help="Pesos por clase separados por coma (orden: plastico,unicel,"
+             "metal). Úsalo para boosts de clases raras, "
+             "ej. '1,2,1'.",
     )
     args = p.parse_args()
 

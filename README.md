@@ -74,15 +74,18 @@ Referencias de diseño aplicadas: patrones de telemetría de Teenage Engineering
 | NumPy | ≥1.26 | Pre/post-procesamiento de tensores |
 | OpenCV (headless) | ≥4.10 | Decodificación JPEG, validación magic bytes, dibujo de cajas anotadas |
 
-Scripts del pipeline: `train_outdoor.py` (entrena+exporta), `evaluate_outdoor.py` (compara pesos), `eval_upload_path.py` (evalúa el path real `/upload`), `tune_confidence.py` (umbral óptimo), `build_outdoor_eval.py` (set degradado), `download_taco.py` + `generate_synthetic_dataset.py` (datasets).
+Scripts del pipeline: `train_outdoor.py` (entrena+exporta), `evaluate_outdoor.py` (compara pesos), `eval_upload_path.py` (evalúa el path real `/upload`), `tune_confidence.py` (umbral óptimo), `build_outdoor_eval.py` (set degradado), `download_taco.py` + `download_ecosort.py` + `generate_synthetic_dataset.py` (datasets).
 
 ### Datos y datasets (`datasets/`)
 
 | Herramienta / fuente | Uso en REBA |
 |----------------------|-------------|
 | `REBA_synthetic` (propio) | 240 tr / 60 val / 60 test — escenas acuáticas sintéticas generadas por script |
-| `REBA_synthetic_boost` (propio) | 180 train extra — refuerzo de clases raras (`organico` ×4, `tela` ×3) |
-| TACO (Trash Annotations in Context, real) | 750 imágenes vía `download_taco.py`, mapeadas a las 5 clases REBA |
+| `REBA_synthetic_boost` + `REBA_synthetic_boost2` (propio) | 180 + 240 train extra — refuerzo de clases raras |
+| TACO (Trash Annotations in Context, real) | ~1300 imágenes vía `download_taco.py`, mapeadas a las clases REBA |
+| EcoSort (Hugging Face, real) | 718 tr / 82 val vía `download_ecosort.py` — basura real fusionada (Open Images + TACO + Roboflow), remapeada a `plastico`/`metal` |
+| FloatWaste (Hugging Face, real) | ~1,550 train vía `download_floatwaste.py` — residuos **flotando en ríos** (CC BY 4.0); su split val → `REBA_real_val` (415 imgs limpias de fugas) = set de validación real |
+| `REBA_copypaste` (propio) | 600 imgs copy-paste de recortes reales sobre fondos de agua |
 | `REBA_outdoor_eval` (propio) | 120 copias degradadas deterministas para medir robustez |
 | Formato YOLO | Labels `class cx cy w h` normalizados; export del dashboard en ZIP re-entrenable |
 | Openverse + OpenAI Vision | **Solo bootstrap opcional** (`download_openverse_dataset.py`, `dataset_builder.py`) — nunca en producción |
@@ -131,7 +134,7 @@ Scripts del pipeline: `train_outdoor.py` (entrena+exporta), `evaluate_outdoor.py
 | **Dashboard** | `http://<IP_PC o localhost>:<PUERTO>` | `http://localhost:5000` | Navegador en la misma LAN |
 | **`MODEL_PATH`** | Ruta relativa o absoluta al `.onnx` | `models/best.onnx` | `.env` |
 | **`INFERENCE_CONFIDENCE` / `INFERENCE_IOU`** | 0.0–1.0 | `0.35` / `0.45` | `.env` |
-| **`CLASS_NAMES`** | CSV, orden = class_id | `plastico,tela,organico,unicel,metal` | `.env` |
+| **`CLASS_NAMES`** | CSV, orden = class_id | `plastico,unicel,metal` | `.env` |
 | **`PUMP_TRIGGER_PHOTOS` / `PUMP_RUN_SECONDS`** | entero / segundos | `3` / `10` — **informativo**: espejar `pump_photos`/`pump_seconds` del ESP32 | `.env` + config remota del dispositivo |
 | **`CAPTURE_RETENTION`** | entero (0 = sin límite) | `2000` | `.env` |
 | **`DATABASE_PATH`** | Ruta SQLite | `data/REBA.db` | `.env` |
@@ -150,8 +153,16 @@ Scripts del pipeline: `train_outdoor.py` (entrena+exporta), `evaluate_outdoor.py
 ```
 REBA/
 ├── README.md                 ← este archivo
+├── PROGRESO.md               ← bitácora de sesiones y estado del proyecto
 ├── .env.example              ← plantilla de configuración del servidor
 ├── requirements.txt
+├── campo.bat                 ← arranque campo: server + túnel zrok
+├── detener_entrenamiento.bat ← respaldo de pesos + stop seguro del train
+├── retomar.bat               ← retorno: server + túnel zrok + --resume v5 + monitor
+├── setup_zrok.bat            ← setup único del túnel zrok (URL fija gratis)
+├── monitor_entrenamiento.bat ← launcher del monitor GUI de entrenamiento
+├── tools/
+│   └── zrok_tunnel.ps1       ← lanza el share zrok headless (reservado/efímero)
 ├── docs/
 │   ├── manual_implementacion.md ← implementación E2E (hardware→campo)
 │   ├── manual_uso.md         ← operación del dashboard
@@ -169,10 +180,13 @@ REBA/
 │   ├── generate_synthetic_dataset.py
 │   ├── download_openverse_dataset.py
 │   ├── download_taco.py      ← subset TACO real → YOLO
+│   ├── download_ecosort.py   ← EcoSort (HF) → YOLO-REBA
 │   ├── dataset_builder.py
 │   ├── outdoor_transforms.py ← augmentations de intemperie
 │   ├── build_outdoor_eval.py ← eval set degradado
-│   ├── train_outdoor.py      ← entrenamiento actual (sintético+TACO)
+│   ├── train_outdoor.py      ← entrenamiento actual (sintético+TACO+EcoSort+FloatWaste+copy-paste)
+│   ├── train_monitor.py      ← monitor GUI del entrenamiento (métricas+telemetría HW)
+│   ├── val_snapshot.py       ← val por clase → JSON (lo usa el monitor)
 │   ├── evaluate_outdoor.py   ← comparación de pesos
 │   ├── eval_upload_path.py   ← eval por path real /upload
 │   └── tune_confidence.py    ← umbral óptimo de confianza
@@ -183,12 +197,13 @@ REBA/
 │   └── database.py           ← SQLite (captures, detections, pump_events)
 ├── static/
 │   ├── index.html            ← 3 vistas: En vivo / Analítica / Dispositivo
+│   ├── simulador_esp32.html  ← simulador móvil del nodo ESP32-CAM (cámara real)
 │   ├── app.js                ← WS, gráficas canvas, galería, bomba, config remota
 │   ├── styles.css            ← design system oscuro, móvil primero
 │   ├── fonts/                ← Space Grotesk + JetBrains Mono (woff2 locales)
 │   └── favicon.svg
 └── models/
-    └── best.onnx             ← modelo outdoor v2 (train_outdoor.py → ONNX)
+    └── best.onnx             ← modelo actual (train_outdoor.py → ONNX, 3 clases)
 ```
 
 ---
@@ -204,7 +219,7 @@ REBA/
 | Retención de capturas | **2000** | `.env` → `CAPTURE_RETENTION` |
 | Relé / bomba | GPIO **13**, relé activo **LOW**, bomba en **NC** | `PIN_RELE`, `RELE_ACTIVO_BAJO`, `BOMBA_EN_NC` (`#define`, requieren recompilar) |
 | TRIG / ECHO / FLASH | GPIO **14** / **15** / **4** | `PIN_TRIG` / `PIN_ECHO` / `PIN_FLASH` (`#define`) |
-| Clases | plastico, tela, organico, unicel, metal | `.env` → `CLASS_NAMES` |
+| Clases | plastico, unicel, metal | `.env` → `CLASS_NAMES` |
 
 > Mantén los valores del ESP32 (vía dashboard → Dispositivo) y del `.env` **alineados** para que el progreso de bomba del dashboard coincinda con el comportamiento real.
 
@@ -246,6 +261,8 @@ uvicorn server.main:app --host 0.0.0.0 --port 5000
 ```
 
 Dashboard: [http://localhost:5000](http://localhost:5000)
+
+**Acceso remoto (túnel zrok):** `campo.bat` levanta además un túnel zrok que expone el dashboard como `https://<nombre>.shares.zrok.io` — URL **fija y gratuita** si se reservó con `setup_zrok.bat` (una sola vez; cuenta gratuita en zrok.io, sin dominio). La ESP32 no usa el túnel (HTTP plano en LAN); el túnel es para el celular/dashboard y el simulador `/simulador_esp32.html`. Detalle: [docs/server.md](docs/server.md) §Acceso remoto y [docs/manual_uso.md](docs/manual_uso.md) §1.
 
 Prueba sin hardware (envía una foto cualquiera como si fuera el ESP32):
 

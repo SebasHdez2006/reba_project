@@ -44,6 +44,9 @@ EVAL_SETS = [
     ("clean", "REBA_synthetic", "test"),
     ("outdoor", "REBA_outdoor_eval", "val"),
     ("taco_real", "REBA_taco", "test"),
+    # Set de validacion real acuatico (FloatWaste val, nunca entrenado).
+    # Es el set que decide el despliegue. Se omite si no existe.
+    ("real_water", "REBA_real_val", "val"),
 ]
 
 
@@ -276,14 +279,17 @@ def build_report(
     )
     lines.append(
         "- `taco_real` tiene gap de dominio (fotos terrestres TACO vs. agua "
-        "sintética) y desbalance severo de clases (TACO casi no contiene "
-        "`organico`/`tela` mapeables) — los valores absolutos son bajos para "
-        "ambos modelos y deben leerse de forma comparativa, no absoluta."
+        "sintética) — los valores absolutos son bajos y deben leerse de "
+        "forma comparativa, no absoluta."
+    )
+    lines.append(
+        "- `real_water` (FloatWaste val limpio de fugas) es el set que "
+        "decide el despliegue: agua real con objetos reales."
     )
     lines.append(
         "- La regresión en `clean` es esperada: el modelo nuevo reparte "
         "capacidad entre un dominio mucho más amplio; la decisión de "
-        "despliegue debe priorizar `outdoor`/`taco_real`."
+        "despliegue debe priorizar `real_water`/`outdoor`/`taco_real`."
     )
     lines.append("")
 
@@ -300,6 +306,10 @@ def build_report(
     lines.append(
         "- `taco_real`: fotos reales TACO — distribución real; las clases sin "
         "equivalente REBA quedan como fondo (pueden penalizar recall)."
+    )
+    lines.append(
+        "- `real_water`: split val de FloatWaste sin near-duplicados en "
+        "train — validación real acuática; nunca usada en entrenamiento."
     )
     if baseline_skipped:
         names = ", ".join(p.name for p in baseline_skipped)

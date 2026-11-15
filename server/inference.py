@@ -5,8 +5,8 @@ Modo final: YOLOv8 exportado a ONNX (`models/best.onnx`) vía onnxruntime.
 Sin fallback remoto: si no hay modelo, el sistema reporta error y sigue en
 modo local/offline.
 
-Clases (class_id 0..4 por defecto):
-    plastico, tela, organico, unicel, metal
+Clases (class_id 0..N-1, configurables vía CLASS_NAMES):
+    plastico, unicel, metal
 
 Uso:
     engine = InferenceEngine(settings)
@@ -99,6 +99,25 @@ class InferenceEngine:
             inp = self.session.get_inputs()[0]
             self.input_name = inp.name
             self.input_shape = tuple(inp.shape)
+
+            # Validar que las clases del ONNX coincidan con CLASS_NAMES.
+            # Salida YOLOv8: (1, 4+nc, N) — nc_model = shape[1] - 4.
+            out_shape = tuple(self.session.get_outputs()[0].shape)
+            nc_model = None
+            if len(out_shape) == 3 and isinstance(out_shape[1], int) \
+                    and isinstance(out_shape[2], int) and out_shape[1] < out_shape[2]:
+                nc_model = out_shape[1] - 4
+            n_cfg = len(self.class_names)
+            if nc_model is not None and nc_model != n_cfg:
+                logger.error(
+                    "ONNX tiene %d clases pero CLASS_NAMES declara %d %s — "
+                    "detecciones quedarian mal etiquetadas. Exporta el modelo "
+                    "con el dataset actual o ajusta CLASS_NAMES en .env.",
+                    nc_model, n_cfg, list(self.class_names),
+                )
+                self.session = None
+                self.backend = "none"
+                return
             self.backend = "onnx"
             logger.info("ONNX loaded: %s input=%s", model_path.name, self.input_shape)
         except Exception as exc:

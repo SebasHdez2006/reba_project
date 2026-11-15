@@ -1,4 +1,4 @@
-# REBA — Checklist de 150 verificaciones (QA)
+# REBA — Checklist de 163 verificaciones (QA)
 
 Guion de pruebas del sistema REBA. Cada fila resume la **pregunta**, el
 **comportamiento esperado** según el código actual, la **prueba sugerida**
@@ -201,7 +201,7 @@ de prueba física · `[📄]` solo documental
 | # | Pregunta | Comportamiento esperado | Prueba | Res. |
 |---|----------|-------------------------|--------|------|
 | 121 | ¿Qué datasets alimentan el train? `[✔]` | synthetic 360, boost 180, taco 750, outdoor_eval 120; train combinado 1022 | `ls datasets/*/images` | ☐ |
-| 122 | ¿Mapeo TACO→REBA? `[✔]` | `TACO_TO_REBA`: 60 cats COCO→5 clases; sin equivalente = fondo | `download_taco.py` | ☐ |
+| 122 | ¿Mapeo TACO→REBA? `[✔]` | `TACO_TO_REBA`: 60 cats COCO→3 clases; sin equivalente = fondo | `download_taco.py` | ☐ |
 | 123 | ¿Aumentaciones outdoor? `[✔]` | brightness/gamma/shadow/sunflare/fog/rain/defocus/motionblur/HSV/gray/noise/jpeg/dropout + cutmix/mixup/erasing | `outdoor_transforms.py` | ☐ |
 | 124 | ¿Por qué solo pixel-level? `[✔]` | No cambian cajas → labels YOLO exactas | Revisión del pipeline | ☐ |
 | 125 | ¿Resume de entrenamiento? `[◐]` | `last.pt` + `resume=True`; interrumpido 3 veces; patience 15 | `runs/detect/REBA_outdoor_v2` | ☐ |
@@ -246,6 +246,30 @@ de prueba física · `[📄]` solo documental
 | 149 | Pendientes antes del agua real | HC-SR04 cableado+trigger, ciclo bomba físico, carcasa estanca, ~50–100 fotos acuáticas para dataset, +datos de `plastico`, decidir persistencia de cola (LittleFS) | Alta | ☐ |
 | 150 | Hallazgos para el informe | `SET pump_cmd` doc≠código; `wifi_pass` en claro + CORS `*`; counters sin reset; cola solo RAM; `Serial.begin` duplicado; época 13 vs 16 del ONNX | Baja | ☐ |
 
+## 18. Pruebas de campo — software y modelo
+
+Plan de la jornada en intemperie (**PC + ESP32 + celular en el hotspot del
+celular** — misma LAN, sin depender de Internet para el ESP32; el dashboard
+del celular puede abrirse por `http://<IP-PC>:5000` o por el túnel zrok si
+se quiere acceso desde otra red). Procedimiento operativo
+en `docs/manual_uso.md` §4. Marcar resultados al terminar el día.
+
+| # | Pregunta | Comportamiento esperado | Prueba | Res. |
+|---|----------|-------------------------|--------|------|
+| 151 | ¿El ESP32 asocia al hotspot del celular? `[◐]` | Wi-Fi 2.4 GHz del hotspot + datos móviles → `STATUS` wifi=OK / píldora EN LÍNEA | `STATUS` por serie / dashboard | ☐ |
+| 152 | ¿El upload funciona en la LAN del hotspot? `[◐]` | Objeto <23 cm → foto → `POST /upload` a `http://<IP-PC>:5000` → capture en DB ≤60 s | Objeto real + dashboard | ☐ |
+| 153 | ¿El dashboard remoto recibe WS? `[◐]` | Eventos `capture`/`detections` en vivo desde datos móviles (`wss://` automático) | DevTools WS en el celular | ☐ |
+| 154 | ¿La bomba automática dispara en campo? `[◐]` | 3 fotos válidas → `pump_event` inferido + relé conmuta ~10 s | Objeto 3 veces + registro eventos | ☐ |
+| 155 | ¿La bomba manual remota funciona por túnel? `[◐]` | `pump/run` → `pump_cmd` → ESP32 lo recoge ≤60 s → `ack` → `cleared:true` | Dashboard "Activar ahora" | ☐ |
+| 156 | ¿La config remota aplica por túnel? `[◐]` | `dist_max_cm` u otra clave → poll ≤60 s → valor nuevo en `GET`/`STATUS` | Dashboard → Dispositivo | ☐ |
+| 157 | ¿La cola retiene fotos sin señal? `[◐]` | Apagar datos del hotspot → fotos en cola (máx 6); al volver drenan FIFO; la más vieja se pierde si se llena | Cortar señal + capturas | ☐ |
+| 158 | ¿El server local sigue operativo? `[◐]` | `localhost:5000` en la PC sirve igual aunque el ESP32 venga por Internet | `curl /api/health` en la PC | ☐ |
+| 159 | ¿Las fotos de campo quedan limpias? `[◐]` | `image_orig_jpeg` crudo en DB → base para reentrenar; `image_jpeg` anotado para el dashboard | `GET /api/captures/{id}/image?orig=1` | ☐ |
+| 160 | ¿Tasa de falsos positivos en agua limpia? `[◐]` | Escenas sin objetos → anotar detecciones espurias (clase + confianza) para calibrar umbral | Fotos de agua limpia | ☐ |
+| 161 | ¿Latencia de inferencia en campo? `[◐]` | `inference_ms` puede subir (CPU compartida con entrenamiento v5): registrar media/rango real | `inference_ms` en uploads | ☐ |
+| 162 | ¿Confianza de detecciones reales? `[◐]` | Distribución por clase en objetos acuáticos reales — insumo para `tune_confidence.py` posterior | Captures + detections de la jornada | ☐ |
+| 163 | ¿Export YOLO post-jornada? `[◐]` | `Exportar YOLO` descarga ZIP con fotos reales de campo + labels → dataset para próximo entrenamiento | Botón en dashboard → Analítica | ☐ |
+
 ---
 
 ## Anexo — Prioridades de prueba
@@ -254,7 +278,8 @@ de prueba física · `[📄]` solo documental
 |-----------|--------|--------|
 | Alta | Trigger HC-SR04 con objeto <23 cm | Pendiente (sin lecturas en banco) |
 | Alta | Ciclo automático 3 fotos → relé/bomba | Pendiente verificación física |
-| Alta | Capturas acuáticas reales → dataset | Pendiente (~4 fotos en DB) |
+| Alta | Capturas acuáticas reales → dataset | Pendiente (~4 fotos en DB) — **en curso: jornada de campo 14-nov** |
+| Alta | ESP32 + PC + celular en hotspot compartido (sin Wi-Fi local) | Preparado — pendiente ejecución en campo (zrok no aplica al ESP32: solo HTTPS) |
 | Media | Estrés de cola offline (>6 fotos) | Parcialmente probado |
 | Media | Reversión Wi-Fi/server_url remotos | Verificado en banco |
 | Media | Retención `CAPTURE_RETENTION` | Verificado con prune manual |

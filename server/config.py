@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     inference_iou: float = Field(default=0.45, ge=0.0, le=1.0)
 
     # --- Clases YOLO (orden = class_id) ---
-    class_names: str = Field(default="plastico,tela,organico,unicel,metal")
+    class_names: str = Field(default="plastico,unicel,metal")
 
     # --- Bomba (informativo: espejar constantes del firmware) ---
     # Deben coincidir con FOTOS_PARA_BOMBA y TIEMPO_BOMBA_MS de fotos_nc.ino.
@@ -62,6 +62,14 @@ class Settings(BaseSettings):
     # Las fotos son blobs ~5 KB; 2000 ≈ 10 MB. Evita crecimiento ilimitado
     # en operación continua de campo.
     capture_retention: int = Field(default=2000, ge=0)
+
+    # --- Túnel zrok (informativo: lo usan los .bat / tools\zrok_tunnel.ps1) ---
+    # Nombre reservado del share público (URL fija https://<nombre>.shares.zrok.io).
+    # Vacío = share efímero. Se configura con setup_zrok.bat.
+    zrok_reserved_name: str = Field(default="")
+    # Objetivo local del túnel (uvicorn). La ESP32 NO usa el túnel: habla
+    # HTTP plano directo con HOST:PORT en la LAN/hotspot.
+    zrok_target_url: str = Field(default="http://127.0.0.1:5000")
 
     @property
     def class_list(self) -> List[str]:

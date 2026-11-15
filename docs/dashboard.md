@@ -2,7 +2,7 @@
 
 Interfaz servida por FastAPI desde `static/` — abrir por HTTP en **http://localhost:5000** o la IP de la PC (nunca como archivo `file://`).
 
-**Acceso desde el celular:** conectar el teléfono a la misma red que la PC (ej. hotspot `REBA-AP`) y abrir `http://<IP-PC>:5000` — con el hotspot activo suele ser `http://192.168.137.1:5000`. Sin autenticación por decisión: la red `REBA-AP` aísla el sistema; no exponer el puerto a redes no confiables.
+**Acceso desde el celular:** conectar el teléfono a la misma red que la PC (ej. hotspot `REBA-AP`) y abrir `http://<IP-PC>:5000` — con el hotspot activo suele ser `http://192.168.137.1:5000`. También es posible abrirlo desde **cualquier red con Internet** mediante el túnel zrok (`https://<nombre>.shares.zrok.io`, URL fija si se reservó con `setup_zrok.bat`, ver "Requisitos de red"). Sin autenticación por decisión: la red `REBA-AP` aísla el sistema en LAN; el túnel expone la URL a Internet — tratarla como secreta durante la prueba.
 
 ---
 
@@ -56,6 +56,19 @@ Archivos:
 - La red `REBA-AP` (hotspot Windows de la PC) no requiere Internet: PC y ESP32 se comunican por LAN.
 - Windows Firewall debe permitir entrada TCP 5000.
 - El dashboard y el ESP32 pueden usar un punto de acceso sin Internet; el modelo y la base de datos residen en la PC.
+
+### Acceso remoto — túnel zrok
+
+Para operar desde una red distinta a la LAN (datos móviles, otro sitio):
+
+```bat
+setup_zrok.bat   :: una vez: reserva https://<nombre>.shares.zrok.io (gratis, fijo)
+campo.bat        :: levanta el tunel en la ventana REBA-Tunnel
+```
+
+- Usa la URL `https://<nombre>.shares.zrok.io` en el navegador (HTTPS + `wss://` automáticos). Con reserva es **siempre la misma**; sin reserva cambia por arranque del túnel (`logs/tunnel.log`, `logs/zrok_url.txt`).
+- **El ESP32 no usa el túnel** (zrok solo HTTPS; el firmware habla HTTP plano): va por la LAN/hotspot con la PC — `server_url=http://<IP-PC>:5000`.
+- El servidor puede reiniciarse sin afectar al túnel; `campo.bat`/`retomar.bat` relanzan ambos.
 
 ---
 

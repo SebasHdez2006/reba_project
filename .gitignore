@@ -24,8 +24,9 @@ models/**/*.pt
 yolov8n.pt
 runs/
 
-# Dataset generado
-datasets/
+# Dataset generado (pesado, no versionar) — solo el catalogo si se sube
+datasets/*
+!datasets/CATALOGO.md
 raw_images/
 
 # IDE / OS
@@ -39,3 +40,4 @@ Desktop.ini
 # Colab / notebooks checkpoints
 .ipynb_checkpoints/
 server.log
+logs/

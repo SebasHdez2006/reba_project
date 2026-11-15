@@ -6,7 +6,8 @@ Entrenamiento YOLOv8n con aumentación de intemperie → ONNX.
 No cambia la arquitectura (sigue siendo YOLOv8n → ONNX) pero endurece los datos:
 
 1. Construye `datasets/REBA_outdoor/data.yaml` combinando el dataset sintético
-   con el subconjunto real TACO (si `datasets/REBA_taco` existe).
+   con las fuentes reales/opcionales presentes en `datasets/` (TACO, EcoSort,
+   boosts sintéticos de clases raras — ver OPTIONAL_TRAIN_SOURCES).
 2. Inyecta el pipeline outdoor de `outdoor_transforms.py` vía el parámetro
    nativo `augmentations` de Ultralytics (Albumentations aplicado on-the-fly
    en cada época, con manejo automático de cajas).
@@ -35,7 +36,7 @@ from outdoor_transforms import outdoor_train_transforms
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATASETS_ROOT = PROJECT_ROOT / "datasets"
-CLASSES = ("plastico", "tela", "organico", "unicel", "metal")
+CLASSES = ("plastico", "unicel", "metal")
 
 
 def archive_previous_model(path: Path, archive_dir: Path) -> None:
@@ -75,24 +76,27 @@ def write_combined_data_yaml(
     return out_path
 
 
-def build_dataset_yaml() -> Path:
-    """Combina sintético (+boost de clases raras) + TACO en datasets/REBA_outdoor."""
-    synthetic = DATASETS_ROOT / "REBA_synthetic"
-    boost = DATASETS_ROOT / "REBA_synthetic_boost"
-    taco = DATASETS_ROOT / "REBA_taco"
+# Fuentes opcionales de train: (carpeta en datasets/, etiqueta para el log).
+# Se incluyen solo si `datasets/<nombre>/images/train` existe y no está vacío.
+OPTIONAL_TRAIN_SOURCES = (
+    ("REBA_synthetic_boost", "boost"),
+    ("REBA_synthetic_boost2", "boost2"),
+    ("REBA_taco", "TACO"),
+    ("REBA_ecosort", "EcoSort"),
+    ("REBA_floatwaste", "FloatWaste"),
+    ("REBA_copypaste", "copy-paste"),
+)
 
+
+def build_dataset_yaml() -> Path:
+    """Combina sintético + fuentes opcionales presentes en datasets/."""
     train_dirs = [Path("REBA_synthetic/images/train")]
     parts = ["sintético"]
-    if (boost / "images" / "train").is_dir() and any(
-        (boost / "images" / "train").iterdir()
-    ):
-        train_dirs.append(Path("REBA_synthetic_boost/images/train"))
-        parts.append("boost(organico/tela)")
-    if (taco / "images" / "train").is_dir() and any(
-        (taco / "images" / "train").iterdir()
-    ):
-        train_dirs.append(Path("REBA_taco/images/train"))
-        parts.append("TACO")
+    for folder, label in OPTIONAL_TRAIN_SOURCES:
+        train_dir = DATASETS_ROOT / folder / "images" / "train"
+        if train_dir.is_dir() and any(train_dir.iterdir()):
+            train_dirs.append(Path(f"{folder}/images/train"))
+            parts.append(label)
     print("Dataset combinado: " + " + ".join(parts))
 
     yaml_path = DATASETS_ROOT / "REBA_outdoor" / "data.yaml"
@@ -102,6 +106,15 @@ def build_dataset_yaml() -> Path:
         val_dir=Path("REBA_synthetic/images/val"),
         test_dir=Path("REBA_synthetic/images/test"),
     )
+
+
+def _epochs_completed(run_dir: Path) -> int:
+    """Épocas registradas en results.csv (filas de datos, sin cabecera)."""
+    csv_path = run_dir / "results.csv"
+    if not csv_path.is_file():
+        return 0
+    with csv_path.open(encoding="utf-8", errors="replace") as fh:
+        return max(0, sum(1 for _ in fh) - 1)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
@@ -122,6 +135,10 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     p.add_argument("--project", type=Path,
                    default=PROJECT_ROOT / "runs" / "detect")
     p.add_argument("--name", type=str, default="REBA_outdoor")
+    p.add_argument("--resume", action="store_true",
+                   help="Reanuda runs/detect/<name> desde weights/last.pt. "
+                        "Restaura epochs/patience/LR/augmentations del checkpoint; "
+                        "el resto de flags de train() se ignoran")
     # Aumentación built-in adicional (los efectos fotométricos viven en
     # outdoor_transforms.py y se pasan vía `augmentations`).
     p.add_argument("--cutmix", type=float, default=0.3)
@@ -142,40 +159,56 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     print("Selección de best.pt por fitness = mAP50-95 "
           "(Ultralytics ≥8.4) — prioriza mAP; early stopping con patience.")
 
-    model = YOLO(args.model)
-    model.train(
-        data=str(data_yaml),
-        epochs=args.epochs,
-        imgsz=args.imgsz,
-        batch=args.batch,
-        device=args.device,
-        project=str(args.project),
-        name=args.name,
-        pretrained=True,
-        patience=args.patience,
-        workers=0,  # más estable en Windows
-        exist_ok=True,
-        verbose=True,
-        augmentations=transforms,
-        # Oclusión extra built-in
-        cutmix=args.cutmix,
-        mixup=args.mixup,
-        erasing=args.erasing,
-        # Geometría leve (la basura flota y rota)
-        degrees=args.degrees,
-        translate=0.15,
-        scale=0.6,
-        fliplr=0.5,
-        # HSV built-in moderado (HueSaturationValue fuerte va en albumentations)
-        hsv_h=0.02,
-        hsv_s=0.7,
-        hsv_v=0.45,
-        mosaic=1.0,
-        close_mosaic=10,
-        cos_lr=True,
-    )
-
-    save_dir = Path(model.trainer.save_dir)
+    if args.resume:
+        last_pt = args.project / args.name / "weights" / "last.pt"
+        if not last_pt.is_file():
+            raise SystemExit(f"--resume: no existe {last_pt}")
+        done = _epochs_completed(args.project / args.name)
+        if done >= args.epochs:
+            print(f"{args.name} ya completó {done}/{args.epochs} épocas "
+                  "— nada que reanudar; se reexporta el mejor peso")
+            save_dir = args.project / args.name
+        else:
+            print(f"Reanudando {args.name}: {done}/{args.epochs} épocas "
+                  "hechas — epochs/patience/LR/augmentations se restauran "
+                  "del checkpoint")
+            model = YOLO(str(last_pt))
+            model.train(resume=True)
+            save_dir = Path(model.trainer.save_dir)
+    else:
+        model = YOLO(args.model)
+        model.train(
+            data=str(data_yaml),
+            epochs=args.epochs,
+            imgsz=args.imgsz,
+            batch=args.batch,
+            device=args.device,
+            project=str(args.project),
+            name=args.name,
+            pretrained=True,
+            patience=args.patience,
+            workers=0,  # más estable en Windows
+            exist_ok=True,
+            verbose=True,
+            augmentations=transforms,
+            # Oclusión extra built-in
+            cutmix=args.cutmix,
+            mixup=args.mixup,
+            erasing=args.erasing,
+            # Geometría leve (la basura flota y rota)
+            degrees=args.degrees,
+            translate=0.15,
+            scale=0.6,
+            fliplr=0.5,
+            # HSV built-in moderado (HueSaturationValue fuerte va en albumentations)
+            hsv_h=0.02,
+            hsv_s=0.7,
+            hsv_v=0.45,
+            mosaic=1.0,
+            close_mosaic=10,
+            cos_lr=True,
+        )
+        save_dir = Path(model.trainer.save_dir)
     best_pt = save_dir / "weights" / "best.pt"
     if not best_pt.is_file():
         raise SystemExit(f"No se encontró {best_pt}")

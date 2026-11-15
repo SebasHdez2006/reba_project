@@ -36,7 +36,7 @@ from outdoor_transforms import outdoor_eval_transforms
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-CLASSES = ("plastico", "tela", "organico", "unicel", "metal")
+CLASSES = ("plastico", "unicel", "metal")
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 logger = logging.getLogger("REBA.outdoor_eval")

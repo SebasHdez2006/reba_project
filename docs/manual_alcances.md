@@ -34,7 +34,7 @@ Demostrar un sistema IoT + visión artificial **100% offline** que:
 
 | Capacidad | Detalle |
 |-----------|---------|
-| Clasificación local | YOLOv8n exportado a ONNX, CPU — 5 clases: `plastico`, `tela`, `organico`, `unicel`, `metal` |
+| Clasificación local | YOLOv8n exportado a ONNX, CPU — 3 clases: `plastico`, `unicel`, `metal` |
 | Latencia | ~50–130 ms por foto (p95 ~120 ms) en la PC de desarrollo |
 | Persistencia | SQLite local: doble JPEG por captura (anotado para dashboard + crudo para dataset), detecciones con confianza y caja, contadores, eventos de bomba, config del dispositivo |
 | Retención | Poda horaria de capturas > `CAPTURE_RETENTION` (default 2000 ≈ 10 MB) |
@@ -66,7 +66,7 @@ Tres vías redundantes, todas con la misma validación estricta y **reversión a
 
 | Capacidad | Detalle |
 |-----------|---------|
-| Datasets | Sintético acuático (240 tr), boost de clases raras (180), TACO real (750), eval degradado (120) |
+| Datasets | Sintético acuático, boosts, TACO + EcoSort + FloatWaste (agua real) + copy-paste, eval degradado — ~4,580 imgs train combinadas |
 | Entrenamiento | `train_outdoor.py` con augmentations de intemperie (brillo, sombra, niebla, lluvia, blur, HSV, dropout, cutmix) + early stopping |
 | Evaluación | Offline (clean/outdoor/TACO) + **path de producción real** vía `eval_upload_path.py` contra `/upload` |
 | Reentrenamiento | Botón Exportar YOLO → mezcla con datasets → nuevo `best.onnx` |
@@ -125,6 +125,12 @@ Tres vías redundantes, todas con la misma validación estricta y **reversión a
 ## 5. Métricas de desempeño medidas
 
 ### 5.1 Reconocimiento (modelo outdoor v2, época 13)
+
+> **Nota histórica:** estas métricas corresponden al modelo de 5 clases
+> (`plastico, tela, organico, unicel, metal`) anterior al pivote a 3
+> clases. `tela` y `organico` fueron eliminadas; las cifras de abajo se
+> conservan como referencia del baseline. El modelo actual entrena solo
+> `plastico, unicel, metal` — ver `reports/experimentos.md` EXP-3.
 
 | Conjunto | ΔP | ΔR | ΔmAP50 | ΔmAP50-95 |
 |----------|-----|-----|--------|-----------|
@@ -190,7 +196,7 @@ Tres vías redundantes, todas con la misma validación estricta y **reversión a
 El sistema se considera **funcionalmente completo** cuando:
 
 - [x] Captura por trigger ultrasónico y sube JPEG al servidor (verificado en banco: HTTP 200 → ONNX → SQLite)
-- [x] Clasifica en las 5 clases con ONNX local (~100 ms)
+- [x] Clasifica en las 3 clases con ONNX local (~100 ms)
 - [x] Dashboard operativo en móvil y escritorio, sin Internet
 - [x] Bomba automática por conteo de fotos + manual remota con ack
 - [x] Config remota sin reflashear con reversión automática

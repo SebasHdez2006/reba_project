@@ -18,6 +18,12 @@
 //     PUMP_SECONDS_DEFAULT segundos (ajustables desde el dashboard;
 //     ver sección "Configuración remota").
 //
+// Acceso remoto: el dispositivo habla HTTP plano (sin TLS — ver nota de
+// HTTPClient.h abajo). Para alcanzarlo desde fuera de la LAN hace falta
+// un tunel que acepte HTTP plano (cloudflared quick tunnel u otro); el
+// tunel HTTPS de zrok NO sirve para este firmware. Dashboard/celular si
+// pueden usar zrok: https://<nombre>.shares.zrok.io.
+//
 // Configuración (SIN recompilar):
 //  - Primera vez / sin WiFi guardada: el ESP32 levanta el AP
 //    "REBA-Setup". Conéctate desde el celular, abre http://192.168.4.1
@@ -325,8 +331,14 @@ bool aplicarClaveRemota(const String& clave, const String& valor) {
   else if (clave == "server_url") {
     String v = valor;
     while (v.endsWith("/")) v.remove(v.length() - 1);   // normalizar: sin / final
-    // Solo http:// plano (LAN): httpSimple no soporta https ni otros
-    // esquemas; una URL mala dejaría el dispositivo inalcanzable.
+    // Solo http:// plano (LAN o tunel HTTP): httpSimple no soporta https.
+    // https:// se rechaza A PROPOSITO — TLS (WiFiClientSecure/mbedTLS)
+    // esta prohibido en esta placa: su init estatico provoca FB-OVF
+    // permanente en el driver de camara (verificado en banco, ver nota
+    // del include). Por eso la URL de zrok (https://*.shares.zrok.io)
+    // NO sirve como server_url: el dispostivo remoto necesita un tunel
+    // que acepte HTTP plano (cloudflared u otro).
+    // Una URL mala dejaria el dispositivo inalcanzable.
     if (v.length() > 7 && v.length() <= 96 && v.startsWith("http://")
         && v.indexOf(' ') < 0 && v != srvBase) {
       // Respaldo: si la URL nueva no responde en ~6 min se revierte.
