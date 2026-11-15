@@ -866,3 +866,89 @@ v5 ni el acceso remoto. Runbook completo: `docs/plan_apagado_retorno.md`.
 - **Pendiente sin cambios**: evaluación `real_water` + umbral al
   terminar v5 (runbook `docs/plan_post_v5.md`); Nabiki flashea por USB
   una vez; cloudflared zombie sigue vivo para la ESP32 remota.
+
+## Sesión 14 — Corte de v5 en época 30 + evaluación real_water + despliegue ONNX (15-nov, noche)
+
+Decisión del usuario: cortar el entrenamiento esta noche (opción B del
+análisis de viabilidad para la entrega del lunes 16-nov 18:00) en vez de
+esperar al early-stop ~ép 46 del lunes ~10:30. La época 30 cerró a las
+16:51 trayendo **nuevo best: mAP50-95 0.8513** (supera al 0.8418 de la
+ep 26). Entrenamiento detenido con backup `.bak` previo (mismo
+procedimiento que `detener_entrenamiento.bat`, manual para evitar el
+`pause`).
+
+### Deploy ejecutado esta noche
+
+- `runs/.../v5/weights/best.pt` = **época 30** (verificado `epoch=29`
+  interno + mtime 16:51) → copiado a `models/best.pt`.
+- Exportado `models/best.onnx` desde ese .pt (imgsz 640, opset 12,
+  simplify) — verificado onnxruntime: input `(1,3,640,640)`,
+  output `(1,7,8400)` = 3 clases.
+- Pre-cambio archivado en `models/archive/best_20261115T225412Z.*`:
+  **OJO** el `.onnx` archivado es v5-época-1 (3 clases, el incumbente
+  real) pero el `.pt` archivado es v2 de **5 clases** (models/best.pt
+  estaba desincronizado — ningún `.pt` de 3 clases existía fuera del
+  run). Rollback correcto = restaurar solo el `.onnx`.
+- `.env`: `INFERENCE_CONFIDENCE` 0.35 → **0.25** (ver abajo).
+- uvicorn reiniciado (comando de `campo.bat` con proxy-headers): ahora
+  hay **un solo proceso** — el DOS de PIDs 16964/18120 quedó resuelto.
+  `/api/health` → `backend: onnx`, `ok: true`.
+
+### Evaluación (CPU libre tras el corte, ~3 min total)
+
+`evaluate_outdoor.py` → `outdoor_training_report.md` regenerado:
+
+| Set | baseline archivado* | v5 época 30 |
+|---|---|---|
+| clean | mAP50-95 0.374 | **0.846** |
+| outdoor | 0.260 | **0.762** |
+| taco_real | 0.023 | **0.169** |
+| **real_water** | 0.013 | **mAP50 0.469 · mAP50-95 0.329 · P 0.495 · R 0.556** |
+
+\* baseline = `best_*.pt` más antiguo del archive = modelo original de
+**5 clases** — sus métricas contra GT de 3 clases son semánticamente
+sin sentido (casi todo FP). Sirve solo como referencia de que v5 es
+mejor; NO como comparador honesto del incumbente v5-ép1.
+
+`tune_confidence.py` sobre `REBA_real_val` (415 imgs):
+
+| conf | P | R | F1 | mAP50 |
+|---|---|---|---|---|
+| 0.15 | 0.495 | 0.556 | 0.523 | 0.417 |
+| 0.20 | 0.495 | 0.556 | 0.523 | 0.390 |
+| **0.25** | 0.486 | 0.568 | **0.524** | 0.371 |
+| 0.30 | 0.527 | 0.500 | 0.513 | 0.334 |
+| 0.35 | 0.568 | 0.435 | 0.493 | 0.302 |
+| 0.45 | 0.660 | 0.315 | 0.426 | 0.231 |
+| 0.55 | 0.724 | 0.201 | 0.315 | 0.153 |
+
+### Veredicto go/no-go (pisos de docs/plan_post_v5.md §2)
+
+- mAP50 ≥0.55: **0.469 ✗** · mAP50-95 ≥0.35: **0.329 ✗** (falla por
+  ~0.02) · F1 ≥0.50: **0.524 ✓** · latencia ~86-104 ms ✓
+- → **Desplegado igualmente** (regla: falla pisos pero supera al
+  baseline y no existe alternativa 3-clases mejor — el incumbente era
+  v5-ép1, estrictamente peor). Brecha de dominio documentada; la
+  captura de campo del lunes alimenta `REBA_field` (rama B).
+- `eval_upload_path.py --dataset REBA_real_val --split val` contra el
+  server reiniciado (`ai_pipeline/eval_upload_report_v5ep30.json`):
+  GLOBAL P=0.614 R=0.394 **F1=0.480** (plastico 0.514, metal 0.454,
+  unicel 0.325), mAP@0.5=0.261, inferencia media 153 ms p95 289 ms —
+  coherente con el offline (F1 0.524→0.480, sin colapso ONNX/NMS).
+- **Purge realizado**: 415 captures + 707 detecciones de eval
+  (`id 3-417`, evento `eval-REBA_real_val-val`) eliminadas de la DB;
+  quedan solo las 2 capturas reales del 14-nov. OJO: `X-Evento` NO se
+  persiste — la purga fue por rango de id/hora.
+- Procesos huérfanos cerrados: `cmd /k` del uvicorn viejo (10868),
+  del train viejo (20640) y 2 wrappers de `monitor_entrenamiento.bat`
+  (10352, 3376). Se conservan: cloudflared zombie (ESP32 remota),
+  zrok2 `reba-cam`, uvicorn nuevo, túneles del IDE.
+
+### Pendiente para el lunes (checklist_de_entrega)
+
+- Tarea 5: E2E oficina (ESP32 WiFi + HC-SR04 + bomba) — HC-SR04 nunca
+  verificada en banco, esperar resultado parcial posible.
+- Tarea 6-7: docs finales + commit (README "outdoor v2"→v5 ep30,
+  métricas reales, `git add -f models/best.onnx` opcional ~12 MB).
+- Corregir en el checklist/runbook: la rama NO-GO debe restaurar solo
+  `best_<ts>.onnx` (NO el .pt — es 5-clases y el server lo rechaza).

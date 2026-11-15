@@ -23,7 +23,7 @@
 
 ## Fase 1 — Lunes 06:20–07:00: Check-in, corte de `v5` y exportación ONNX
 
-### - [ ] Tarea 1: Verificar estado del entrenamiento y detenerlo de forma segura
+### - [x] Tarea 1: Verificar estado del entrenamiento y detenerlo de forma segura — **HECHA 15-nov noche** (corte manual tras ép 30; best=época 30, mAP50-95 0.8513)
 ```text
 Actúa como ingeniero de ML en el repo REBA. El entrenamiento `REBA_outdoor_v5` corrió toda la noche; primero verifica el estado general del entorno:
 0. Check-in: ejecuta `ai_pipeline/train_monitor.py --run REBA_outdoor_v5 --once` con `.venv-reba\Scripts\python`, revisa `git status` rápido y confirma que el server sigue vivo (`GET http://localhost:5000/api/health`). Si el proceso de entrenamiento murió en la noche (PC suspendida/apagada), relanza primero con `retomar.bat` y espera a que complete la época en curso antes de cortar.
@@ -32,7 +32,7 @@ Actúa como ingeniero de ML en el repo REBA. El entrenamiento `REBA_outdoor_v5` 
 3. Confirma que `runs/detect/REBA_outdoor_v5/weights/best.pt` existe, no está corrupto y reporta en qué época quedó el mejor checkpoint y sus métricas.
 ```
 
-### - [ ] Tarea 2: Archivar modelo anterior (`v2`) y exportar `v5` a `models/best.onnx`
+### - [x] Tarea 2: Archivar modelo anterior (`v2`) y exportar `v5` a `models/best.onnx` — **HECHA 15-nov noche** (archivado `best_20261115T225412Z.*`; OJO: el .pt archivado es v2-5cl, el .onnx es v5-ép1 — rollback = solo .onnx)
 ```text
 Como el entrenamiento `REBA_outdoor_v5` se detuvo antes de completar las 50 épocas (o terminó por early-stop sin el flujo de exportación automático), realiza manualmente el flujo de exportación que hace `ai_pipeline/train_outdoor.py` al finalizar (ver líneas ~218-229: archiva con timestamp en models/archive/, exporta con imgsz=640, opset=12, simplify=True):
 1. Archiva el `models/best.onnx` y `models/best.pt` actuales dentro de `models/archive/` con marca de tiempo para conservar el baseline `v2`.
@@ -44,7 +44,7 @@ Como el entrenamiento `REBA_outdoor_v5` se detuvo antes de completar las 50 épo
 
 ## Fase 2 — Lunes 07:00–09:00: Evaluación en agua real y calibración
 
-### - [ ] Tarea 3: Evaluar `v5` contra `real_water` y calcular el umbral óptimo de confianza
+### - [x] Tarea 3: Evaluar `v5` contra `real_water` y calcular el umbral óptimo de confianza — **HECHA 15-nov noche** (real_water mAP50 0.469/mAP50-95 0.329; umbral óptimo 0.25, F1 0.524; veredicto: desplegar igualmente según regla plan_post_v5)
 ```text
 Evalúa el nuevo modelo `REBA_outdoor_v5` sobre el dataset de validación en agua real (FloatWaste inédito) sin reiniciar todavía el servidor:
 1. Ejecuta `ai_pipeline/evaluate_outdoor.py` para actualizar `outdoor_training_report.md` y extrae la comparación entre `v5` y los pesos archivados en `models/archive/` sobre el split `real_water`.
@@ -52,7 +52,7 @@ Evalúa el nuevo modelo `REBA_outdoor_v5` sobre el dataset de validación en agu
 3. Preséntame una tabla comparativa con `mAP50`, `mAP50-95`, `Precision`, `Recall`, `F1` y latencia en CPU, indicando explícitamente el veredicto go/no-go según los criterios de `docs/plan_post_v5.md` (sección 2) y cuál es el valor exacto recomendado para `INFERENCE_CONFIDENCE`.
 ```
 
-### - [ ] Tarea 4: Aplicar nuevo umbral en `.env`, reiniciar servidor y validar `/upload`
+### - [x] Tarea 4: Aplicar nuevo umbral en `.env`, reiniciar servidor y validar `/upload` — **HECHA 15-nov noche** (`INFERENCE_CONFIDENCE=0.25`, uvicorn único reiniciado, `/api/health` onnx OK, `eval_upload_path` F1=0.480 coherente, purge DB hecho)
 ```text
 Actualiza la configuración de producción de REBA con los resultados calibrados de `v5`:
 1. Actualiza `INFERENCE_CONFIDENCE` en `.env` con el umbral óptimo obtenido en `REBA_real_val` (manteniendo `MODEL_PATH=models/best.onnx` y `CLASS_NAMES=plastico,unicel,metal`). No subas `.env` a git.

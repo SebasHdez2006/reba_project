@@ -1,0 +1,42 @@
+{
+  "dataset": "datasets\\REBA_real_val",
+  "split": "val",
+  "n_images": 415,
+  "errors": 0,
+  "per_class": {
+    "plastico": {
+      "precision": 0.7046,
+      "recall": 0.4044,
+      "tp": 353,
+      "fp": 148,
+      "fn": 520,
+      "ap50": 0.309847978571783
+    },
+    "unicel": {
+      "precision": 0.44,
+      "recall": 0.2573,
+      "tp": 44,
+      "fp": 56,
+      "fn": 127,
+      "ap50": 0.16196111706842042
+    },
+    "metal": {
+      "precision": 0.3491,
+      "recall": 0.6491,
+      "tp": 37,
+      "fp": 69,
+      "fn": 20,
+      "ap50": 0.3098508586930712
+    }
+  },
+  "global": {
+    "precision": 0.6139,
+    "recall": 0.3942,
+    "f1": 0.4801,
+    "map50": 0.2606,
+    "tp": 434,
+    "fp": 273,
+    "fn": 667
+  },
+  "inference_ms_mean": 153.1
+}

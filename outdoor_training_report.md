@@ -1,13 +1,6 @@
 # Reporte de entrenamiento outdoor — REBA
 
-> **⚠ Reporte histórico (pre-pivote):** corresponde al modelo **v2 de 5
-> clases** (`plastico, tela, organico, unicel, metal`). Desde el
-> 2026-11-14 el sistema usa **3 clases** (`plastico, unicel, metal`) y el
-> experimento vigente es `REBA_outdoor_v5`. Este archivo se **regenera
-> automáticamente** con `ai_pipeline/evaluate_outdoor.py` cuando se
-> evalúe el modelo nuevo — mientras tanto se conserva como baseline.
-
-Generado: 2026-11-13 10:15 UTC
+Generado: 2026-11-15 22:59 UTC
 
 ## Contexto
 
@@ -19,14 +12,14 @@ Generado: 2026-11-13 10:15 UTC
 
 ## Configuración de entrenamiento
 
-- Pesos iniciales: `runs\detect\REBA_outdoor_v2\weights\last.pt`
+- Pesos iniciales: `D:\Backup_Sebas\UES\Ciclo 6\ARC115\Proyecto\REBA\runs\detect\REBA_outdoor_v5\weights\last.pt`
 - data.yaml: `D:\Backup_Sebas\UES\Ciclo 6\ARC115\Proyecto\REBA\datasets\REBA_outdoor\data.yaml`
-- Épocas solicitadas: `60`
-- Épocas ejecutadas: `14`
-- Mejor época (fitness): `13`
+- Épocas solicitadas: `50`
+- Épocas ejecutadas: `30`
+- Mejor época (fitness): `30`
 - Batch: `8`
 - imgsz: `640`
-- Patience (early stop): `15`
+- Patience (early stop): `20`
 - Optimizador: `AdamW`
 
 ## Modelos comparados
@@ -39,43 +32,49 @@ Generado: 2026-11-13 10:15 UTC
 - `clean`
 - `outdoor`
 - `taco_real`
+- `real_water`
 
 ## Métricas globales
 
 | Modelo | Conjunto | Precisión | Recall | mAP50 | mAP50-95 |
 |---|---|---|---|---|---|
-| baseline (previo) | clean | 0.873 | 0.935 | 0.915 | 0.802 |
-| outdoor (nuevo) | clean | 0.768 | 0.888 | 0.879 | 0.650 |
-| baseline (previo) | outdoor | 0.654 | 0.623 | 0.636 | 0.533 |
-| outdoor (nuevo) | outdoor | 0.733 | 0.803 | 0.820 | 0.576 |
-| baseline (previo) | taco_real | 0.030 | 0.028 | 0.013 | 0.008 |
-| outdoor (nuevo) | taco_real | 0.129 | 0.299 | 0.133 | 0.070 |
+| baseline (previo) | clean | 0.337 | 0.353 | 0.400 | 0.374 |
+| outdoor (nuevo) | clean | 0.984 | 0.958 | 0.990 | 0.846 |
+| baseline (previo) | outdoor | 0.310 | 0.256 | 0.306 | 0.260 |
+| outdoor (nuevo) | outdoor | 0.970 | 0.914 | 0.971 | 0.762 |
+| baseline (previo) | taco_real | 0.118 | 0.174 | 0.047 | 0.023 |
+| outdoor (nuevo) | taco_real | 0.296 | 0.280 | 0.254 | 0.169 |
+| baseline (previo) | real_water | 0.177 | 0.043 | 0.022 | 0.013 |
+| outdoor (nuevo) | real_water | 0.495 | 0.556 | 0.469 | 0.329 |
 
 ## mAP50-95 por clase (conjunto outdoor difícil)
 
 | Clase | baseline (previo) | outdoor (nuevo) | Δ |
 |---|---|---|---|
-| plastico | 0.727 | 0.631 | -0.097 |
-| tela | 0.635 | 0.688 | +0.053 |
-| organico | 0.092 | 0.095 | +0.004 |
-| unicel | 0.672 | 0.743 | +0.070 |
-| metal | 0.538 | 0.725 | +0.187 |
+| plastico | 0.727 | 0.698 | -0.030 |
+| tela | 0.049 | 0.783 | +0.734 |
+| organico | 0.002 | 0.805 | +0.803 |
+| unicel | 0.260 | 0.000 |  |
+| metal | 0.260 | 0.000 |  |
 
 ## Interpretación
 
-- `clean`: ΔP -0.106, ΔR -0.046, ΔmAP50 -0.036, ΔmAP50-95 -0.151.
-- `outdoor`: ΔP +0.079, ΔR +0.180, ΔmAP50 +0.183, ΔmAP50-95 +0.044.
-- `taco_real`: ΔP +0.099, ΔR +0.271, ΔmAP50 +0.120, ΔmAP50-95 +0.062.
+- `clean`: ΔP +0.647, ΔR +0.605, ΔmAP50 +0.590, ΔmAP50-95 +0.472.
+- `outdoor`: ΔP +0.660, ΔR +0.658, ΔmAP50 +0.665, ΔmAP50-95 +0.503.
+- `taco_real`: ΔP +0.179, ΔR +0.106, ΔmAP50 +0.207, ΔmAP50-95 +0.146.
+- `real_water`: ΔP +0.317, ΔR +0.512, ΔmAP50 +0.446, ΔmAP50-95 +0.316.
 
 ## Limitaciones
 
 - `outdoor` es un proxy determinista de intemperie sobre imágenes sintéticas; no sustituye capturas reales de la ESP32-CAM en campo.
-- `taco_real` tiene gap de dominio (fotos terrestres TACO vs. agua sintética) y desbalance severo de clases (TACO casi no contiene `organico`/`tela` mapeables) — los valores absolutos son bajos para ambos modelos y deben leerse de forma comparativa, no absoluta.
-- La regresión en `clean` es esperada: el modelo nuevo reparte capacidad entre un dominio mucho más amplio; la decisión de despliegue debe priorizar `outdoor`/`taco_real`.
+- `taco_real` tiene gap de dominio (fotos terrestres TACO vs. agua sintética) — los valores absolutos son bajos y deben leerse de forma comparativa, no absoluta.
+- `real_water` (FloatWaste val limpio de fugas) es el set que decide el despliegue: agua real con objetos reales.
+- La regresión en `clean` es esperada: el modelo nuevo reparte capacidad entre un dominio mucho más amplio; la decisión de despliegue debe priorizar `real_water`/`outdoor`/`taco_real`.
 
 ## Notas
 
 - `clean`: test sintético original — condiciones ideales.
 - `outdoor`: mismas imágenes val+test sintéticas degradadas de forma determinista (semilla fija) — proxy de intemperie con etiquetas exactas.
 - `taco_real`: fotos reales TACO — distribución real; las clases sin equivalente REBA quedan como fondo (pueden penalizar recall).
+- `real_water`: split val de FloatWaste sin near-duplicados en train — validación real acuática; nunca usada en entrenamiento.
 - El modelo de producción es ONNX exportado desde el mismo `best.pt`; estas métricas usan el `.pt` directamente (val de Ultralytics).
