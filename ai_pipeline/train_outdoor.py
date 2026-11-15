@@ -108,6 +108,15 @@ def build_dataset_yaml() -> Path:
     )
 
 
+def _epochs_completed(run_dir: Path) -> int:
+    """Épocas registradas en results.csv (filas de datos, sin cabecera)."""
+    csv_path = run_dir / "results.csv"
+    if not csv_path.is_file():
+        return 0
+    with csv_path.open(encoding="utf-8", errors="replace") as fh:
+        return max(0, sum(1 for _ in fh) - 1)
+
+
 def main(argv: Optional[Sequence[str]] = None) -> None:
     p = argparse.ArgumentParser(
         description="Entrena YOLOv8n con aumentación outdoor → ONNX (REBA)"
@@ -126,6 +135,10 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     p.add_argument("--project", type=Path,
                    default=PROJECT_ROOT / "runs" / "detect")
     p.add_argument("--name", type=str, default="REBA_outdoor")
+    p.add_argument("--resume", action="store_true",
+                   help="Reanuda runs/detect/<name> desde weights/last.pt. "
+                        "Restaura epochs/patience/LR/augmentations del checkpoint; "
+                        "el resto de flags de train() se ignoran")
     # Aumentación built-in adicional (los efectos fotométricos viven en
     # outdoor_transforms.py y se pasan vía `augmentations`).
     p.add_argument("--cutmix", type=float, default=0.3)
@@ -146,40 +159,56 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     print("Selección de best.pt por fitness = mAP50-95 "
           "(Ultralytics ≥8.4) — prioriza mAP; early stopping con patience.")
 
-    model = YOLO(args.model)
-    model.train(
-        data=str(data_yaml),
-        epochs=args.epochs,
-        imgsz=args.imgsz,
-        batch=args.batch,
-        device=args.device,
-        project=str(args.project),
-        name=args.name,
-        pretrained=True,
-        patience=args.patience,
-        workers=0,  # más estable en Windows
-        exist_ok=True,
-        verbose=True,
-        augmentations=transforms,
-        # Oclusión extra built-in
-        cutmix=args.cutmix,
-        mixup=args.mixup,
-        erasing=args.erasing,
-        # Geometría leve (la basura flota y rota)
-        degrees=args.degrees,
-        translate=0.15,
-        scale=0.6,
-        fliplr=0.5,
-        # HSV built-in moderado (HueSaturationValue fuerte va en albumentations)
-        hsv_h=0.02,
-        hsv_s=0.7,
-        hsv_v=0.45,
-        mosaic=1.0,
-        close_mosaic=10,
-        cos_lr=True,
-    )
-
-    save_dir = Path(model.trainer.save_dir)
+    if args.resume:
+        last_pt = args.project / args.name / "weights" / "last.pt"
+        if not last_pt.is_file():
+            raise SystemExit(f"--resume: no existe {last_pt}")
+        done = _epochs_completed(args.project / args.name)
+        if done >= args.epochs:
+            print(f"{args.name} ya completó {done}/{args.epochs} épocas "
+                  "— nada que reanudar; se reexporta el mejor peso")
+            save_dir = args.project / args.name
+        else:
+            print(f"Reanudando {args.name}: {done}/{args.epochs} épocas "
+                  "hechas — epochs/patience/LR/augmentations se restauran "
+                  "del checkpoint")
+            model = YOLO(str(last_pt))
+            model.train(resume=True)
+            save_dir = Path(model.trainer.save_dir)
+    else:
+        model = YOLO(args.model)
+        model.train(
+            data=str(data_yaml),
+            epochs=args.epochs,
+            imgsz=args.imgsz,
+            batch=args.batch,
+            device=args.device,
+            project=str(args.project),
+            name=args.name,
+            pretrained=True,
+            patience=args.patience,
+            workers=0,  # más estable en Windows
+            exist_ok=True,
+            verbose=True,
+            augmentations=transforms,
+            # Oclusión extra built-in
+            cutmix=args.cutmix,
+            mixup=args.mixup,
+            erasing=args.erasing,
+            # Geometría leve (la basura flota y rota)
+            degrees=args.degrees,
+            translate=0.15,
+            scale=0.6,
+            fliplr=0.5,
+            # HSV built-in moderado (HueSaturationValue fuerte va en albumentations)
+            hsv_h=0.02,
+            hsv_s=0.7,
+            hsv_v=0.45,
+            mosaic=1.0,
+            close_mosaic=10,
+            cos_lr=True,
+        )
+        save_dir = Path(model.trainer.save_dir)
     best_pt = save_dir / "weights" / "best.pt"
     if not best_pt.is_file():
         raise SystemExit(f"No se encontró {best_pt}")

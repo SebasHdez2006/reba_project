@@ -153,8 +153,16 @@ Scripts del pipeline: `train_outdoor.py` (entrena+exporta), `evaluate_outdoor.py
 ```
 REBA/
 ├── README.md                 ← este archivo
+├── PROGRESO.md               ← bitácora de sesiones y estado del proyecto
 ├── .env.example              ← plantilla de configuración del servidor
 ├── requirements.txt
+├── campo.bat                 ← arranque campo: server + túnel zrok
+├── detener_entrenamiento.bat ← respaldo de pesos + stop seguro del train
+├── retomar.bat               ← retorno: server + túnel zrok + --resume v5 + monitor
+├── setup_zrok.bat            ← setup único del túnel zrok (URL fija gratis)
+├── monitor_entrenamiento.bat ← launcher del monitor GUI de entrenamiento
+├── tools/
+│   └── zrok_tunnel.ps1       ← lanza el share zrok headless (reservado/efímero)
 ├── docs/
 │   ├── manual_implementacion.md ← implementación E2E (hardware→campo)
 │   ├── manual_uso.md         ← operación del dashboard
@@ -176,7 +184,9 @@ REBA/
 │   ├── dataset_builder.py
 │   ├── outdoor_transforms.py ← augmentations de intemperie
 │   ├── build_outdoor_eval.py ← eval set degradado
-│   ├── train_outdoor.py      ← entrenamiento actual (sintético+TACO)
+│   ├── train_outdoor.py      ← entrenamiento actual (sintético+TACO+EcoSort+FloatWaste+copy-paste)
+│   ├── train_monitor.py      ← monitor GUI del entrenamiento (métricas+telemetría HW)
+│   ├── val_snapshot.py       ← val por clase → JSON (lo usa el monitor)
 │   ├── evaluate_outdoor.py   ← comparación de pesos
 │   ├── eval_upload_path.py   ← eval por path real /upload
 │   └── tune_confidence.py    ← umbral óptimo de confianza
@@ -187,12 +197,13 @@ REBA/
 │   └── database.py           ← SQLite (captures, detections, pump_events)
 ├── static/
 │   ├── index.html            ← 3 vistas: En vivo / Analítica / Dispositivo
+│   ├── simulador_esp32.html  ← simulador móvil del nodo ESP32-CAM (cámara real)
 │   ├── app.js                ← WS, gráficas canvas, galería, bomba, config remota
 │   ├── styles.css            ← design system oscuro, móvil primero
 │   ├── fonts/                ← Space Grotesk + JetBrains Mono (woff2 locales)
 │   └── favicon.svg
 └── models/
-    └── best.onnx             ← modelo outdoor v2 (train_outdoor.py → ONNX)
+    └── best.onnx             ← modelo actual (train_outdoor.py → ONNX, 3 clases)
 ```
 
 ---
@@ -250,6 +261,8 @@ uvicorn server.main:app --host 0.0.0.0 --port 5000
 ```
 
 Dashboard: [http://localhost:5000](http://localhost:5000)
+
+**Acceso remoto (túnel zrok):** `campo.bat` levanta además un túnel zrok que expone el dashboard como `https://<nombre>.shares.zrok.io` — URL **fija y gratuita** si se reservó con `setup_zrok.bat` (una sola vez; cuenta gratuita en zrok.io, sin dominio). La ESP32 no usa el túnel (HTTP plano en LAN); el túnel es para el celular/dashboard y el simulador `/simulador_esp32.html`. Detalle: [docs/server.md](docs/server.md) §Acceso remoto y [docs/manual_uso.md](docs/manual_uso.md) §1.
 
 Prueba sin hardware (envía una foto cualquiera como si fuera el ESP32):
 

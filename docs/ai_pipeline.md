@@ -189,7 +189,7 @@ Valores normalizados en \[0, 1\].
 
 ## 2. Entrenamiento — `train_outdoor.py`
 
-El entrenamiento oficial es **100% local** con `ai_pipeline/train_outdoor.py` (CPU). Combina el dataset sintético (+boosts de clases raras) con las fuentes reales presentes en `datasets/` — TACO y EcoSort — inyecta augmentations de intemperie vía Albumentations, usa early stopping por mAP50-95 y exporta `models/best.onnx` archivando los pesos previos en `models/archive/`.
+El entrenamiento oficial es **100% local** con `ai_pipeline/train_outdoor.py` (CPU). Combina el dataset sintético (+boosts de clases raras) con las fuentes reales presentes en `datasets/` — TACO, EcoSort, FloatWaste y copy-paste — inyecta augmentations de intemperie vía Albumentations, usa early stopping por mAP50-95 y exporta `models/best.onnx` archivando los pesos previos en `models/archive/`.
 
 ```bash
 python ai_pipeline/train_outdoor.py --epochs 50   # desde la raíz REBA/
@@ -215,8 +215,8 @@ tres herramientas:
 
 | Script | Propósito |
 |--------|-----------|
-| `ai_pipeline/download_taco.py` | Descarga TACO (basura real "in the wild", formato COCO) y lo convierte a YOLO con las 5 clases REBA en `datasets/REBA_taco/`. Soporta `--limit 0` (todo), `--per-class` y `--prioritize-classes` para sesgar la descarga hacia clases escasas; reanuda por `manifest.jsonl`. |
-| `ai_pipeline/download_ecosort.py` | Descarga el dataset **EcoSort** de Hugging Face (`dataset.tar` ~1.5 GB, YOLO de 10 clases ya fusionado de Open Images + TACO + Roboflow) y lo remapea a las 5 clases REBA en `datasets/REBA_ecosort/`. Vidrio/cartón/papel quedan como fondo. `--limit`/`--val-limit`/`--seed` para subconjunto determinista; `--tar-file` reutiliza un tar local. |
+| `ai_pipeline/download_taco.py` | Descarga TACO (basura real "in the wild", formato COCO) y lo convierte a YOLO con las 3 clases REBA en `datasets/REBA_taco/`. Soporta `--limit 0` (todo), `--per-class` y `--prioritize-classes` para sesgar la descarga hacia clases escasas; reanuda por `manifest.jsonl`. |
+| `ai_pipeline/download_ecosort.py` | Descarga el dataset **EcoSort** de Hugging Face (`dataset.tar` ~1.5 GB, YOLO de 10 clases ya fusionado de Open Images + TACO + Roboflow) y lo remapea a las 3 clases REBA en `datasets/REBA_ecosort/`. Vidrio/cartón/papel quedan como fondo. `--limit`/`--val-limit`/`--seed` para subconjunto determinista; `--tar-file` reutiliza un tar local. |
 | `ai_pipeline/download_floatwaste.py` | Descarga **FloatWaste** (HF `OliviaWuYJ/sc-floatwaste`, CC BY 4.0 — 7,906 imgs de superficie de río, COCO). Remapea 25 categorías → REBA en `datasets/REBA_floatwaste/` (train priorizado a clases raras + `--negatives` de agua limpia) y **todo el split val → `datasets/REBA_real_val/`** = set de validación real acuático que NUNCA entra a entrenamiento. Re-encodea a JPEG ≤1600px. |
 | `ai_pipeline/generate_copypaste_dataset.py` | Genera `datasets/REBA_copypaste/` (~600 imgs): recorta instancias reales de todos los `REBA_*` y las pega sobre fondos de agua con escala/rotación/jitter/submersión parcial. |
 | `ai_pipeline/dedup_audit.py` | Auditoría de near-duplicados perceptuales (dHash 64-bit, Hamming≤6) entre todos los `REBA_*` → `reports/dedup_report.json`. Detecta fugas train↔val/test. |
@@ -227,6 +227,8 @@ tres herramientas:
 | `ai_pipeline/evaluate_outdoor.py` | Compara pesos previos (`models/archive/best_*.pt`) vs. nuevos en clean/outdoor/TACO/**real_water** (`REBA_real_val` — FloatWaste val limpio de fugas) y escribe `outdoor_training_report.md`. |
 | `ai_pipeline/eval_upload_path.py` | Evalúa el **path de producción real**: sube imágenes a `POST /upload` del server y compara detecciones contra ground-truth YOLO → `eval_upload_report.json`. |
 | `ai_pipeline/tune_confidence.py` | Barre `conf` sobre el conjunto difícil y recomienda `INFERENCE_CONFIDENCE` (máx. F1). |
+| `ai_pipeline/train_monitor.py` | Monitor GUI (tkinter) de solo lectura: épocas, losses, LR, mAP, métricas por clase, telemetría de hardware Windows y ETAs — ver §2c. |
+| `ai_pipeline/val_snapshot.py` | `model.val()` sobre `weights/last.pt` → JSON por clase (P/R/mAP/img/inst) + `speed` (ms/img). Lo invoca el monitor una vez por época vía subprocess. |
 
 ### Aumentación outdoor
 
@@ -326,6 +328,42 @@ registrar una fuente nueva.
 
 `train_outdoor.py` archiva los pesos previos en `models/archive/` antes de
 sobrescribir, así `evaluate_outdoor.py` siempre tiene baseline.
+
+---
+
+## 2c. Monitoreo del entrenamiento — `train_monitor.py`
+
+Monitor GUI (tkinter, **solo lectura** — nunca toca el proceso de
+entrenamiento) que funciona para cualquier run de Ultralytics. Fuentes:
+`results.csv`, `args.yaml` y `val_snapshot.json` del run, más telemetría
+del SO vía `psutil` y PowerShell CIM.
+
+```bash
+python ai_pipeline/train_monitor.py --run REBA_outdoor_v5   # GUI
+python ai_pipeline/train_monitor.py --run REBA_outdoor_v5 --once   # snapshot consola
+monitor_entrenamiento.bat                                  # launcher GUI
+```
+
+| Qué muestra | Fuente |
+|-------------|--------|
+| Época actual, progreso %, ETA por época / a early-stop / total | `results.csv` (`time`, mAP50-95) + `args.yaml` (`epochs`, `patience`) + `create_time` del proceso |
+| iter/s-it y ETA en tiempo real | tqdm del stdout (si el log es accesible; `--log` para ruta explícita) |
+| Ficha de hiperes: `imgsz · batch · optimizer · workers · patience · Mosaic ON/OFF · device` | `args.yaml` (Mosaic se apaga en `epochs - close_mosaic`) |
+| Historial por época: `tBOX tCLS tDFL P R mAP50 mAP50-95 vBOX vCLS vDFL LR` | `results.csv` |
+| Alerta de posible overfitting (≥3 épocas `val/box↑` + `train/box↓`) | derivado de `results.csv` |
+| Mejor modelo destacado (`Época X · mAP50-95 · F1 · P · R`) + `Sin mejora: X / patience` | pico de `metrics/mAP50-95(B)` = el `best.pt` real |
+| Tabla por clase: `Img Inst P R F1 mAP50 mAP50-95` + `Speed` (ms/img → FPS) | `val_snapshot.py` sobre `last.pt` (una vez por época, ~3 min CPU en segundo plano) |
+| Trainer: PID, CPU%, RSS, IO MB/s, hilos, nice, uptime | `psutil.Process` |
+| Hardware (hilo daemon 2 s): freq GHz + %clock, AC/batería, RAM%, swap%, disco R/W MB/s, temp CPU | `psutil` + cadena CIM (`LibreHardwareMonitor` → `OpenHardwareMonitor` → `MSAcpi_ThermalZoneTemperature`); temp `N/D` si no hay sensor |
+
+La ventana tiene scroll con rueda del mouse. Colores semánticos:
+temp >80 °C / RAM-swap >85 % / clock <80 % bajo carga → ámbar-rojo.
+
+**Dependencias:** `psutil` y `pyyaml` (`import yaml`) requeridas;
+`wmi`/`pywin32` opcionales (sin ellas la temperatura usa PowerShell CIM).
+El monitor tolera escrituras concurrentes de Ultralytics
+(`utf-8`/`errors="replace"`, líneas parciales ignoradas) y no compite
+por CPU de forma relevante (~1 val de 60 imágenes cada ~54 min).
 
 ---
 

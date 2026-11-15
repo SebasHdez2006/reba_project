@@ -40,3 +40,4 @@ Desktop.ini
 # Colab / notebooks checkpoints
 .ipynb_checkpoints/
 server.log
+logs/
