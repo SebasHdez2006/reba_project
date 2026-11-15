@@ -452,6 +452,10 @@ class Database:
         # Lo crea POST /api/pump/run; el firmware lo ejecuta una vez y hace
         # ack por POST /api/device/ack. TTL de 10 min al servirse en config.
         "pump_cmd",
+        # URL http:// de un .bin para auto-actualizacion OTA del firmware.
+        # El ESP32 la descarga, la flashea en la particion OTA inactiva y
+        # reinicia. Dedup por NVS "ota_last": la misma URL no re-flashea.
+        "ota_url",
     )
 
     def get_device_config(self) -> Dict[str, str]:

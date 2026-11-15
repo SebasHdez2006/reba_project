@@ -49,6 +49,7 @@ En Arduino IDE: abrir la carpeta `fotos_nc` (el `.ino` debe llevar el nombre de 
 | `pump_seconds` | 1-300 | 10 | Duración del ciclo |
 | `dist_min_cm` / `dist_max_cm` | 0-500, min<max | 0 / 23 | Rango ultrasónico de disparo |
 | `pump_cmd` | `<unix_ts>:<s>` | — | **Solo servidor→ESP32**: comando de bomba manual de un solo uso (ver abajo) |
+| `ota_url` | `http://…` ≤128 | — | **Solo servidor→ESP32**: URL de un `.bin` para auto-actualización OTA (ver abajo). Dedup por NVS `ota_last` |
 
 Validación estricta en `aplicarClaveRemota()`: numéricos con `esEntero`/`esFloat` (rechaza `"3abc"`, `"abc"`, fuera de rango), `server_url` solo `http://` con host, longitudes WiFi. El comando serie `SET` reporta `aplicado`/`rechazada` real.
 
@@ -90,12 +91,49 @@ También funciona por serie: `SET pump_cmd=<ts>:<s>` (uso típico: pruebas de ba
 
 ```text
 HELP     → lista de comandos
-GET      → wifi_ssid, wifi_pass, server_url, pump_*, dist_*
-SET k=v  → aplica clave (mismas validaciones que la remota)
+GET      → wifi_ssid, wifi_pass, server_url, pump_*, dist_*, ota_last
+SET k=v  → aplica clave (mismas validaciones que la remota; acepta ota_url)
 CAPTURE  → foto manual (flash + cola + upload + contador bomba)
 STATUS   → uptime, boots, heap, cámara, WiFi, cola, bomba, distancia
+OTA      → auto-actualización: descarga {server_url}/firmware.bin y reflashea
+OTA http://IP:5000/x.bin → idem con URL explícita
 REBOOT   → reinicio inmediato
 ```
+
+## OTA (auto-actualización de firmware)
+
+El sketch puede **reflashearse solo** descargando un `.bin` por HTTP plano
+— sin USB, sin TLS, sin `HTTPClient.h` (usa `WiFiClient` + `Update`, igual
+que el resto del firmware).
+
+- **Requisito de placa**: partition scheme **con OTA**. La placa
+  `esp32cam` trae por defecto `huge_app` (3 MB, **sin OTA**) → compilar
+  con `PartitionScheme=min_spiffs` ("Minimal SPIFFS 1.9MB APP with OTA")
+  o en Arduino IDE: *Tools → Partition Scheme → Minimal SPIFFS
+  (1.9MB APP with OTA/128KB SPIFFS)*. El repartition **conserva NVS**
+  (mismas credenciales WiFi) — verificado en `tools/partitions/*.csv`.
+- **Disparo**:
+  - Serie: `OTA` (usa `{server_url}/firmware.bin`) u `OTA <url>`.
+  - Remoto: override `ota_url=http://…` en *Dashboard → Dispositivo* →
+    el ESP32 lo recoge en el próximo poll (≤60 s), descarga, flashea la
+    partición inactiva y reinicia.
+- **Dedup**: NVS `ota_last` guarda la última URL aplicada — el server
+  puede dejar `ota_url` puesta sin re-flashear.
+  Para forzar re-update, cambia la URL (p.ej. `?v=2`) o usa `OTA` por serie.
+- **Binario**: el server lo sirve en `GET /firmware.bin` desde
+  `firmware/fotos_nc.bin` (compilar con `arduino-cli`, ver abajo). Los
+  artefactos de flasheo USB también están en `/firmware/` (bootloader,
+  partitions).
+- **Seguridad**: `Update.end()` estricto — descarga truncada aborta y la
+  app actual queda intacta. Si el bin nuevo no bootea **no hay rollback
+  automático**: recovery = reflashear por USB.
+- Durante la descarga (~1-2 min) el loop se pausa: sin captura ni bomba.
+- **Compilar el .bin**:
+  ```bash
+  arduino-cli compile --fqbn "esp32:esp32:esp32cam:PartitionScheme=min_spiffs" \
+    --export-binaries --output-dir build esp32_firmware/fotos_nc
+  # -> build/fotos_nc.ino.bin  ==  firmware/fotos_nc.bin (imagen OTA)
+  ```
 
 Salida típica de boot sano:
 

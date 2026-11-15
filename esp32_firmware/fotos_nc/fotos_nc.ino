@@ -33,6 +33,11 @@
 //    WiFi, URL del servidor, umbrales y parámetros de la bomba.
 //  - Si el WiFi guardado deja de funcionar ~10 min (cambiaste de red),
 //    el AP "REBA-Setup" se reactiva solo para reconfigurar.
+//  - OTA: el sketch puede auto-actualizarse descargando un .bin por HTTP
+//    plano (ver sección "OTA" más abajo). Requiere partition scheme CON
+//    OTA: en Arduino IDE → Tools → Partition Scheme → "Minimal SPIFFS
+//    (1.9MB APP with OTA/128KB SPIFFS)". Disparo: serie `OTA` o clave
+//    remota `ota_url` desde el dashboard.
 //
 // Bomba en NC (normalmente cerrado): COM = 12V del boost, bomba + en NC.
 //    relé ACTIVO (clic, LED verde)  -> bomba APAGADA
@@ -46,6 +51,7 @@
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <Preferences.h>
+#include <Update.h>
 // NOTA: HTTPClient.h está PROHIBIDO en este firmware — enlaza
 // WiFiClientSecure/mbedTLS cuyo init estático provoca FB-OVF permanente
 // en el driver de cámara (verificado en banco: con HTTPClient la cámara
@@ -153,6 +159,12 @@ int            cmdBombaSecs      = 0;
 bool           bombaManualActiva = false;
 unsigned long  bombaManualFin    = 0;   // millis() deadline (wrap-safe)
 
+// --- OTA (auto-actualización por HTTP plano) ---
+// otaUrlPendiente: URL .bin esperando ser flasheada (serie `OTA` o clave
+// remota ota_url). otaReintentoEn: backoff RTC tras un intento fallido.
+RTC_DATA_ATTR unsigned long otaReintentoEn = 0;
+String         otaUrlPendiente;
+
 // WiFiManager se crea SOLO cuando se abre el portal de configuración.
 // Como global consumía ~45KB de heap desde el arranque y la cámara
 // (que necesita ~250KB contiguos) no inicializaba en esta placa.
@@ -163,6 +175,10 @@ WiFiManagerParameter*  pSrvP = nullptr;
 int httpSimple(const String& method, const String& url,
                const char* headersExtra, const uint8_t* body, size_t bodyLen,
                String* respBody, unsigned long timeoutMs);
+
+// Definida más abajo (sección OTA); la usa aplicarClaveRemota() y el
+// comando serie SET ota_url.
+bool otaUrlValida(const String& u);
 
 // Clamp de valores leídos de NVS: una clave corrupta no debe dejar el
 // dispositivo en un estado inválido (p.ej. pump_photos=0 o dist_max=-5).
@@ -408,6 +424,24 @@ bool aplicarClaveRemota(const String& clave, const String& valor) {
     cmdBombaSecs = secs;
     cmdBombaPendiente = true;
     Serial.printf("Cmd bomba pendiente: id=%lu %ds\n", cmdBombaId, cmdBombaSecs);
+    return true;
+  }
+  else if (clave == "ota_url") {
+    // URL .bin para auto-actualizacion (OTA por HTTP plano). Dedup por
+    // NVS "ota_last": si ya se aplico esta URL no se re-flashea en cada
+    // poll — el server puede dejar la clave puesta sin efecto.
+    String v = valor;
+    while (v.endsWith("/")) v.remove(v.length() - 1);
+    if (!otaUrlValida(v)) {
+      Serial.println("ota_url rechazada (debe ser http:// <=128 chars)");
+      return false;
+    }
+    prefs.begin("reba", true);
+    String last = prefs.getString("ota_last", "");
+    prefs.end();
+    if (last == v) return true;                  // ya aplicada: no-op
+    otaUrlPendiente = v;
+    Serial.printf("OTA remoto pendiente: %s\n", v.c_str());
     return true;
   }
   return false;   // clave desconocida
@@ -906,6 +940,150 @@ void colaEnviar() {
 }
 
 // ============================================================
+// OTA: auto-actualización por HTTP plano (sin TLS, sin HTTPClient)
+// ============================================================
+// Descarga un .bin desde una URL http:// y lo escribe en la partición
+// OTA inactiva con Update (flash directo, no necesita heap grande).
+// Requiere partition scheme CON OTA (no huge_app): "Minimal SPIFFS
+// (1.9MB APP with OTA/128KB SPIFFS)" en Arduino IDE.
+//   Disparo serie:  OTA              -> {srvBase}/firmware.bin
+//                   OTA http://IP:5000/otro.bin
+//   Disparo remoto: clave ota_url=http://... en /api/device/config
+//                   (dedup NVS "ota_last": no re-flashea la misma URL).
+// Seguridad: Update.end() estricto — una descarga truncada aborta y la
+// app actual queda intacta. Si el bin nuevo no bootea, recovery =
+// reflashear por USB (OTA no tiene rollback automático en este core).
+// Durante la descarga el loop() se pausa ~1-2 min (mantenimiento).
+// ============================================================
+
+bool otaUrlValida(const String& u) {
+  return u.length() > 7 && u.length() <= 128 &&
+         u.startsWith("http://") && u.indexOf(' ') < 0;
+}
+
+// Devuelve true si el flash terminó OK (reinicia solo). false = fallo
+// (Update.abort() ya llamado; la app actual sigue intacta).
+bool otaDescargarYFlashear(const String& url, unsigned long timeoutMs) {
+  if (!asegurarWiFi()) { Serial.println("OTA: sin WiFi"); return false; }
+  String host, path;
+  uint16_t port;
+  if (!parseHttpUrl(url, host, port, path)) {
+    Serial.println("OTA: URL invalida (debe ser http://)");
+    return false;
+  }
+
+  WiFiClient c;
+  c.setConnectionTimeout(8000);
+  if (c.connect(host.c_str(), port) != 1) {
+    c.stop(); Serial.println("OTA: no se pudo conectar"); return false;
+  }
+  c.printf("GET %s HTTP/1.1\r\n", path.c_str());
+  c.printf("Host: %s\r\n", host.c_str());
+  c.print("Connection: close\r\n");
+  c.print("User-Agent: REBA-ESP32\r\n");
+  c.print("Accept: application/octet-stream\r\n");
+  c.print("\r\n");
+
+  unsigned long deadline = millis() + timeoutMs;
+  String line;
+
+  // Status line
+  int status = -1;
+  while (millis() < deadline) {
+    if (c.available() > 0) {
+      line = c.readStringUntil('\n'); line.trim();
+      if (line.length() > 0) {
+        int sp = line.indexOf(' ');
+        if (sp > 0) status = line.substring(sp + 1, sp + 4).toInt();
+        break;
+      }
+    } else if (!c.connected()) break;
+    else delay(1);
+  }
+  if (status != 200) {
+    c.stop();
+    Serial.printf("OTA: HTTP %d\n", status);
+    return false;
+  }
+
+  // Headers: capturar Content-Length si viene (0 = desconocido/chunked)
+  size_t contentLen = 0;
+  while (millis() < deadline) {
+    if (c.available() > 0) {
+      line = c.readStringUntil('\n'); line.trim();
+      if (line.length() == 0) break;
+      int cl = line.indexOf(':');
+      if (cl > 0 && line.substring(0, cl).equalsIgnoreCase("Content-Length")) {
+        contentLen = (size_t)line.substring(cl + 1).toInt();
+      }
+    } else if (!c.connected()) break;
+    else delay(1);
+  }
+
+  if (!Update.begin(contentLen ? contentLen : UPDATE_SIZE_UNKNOWN)) {
+    c.stop();
+    Serial.printf("OTA: Update.begin fallo (%s)\n", Update.errorString());
+    return false;
+  }
+
+  // Stream del cuerpo -> flash. Watchdog de 15 s sin datos = abortar.
+  uint8_t buf[1024];
+  size_t total = 0, ultimoMb = 0;
+  unsigned long ultimoDato = millis();
+  bool ok = true;
+  while (c.connected() && millis() < deadline) {
+    int avail = c.available();
+    if (avail > 0) {
+      int leido = c.read(buf, sizeof(buf));
+      if (leido > 0) {
+        if (Update.write(buf, leido) != (size_t)leido) { ok = false; break; }
+        total += leido;
+        ultimoDato = millis();
+        if (total - ultimoMb >= 262144) {          // progreso cada 256 KB
+          ultimoMb = total;
+          Serial.printf("OTA: %u KB...\n", (unsigned)(total / 1024));
+        }
+      }
+    } else {
+      if (millis() - ultimoDato > 15000) { ok = false; break; }
+      delay(1);
+    }
+  }
+  c.stop();
+
+  if (!ok || !Update.end()) {                     // end() estricto: tamano exacto
+    Update.abort();
+    Serial.printf("OTA: descarga/integridad fallo (%s) tras %u bytes\n",
+                  Update.errorString(), (unsigned)total);
+    return false;
+  }
+
+  // Flash OK: marcar URL como aplicada (dedup de ota_url remoto) y reboot.
+  guardarClave("ota_last", url);
+  Serial.printf("OTA: flash OK (%u bytes). Reiniciando en 1 s...\n",
+                (unsigned)total);
+  delay(1000);
+  ESP.restart();
+  return true;                                    // no llega (restart)
+}
+
+// Procesa otaUrlPendiente (config remota). Backoff 10 min tras fallo:
+// la clave sigue en el server, asi que el proximo poll la re-encola —
+// el gate de tiempo evita martillear una URL muerta cada 60 s.
+void aplicarOtaPendiente() {
+  if (otaUrlPendiente.length() == 0) return;
+  if (!otaUrlValida(otaUrlPendiente)) { otaUrlPendiente = ""; return; }
+  if ((long)(millis() - otaReintentoEn) < 0) return;   // backoff activo
+  String url = otaUrlPendiente;
+  otaUrlPendiente = "";
+  Serial.printf("OTA remoto: descargando %s\n", url.c_str());
+  if (!otaDescargarYFlashear(url, 180000)) {
+    otaReintentoEn = millis() + 600000;
+    Serial.println("OTA fallo; reintento en 10 min");
+  }
+}
+
+// ============================================================
 // Foto con flash corto
 // ============================================================
 bool tomarFoto() {
@@ -1065,13 +1243,20 @@ void ejecutarComandoSerial(String cmd) {
     Serial.println(F("  SET pump_photos=N pump_seconds=N dist_min_cm=F dist_max_cm=F"));
     Serial.println(F("  CAPTURE   (foto manual: flash + cola + upload + contador bomba)"));
     Serial.println(F("  STATUS    (diagnostico: heap, camara, wifi, cola, sensor)"));
+    Serial.println(F("  OTA       (actualizacion de firmware: {server_url}/firmware.bin)"));
+    Serial.println(F("  OTA http://IP:5000/otro.bin   (URL explicita)"));
     Serial.println(F("  REBOOT"));
   }
   else if (op == "GET") {
+    prefs.begin("reba", true);
+    String otaLast = prefs.getString("ota_last", "-");
+    prefs.end();
     Serial.printf("wifi_ssid=%s\nwifi_pass=%s\nserver_url=%s\n"
-                  "pump_photos=%d\npump_seconds=%d\ndist_min_cm=%.1f\ndist_max_cm=%.1f\n",
+                  "pump_photos=%d\npump_seconds=%d\ndist_min_cm=%.1f\ndist_max_cm=%.1f\n"
+                  "ota_last=%s\n",
                   wifiSsid.c_str(), wifiPass.c_str(), srvBase.c_str(),
-                  pumpPhotos, pumpSeconds, distMinCm, distMaxCm);
+                  pumpPhotos, pumpSeconds, distMinCm, distMaxCm,
+                  otaLast.c_str());
   }
   else if (op == "STATUS") {
     Serial.printf("uptime=%lus boots=%lu heap=%u/%u\n",
@@ -1093,7 +1278,8 @@ void ejecutarComandoSerial(String cmd) {
     String valor = resto.substring(eq + 1); valor.trim();
     static const char* permitidas[] = {
       "wifi_ssid", "wifi_pass", "server_url",
-      "pump_photos", "pump_seconds", "dist_min_cm", "dist_max_cm"
+      "pump_photos", "pump_seconds", "dist_min_cm", "dist_max_cm",
+      "ota_url"
     };
     bool ok = false;
     for (const char* k : permitidas) if (clave == k) { ok = true; break; }
@@ -1106,6 +1292,17 @@ void ejecutarComandoSerial(String cmd) {
   else if (op == "CAPTURE") {
     Serial.println("CAPTURE manual por USB...");
     ingresoDetectado();
+  }
+  else if (op == "OTA") {
+    // Manual: fuerza la actualizacion (ignora dedup ota_last).
+    // `OTA` solo -> {srvBase}/firmware.bin ; `OTA <url>` -> URL explicita.
+    String url = (resto.length() > 0) ? resto : (srvBase + "/firmware.bin");
+    if (!otaUrlValida(url)) {
+      Serial.println("OTA: URL invalida (usa http://...)"); return;
+    }
+    if (!asegurarWiFi()) { Serial.println("OTA: sin WiFi"); return; }
+    Serial.printf("OTA manual: %s\n", url.c_str());
+    otaDescargarYFlashear(url, 180000);
   }
   else if (op == "REBOOT") {
     Serial.println("Reiniciando...");
@@ -1164,6 +1361,7 @@ void loop() {
   revisarReversionSrv();
   procesarSerial();
   procesarCmdBomba();
+  aplicarOtaPendiente();
 
   // Apagado de la bomba manual al cumplirse el plazo (wrap-safe).
   if (bombaManualActiva && (long)(ahora - bombaManualFin) >= 0) {

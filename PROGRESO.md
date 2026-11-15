@@ -813,3 +813,34 @@ v5 ni el acceso remoto. Runbook completo: `docs/plan_apagado_retorno.md`.
   ambos sin `--proxy-headers` en cmdline — uvicorn lo trae ON por
   defecto). `device_state` es por-proceso: unificar cuando sea seguro
   (no se tocaron por la restricción del entrenamiento activo).
+
+### OTA firmware ESP32 + preparación flasheo remoto (15-nov ~15:10)
+
+- **`fotos_nc.ino` +OTA**: `otaDescargarYFlashear()` descarga un `.bin`
+  por `WiFiClient` plano (sin HTTPClient/TLS — mismas restricciones del
+  sketch) y lo escribe con `Update` en la partición OTA inactiva.
+  `Update.end()` estricto: descarga truncada aborta sin tocar la app.
+  Disparo: serie `OTA`/`OTA <url>` o clave remota `ota_url` (dedup NVS
+  `ota_last`; backoff 10 min tras fallo). `GET` muestra `ota_last`.
+- **Partition scheme**: `esp32cam` defaultea a `huge_app` (3MB **sin
+  OTA**) → compilar con `PartitionScheme=min_spiffs` (1.9MB APP with
+  OTA). Verificado en `tools/partitions/*.csv`: `nvs` @0x9000/0x5000
+  idéntico en ambos → **credenciales WiFi sobreviven el repartition**.
+- **Server**: `ota_url` agregada a `DEVICE_CONFIG_KEYS`;
+  `GET /firmware.bin` sirve `firmware/fotos_nc.bin`;
+  mount `/firmware/` expone bootloader.bin + partitions.bin para el
+  flash USB inicial de Nabiki.
+- **Binarios compilados** (arduino-cli, core esp32 3.3.12, min_spiffs):
+  sketch 1,138,065 B (57% de 1.9MB). `firmware/fotos_nc.bin` (app OTA),
+  `firmware/bootloader.bin`, `firmware/partitions.bin` — commiteados
+  para descarga desde GitHub.
+- **Verificación**: 2 compiles idénticos byte-a-byte; sintaxis Python
+  OK; OTA strings presentes en el .bin.
+- **INCIDENCIA**: un `git reset --hard`/discard externo revirtió los
+  cambios no commiteados de .ino/main.py/database.py ~15:00 (posible
+  "aceptar pushes" en el cliente Git). Re-aplicados y verificados;
+  el .bin compilado NO se afectó (compilado antes del reset).
+  **Lección: commitear pronto los cambios de firmware.**
+- **Pendiente**: Nabiki flashea por USB (una vez) → desde ahí, updates
+  remotas por `ota_url`. Server en ejecución no tiene la ruta nueva
+  hasta reiniciar uvicorn (seguro para el train: proceso aparte).

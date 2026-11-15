@@ -394,6 +394,22 @@ async def get_config():
     return settings.public_dict()
 
 
+@app.get("/firmware.bin")
+async def firmware_bin():
+    """
+    Binario OTA para la ESP32-CAM (fotos_nc).
+
+    Lo consume el comando serie `OTA` del firmware y la clave remota
+    `ota_url` (GET /api/device/config -> {srvBase}/firmware.bin).
+    Se compila con partition scheme "Minimal SPIFFS (1.9MB APP with OTA)".
+    """
+    fw = PROJECT_ROOT / "firmware" / "fotos_nc.bin"
+    if not fw.is_file():
+        raise HTTPException(status_code=404, detail="Firmware no compilado aun")
+    return FileResponse(fw, media_type="application/octet-stream",
+                        filename="fotos_nc.bin")
+
+
 # ---------------------------------------------------------------------------
 # Configuración del dispositivo ESP32 (la consulta en su arranque y cada minuto)
 # ---------------------------------------------------------------------------
@@ -707,6 +723,14 @@ async def websocket_endpoint(ws: WebSocket):
 # ---------------------------------------------------------------------------
 # Static dashboard (montar al final para no sombrear /api ni /upload)
 # ---------------------------------------------------------------------------
+
+# Binarios para flasheo USB de la ESP32 (bootloader/partitions/fotos_nc.bin).
+# La ESP32 los descarga por HTTP plano; tambien sirven para provisioning
+# presencial via esptool/web-flasher. Antes del mount "/" para que gane.
+firmware_dir = PROJECT_ROOT / "firmware"
+if firmware_dir.is_dir():
+    app.mount("/firmware", StaticFiles(directory=str(firmware_dir)),
+              name="firmware")
 
 static_dir = settings.static_dir
 if static_dir.is_dir():

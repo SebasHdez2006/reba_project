@@ -95,6 +95,16 @@ El lanzador real es `tools/zrok_tunnel.ps1` (lo invocan los `.bat`):
 | `ZROK_RESERVED_NAME` | *(vacío)* | Nombre fijo del share zrok (`https://<nombre>.shares.zrok.io`); lo escribe `setup_zrok.bat`. Vacío = share efímero |
 | `ZROK_TARGET_URL` | `http://127.0.0.1:5000` | Objetivo local del túnel (informativo para `tools/zrok_tunnel.ps1`) |
 
+### Firmware OTA
+
+- `GET /firmware.bin` → sirve `firmware/fotos_nc.bin` (imagen de la app
+  para la partición OTA; 404 si no está compilada).
+- `GET /firmware/*` → mount estático del directorio `firmware/` con los
+  artefactos de flasheo USB (`bootloader.bin`, `partitions.bin`,
+  `fotos_nc.bin`) — descargables por HTTP plano para provisioning.
+- Clave remota `ota_url` (en `DEVICE_CONFIG_KEYS`): el ESP32 la recoge en
+  `/api/device/config` y auto-actualiza (ver `docs/firmware.md` → OTA).
+
 La carga se hace en `server/config.py` (Pydantic Settings). Tras editar `.env`, reinicia uvicorn.
 
 ---
