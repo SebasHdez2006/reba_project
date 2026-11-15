@@ -44,7 +44,7 @@ En Arduino IDE: abrir la carpeta `fotos_nc` (el `.ino` debe llevar el nombre de 
 | Clave | Rango | Default | Notas |
 |-------|-------|---------|-------|
 | `wifi_ssid` / `wifi_pass` | ssid 1-32, pass ≤63 | — | pass vacío = red abierta. Cambio remoto lleva backup y **revierte solo en 90 s** si no conecta |
-| `server_url` | `http://…` ≤96 chars | `http://192.168.137.1:5000` | Sin https. Backup y **revierte en 6 min** si no responde |
+| `server_url` | `http://…` ≤96 chars | `http://192.168.137.1:5000` | Sin https. Acepta dominios/LAN (p.ej. `http://<IP-PC>:5000`). **No** acepta el túnel zrok (solo HTTPS). Backup y **revierte en 6 min** si no responde |
 | `pump_photos` | 1-50 | 3 | Fotos por ciclo de bomba |
 | `pump_seconds` | 1-300 | 10 | Duración del ciclo |
 | `dist_min_cm` / `dist_max_cm` | 0-500, min<max | 0 / 23 | Rango ultrasónico de disparo |
@@ -66,7 +66,7 @@ ingresoDetectado(): flash 150 ms → tomarFoto() → cola → POST /upload
 ```
 
 - **Cola en RAM** (`MAX_COLA=6`): si el upload falla queda pendiente y reintenta cada 15 s; se descarta en HTTP 4xx o ≥25 intentos (anti poison-pill). **Un reboot pierde la cola** (evidencia transitoria).
-- **HTTP plano** (`httpSimple` con `WiFiClient`): sin `HTTPClient.h`/mbedTLS — ahorra ~122 KB flash y evita problemas de heap estático. Body de respuesta cap 4 KB, loops verifican `connected()`.
+- **HTTP plano** (`httpSimple` con `WiFiClient`): sin `HTTPClient.h`/mbedTLS — ahorra ~122 KB flash y evita problemas de heap estático. **TLS prohibido por hardware**: `WiFiClientSecure`/mbedTLS provoca FB-OVF permanente en el driver de cámara ("init OK pero sin frames"), verificado en banco — por eso `server_url` solo acepta `http://` y las URLs `https://` (zrok) se rechazan a propósito. Body de respuesta cap 4 KB, loops verifican `connected()`.
 - **Cámara**: QVGA JPEG en **DRAM** (`frame_size=6`). `camera_config_t` **debe** ser `= {}` (campos no asignados como `sccb_freq`/`dma_half` quedaban con basura de stack → "init OK pero sin frames" / FB-OVF). `iniciarCamara()` reintenta `fb_get` antes de `deinit`; health check silencioso cada 15 min + re-init de cámara tras 3 fallos.
 - **PSRAM defectuoso en esta placa**: `psramFound()=1` pero `ps_malloc` falla → todo el framebuffer va a DRAM. No depender de PSRAM.
 
@@ -150,6 +150,7 @@ Todos los deadlines usan `(long)(millis() - deadline) < 0` — **seguro ante el 
 | `init OK pero sin frames` / FB-OVF | Verificar `camera_config_t config = {}` en `configCamara()`; alimentación 5 V |
 | No conecta Wi-Fi | SSID/pass en NVS (`GET`), red **2.4 GHz**, `STATUS` → `wifi=` |
 | Cola crece sin enviar | `server_url` correcto, PC alcanzable, firewall puerto 5000 |
+| `server_url` dejó de responder | La PC cambió de IP o el hotspot se reinició → reconfigurar `server_url` (portal `REBA-Setup` si el dispositivo no alcanza otra red). El ESP32 **no puede** descubrir la IP nueva solo. (El túnel zrok no aplica: es solo HTTPS para el dashboard) |
 | `SET` dice "rechazada" | Valor fuera de rango/formato — ver tabla de claves |
 | Bomba no responde a comando manual | `GET /api/pump/events` → `pending_cmd`; ESP32 online (`device.online` en dashboard); ack perdido → TTL 10 min |
 | Distancia siempre -1 | HC-SR04 cableado (TRIG 14 / ECHO 15 con divisor / 5 V), objeto a <4 m |

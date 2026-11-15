@@ -170,11 +170,10 @@ def process_image(client: httpx.Client, img: dict, out_root: Path, split: str,
 
 def write_dataset_yaml(out_root: Path, split_dirs: list[str]) -> None:
     names_yaml = "\n".join(f"  {i}: {n}" for i, n in enumerate(CLASS_NAMES))
-    paths = "\n".join(f"  {s}: images/{s}" for s in split_dirs)
+    splits_yaml = "\n".join(f"{s}: images/{s}" for s in split_dirs)
     (out_root / "data.yaml").write_text(
         f"path: {out_root.as_posix()}\n"
-        f"train:\n{paths}\n"
-        f"val:\n  val: images/val\n"
+        f"{splits_yaml}\n"
         f"names:\n{names_yaml}\n",
         encoding="utf-8",
     )

@@ -63,6 +63,14 @@ class Settings(BaseSettings):
     # en operación continua de campo.
     capture_retention: int = Field(default=2000, ge=0)
 
+    # --- Túnel zrok (informativo: lo usan los .bat / tools\zrok_tunnel.ps1) ---
+    # Nombre reservado del share público (URL fija https://<nombre>.shares.zrok.io).
+    # Vacío = share efímero. Se configura con setup_zrok.bat.
+    zrok_reserved_name: str = Field(default="")
+    # Objetivo local del túnel (uvicorn). La ESP32 NO usa el túnel: habla
+    # HTTP plano directo con HOST:PORT en la LAN/hotspot.
+    zrok_target_url: str = Field(default="http://127.0.0.1:5000")
+
     @property
     def class_list(self) -> List[str]:
         """Lista de nombres de clase en orden de class_id."""

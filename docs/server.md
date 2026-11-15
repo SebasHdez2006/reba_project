@@ -40,6 +40,42 @@ python -m server.main
 
 > El puerto **debe coincidir** con `SERVIDOR_URL` del firmware (`http://<IP_PC>:<PORT>/upload`).
 
+### Acceso remoto (túnel zrok)
+
+Para alcanzar el servidor desde otra red — dashboard del celular, simulador
+ESP32 — se usa **zrok** (openziti/zrok, gratis en zrok.io):
+
+```bat
+setup_zrok.bat   :: una sola vez: cuenta + reserva de nombre
+campo.bat        :: levanta uvicorn + tunel (ventana REBA-Tunnel)
+```
+
+El lanzador real es `tools/zrok_tunnel.ps1` (lo invocan los `.bat`):
+
+- **Con `ZROK_RESERVED_NAME` en `.env`** → share **reservado**: URL fija
+  `https://<nombre>.shares.zrok.io` entre reinicios, sin comprar dominio.
+- **Sin reserva** → share **efímero**: URL nueva por arranque
+  (`logs/tunnel.log` y `logs/zrok_url.txt`). Si el reservado falla al
+  arrancar, cae al efímero automáticamente.
+- Detecta `zrok` (v1: `share reserved`) o `zrok2` (v2: `share public -n
+  public:<nombre>`) en el PATH — ambos soportados.
+- HTTPS + `wss://` automáticos para el dashboard; uvicorn corre con
+  `--proxy-headers --forwarded-allow-ips=*` para aceptar los headers del
+  proxy (IP real del cliente en `device.ip`).
+- **Ojo**: `device.online`/`device.ip` en `/api/health` reflejan al
+  **último cliente que consultó `/api/device/config`** — el simulador web
+  (`/simulador_esp32.html`) usa los mismos endpoints, así que su polling
+  también "enciende" el heartbeat. Un `EN LÍNEA` puede ser el simulador,
+  no necesariamente la ESP32 física.
+- **La ESP32 NO usa el túnel**: zrok solo expone HTTPS y el firmware habla
+  HTTP plano → la ESP32 va por LAN/hotspot directo a `HOST:PORT`.
+- Sin auth → tratar la URL como secreta. Free tier: 5 GB/día.
+- *Interstitial page*: cuentas gratuitas sin verificar muestran un aviso
+  anti-phishing ~1 vez/semana **solo a navegadores** (UA `Mozilla/*`); la
+  ESP32 (`REBA-ESP32`) y clientes HTTP la evitan.
+- Detalles y alternativas evaluadas: `docs/manual_uso.md` §1,
+  `docs/componentes.md` §Acceso.
+
 ---
 
 ## Variables de entorno (`.env`)
@@ -56,6 +92,8 @@ python -m server.main
 | `DETECT_MIN_CM` / `DETECT_MAX_CM` | `0` / `23` | Rango ultrasónico del firmware (display) |
 | `CAPTURE_RETENTION` | `2000` | Máx. capturas en SQLite; poda horaria de las más viejas (`0` = sin poda) |
 | `DATABASE_PATH` | `data/REBA.db` | SQLite |
+| `ZROK_RESERVED_NAME` | *(vacío)* | Nombre fijo del share zrok (`https://<nombre>.shares.zrok.io`); lo escribe `setup_zrok.bat`. Vacío = share efímero |
+| `ZROK_TARGET_URL` | `http://127.0.0.1:5000` | Objetivo local del túnel (informativo para `tools/zrok_tunnel.ps1`) |
 
 La carga se hace en `server/config.py` (Pydantic Settings). Tras editar `.env`, reinicia uvicorn.
 
@@ -271,7 +309,10 @@ La retención (`CAPTURE_RETENTION`, default 2000) poda las capturas más viejas 
 | Síntoma | Acción |
 |---------|--------|
 | ESP32 reintenta siempre | Firewall de Windows: permite el puerto 5000; verifica IP en `SERVIDOR_URL` |
-| Inferencia `source: none` | Coloca `models/best.onnx` |
+| Inferencia `source: none` | Coloca `models/best.onnx` válido para `CLASS_NAMES` (el engine rechaza ONNX con nº de clases distinto) |
 | `400` en /upload | Body no es JPEG decodificable |
 | Dashboard sin WS | Abre por `localhost:5000` (no file://) |
-| Puerto ocupado | Cambia `PORT` en `.env` **y** `SERVIDOR_URL` en el firmware (reflasheo) |
+| Puerto ocupado | Cambia `PORT` en `.env` **y** `SERVIDOR_URL` en el firmware (reflasheo o config remota) |
+| ESP32 inalcanzable tras reiniciar PC | Verificar IP LAN / `server_url` del ESP32 (el túnel zrok no aplica: es solo HTTPS para el dashboard) |
+| Dashboard no carga por la URL zrok | Comprobar que `REBA-Tunnel` corre y `logs/zrok_url.txt` tiene la URL; share efímero → URL nueva en cada arranque del túnel |
+| `device.online=false` con túnel activo | El ESP32 perdió el server_url viejo o no tiene datos/senal — el ESP32 va por LAN/hotspot, no por el túnel |

@@ -568,3 +568,248 @@ python ai_pipeline/tune_confidence.py       # reajusta INFERENCE_CONFIDENCE
 python -c "from ultralytics import YOLO; YOLO('runs/detect/REBA_outdoor_v5/weights/best.pt').export(format='onnx', opset=12, imgsz=640)"
 python ai_pipeline/eval_upload_path.py      # valida POST /upload real
 ```
+
+## Sesión 11 — Acceso externo + preparación pruebas de campo (14-nov)
+
+### Túnel Cloudflare (acceso desde cualquier red)
+
+- `cloudflared` instalado vía winget (`C:\Program Files (x86)\cloudflared\`).
+  Quick tunnel con `--protocol http2` — QUIC/UDP hace timeout en la red
+  institucional; http2/TCP funciona.
+- **URL activa**: `https://doc-related-wit-isa.trycloudflare.com`
+  - Dashboard/celular: HTTPS (WebSocket `wss://` automático por `location.protocol`).
+  - **ESP32**: `http://doc-related-wit-isa.trycloudflare.com` (puerto 80 plano)
+    — verificado que Cloudflare edge acepta HTTP sin redirect forzado.
+    `parseHttpUrl` del firmware asume puerto 80 sin `:port` → válido
+    (44 chars ≤96, pasa validación `server_url`).
+  - Verificado end-to-end por HTTP plano: `POST /upload` (capture_id=2,
+    detección unicel), `GET /api/device/config`, headers `Content-Length`
+    (compatible con `httpSimple` que lee hasta close).
+- **Advertencia**: la URL cambia si cloudflared se reinicia → el ESP32
+  queda inalcanzable hasta reconfigurar `server_url` (portal REBA-Setup
+  o red alcanzable). NO reiniciar cloudflared una vez desplegado.
+  El firmware tiene respaldo `srv_bak` con reversión ~6 min (`SRV_REVERT_MS`)
+  solo para cambios de URL recibidos por config remota.
+- Descartados para ESP32 (todos HTTPS-only o bloqueados): pinggy (HTTPS +
+  expira 60 min), serveo (redirect HTTPS), localhost.run (HTTP→502),
+  bore.pub (TCP perfecto pero Windows Defender bloquea bore.exe),
+  ngrok TCP (requiere cuenta + tarjeta en free tier).
+
+### Modelo ONNX 3 clases desplegado
+
+- `models/best.onnx` era el export v2 de **5 clases** → el engine lo
+  rechazaba (`backend: none`, "ONNX tiene 5 clases pero CLASS_NAMES
+  declara 3").
+- Exportado `runs/detect/REBA_outdoor_v5/weights/best.pt` (epoch 1,
+  3 clases) → ONNX opset 12 simplify, salida `[1,7,8400]` (12.2 MB).
+  Anterior archivado en `models/archive/best_20261114T165759Z.*`.
+- Servidor reiniciado → `backend: onnx`, `ok: true`. Uploads de prueba
+  OK (capture_id 1 y 2 con detecciones).
+- **Recordatorio**: cuando v5 termine, `train_outdoor.py` exporta solo el
+  ONNX final pero hay que **reiniciar uvicorn** para que el engine lo cargue.
+
+### Infraestructura de campo
+
+- `campo.bat` (raíz): relanza uvicorn + cloudflared con doble clic.
+- `powercfg -change -standby-timeout-ac 0`: suspensión en AC desactivada
+  (monitor puede apagarse a los 15 min sin afectar).
+- `server_url`, `wifi_ssid`, `wifi_pass` son pushables por
+  `POST /api/admin/device-config` — pero solo si el ESP32 YA alcanza el
+  server (poll ~60 s). En intemperie sin Wi-Fi requiere portal REBA-Setup.
+
+### Restricción de campo descubierta
+
+- **No hay Wi-Fi en el sitio de prueba** → el ESP32-CAM necesita una red:
+  hotspot del celular (datos móviles) como fuente. `server_url` para ese
+  escenario: `http://doc-related-wit-isa.trycloudflare.com`.
+- Alternativa sin internet: PC móvil hotspot (`192.168.137.1:5000`) si la
+  PC puede ir al sitio — link local directo, túnel solo para visor remoto.
+
+## Sesión 12 — Plan de apagado y retorno (14-nov)
+
+Preparación para cerrar la PC (viaje a casa) sin perder el entrenamiento
+v5 ni el acceso remoto. Runbook completo: `docs/plan_apagado_retorno.md`.
+
+### Piezas nuevas
+
+- **`train_outdoor.py --resume`**: reanuda `runs/detect/<name>` desde
+  `weights/last.pt` restaurando todo del checkpoint (epochs, patience,
+  LR, augmentations). Si `results.csv` ya tiene `epochs` filas, omite el
+  train y solo reexporta ONNX. Sin este flag, correr el script de nuevo
+  habría empezado el run de cero.
+- **`detener_entrenamiento.bat`**: respalda `last.pt`/`best.pt` a `.bak`
+  y mata los procesos `train_outdoor.py` (launcher+hijo) vía
+  `Win32_Process` filtrado por `Name='python.exe'` + CommandLine.
+- **`retomar.bat`**: al encender la PC levanta server + túnel + resume v5
+  + monitor. Detecta `%USERPROFILE%\.cloudflared\config.yml`: si existe
+  usa named tunnel (`tunnel run reba`); si no, quick tunnel con
+  `--logfile logs\tunnel.log` (la URL nueva queda registrada en archivo).
+
+### Decisiones
+
+- **Túnel**: quick tunnel sigue por ahora (URL cambia en cada arranque —
+  impacto nulo porque la ESP32-CAM queda apagada). Upgrade a named tunnel
+  (URL fija) documentado en el runbook; requiere dominio ~$10/año que
+  aún no se tiene.
+- **v5**: se detiene con `detener_entrenamiento.bat` al salir (se pierde
+  solo la época parcial); retoma con `--resume` al volver.
+- Suspensión ya desactivada AC/DC; la laptop es Modern Standby → hay que
+  apagar desde Inicio, NO solo cerrar la tapa.
+- Pendiente al volver: verificar `logs\tunnel.log` para la URL nueva del
+  dashboard; commit de cambios si se desea.
+
+### Retorno ejecutado (14-nov ~18:10)
+
+- PC reiniciada; `retomar.bat` lanzado (el bloque `if exist(...)` del
+  .bat falló por las `(x86)` de la ruta de cloudflared → corregido a
+  `goto`; las piezas se levantaron vía `Start-Process`).
+- **v5 reanudado**: `--resume` desde `last.pt` (época 9), ahora en
+  época 10/50. `best.pt` sigue siendo época 6 (mAP50-95 0.7404).
+- **URL nueva del túnel**: `https://dale-finishing-evans-had.trycloudflare.com`
+  (verificada HTTP 200 vía edge). El bookmark viejo
+  `doc-related-wit-isa...` está muerto.
+- OJO monitor: `progreso_epoca` usa mtime de results.csv (época 9) →
+  marca ~98% hasta que la época 10 cierre y escriba su fila; es un
+  artefacto cosmético, el entrenamiento real va ~6 min de ~54.
+
+### Monitor v2 (14-nov ~18:40)
+
+- **`ai_pipeline/val_snapshot.py` (nuevo)**: `model.val()` sobre
+  `weights/last.pt` + split val sintético → JSON por clase. Corre en
+  subprocess una vez por época desde el monitor (~60-90 s de CPU,
+  amortizado). Validado: reproduce exacto los agregados de results.csv.
+- **`train_monitor.py` v2**: métricas por clase reales (antes vacías —
+  el stdout de la ventana cmd no es legible), CPU%/RAM del trainer vía
+  psutil, progreso de época corregido tras resume (create_time del
+  proceso + startup offset), ETA a early-stop (~época best+patience)
+  además del ETA a 50, sparkline de mAP50-95 con marca de best, columnas
+  vBOX/vCLS en historial, alertas (nueva mejor época / trainer caído).
+- Caché: `runs/detect/<run>/val_snapshot.json` (done-count keyed).
+- Dato época 9 por clase (val sintético): metal 0.771 > unicel 0.692 >
+  plastico 0.631 mAP50-95.
+
+### Plan post-v5: nube Colab/Kaggle (diseño, no implementado)
+
+- `docs/plan_nube_colab_kaggle.md` — migración a GPU gratuita (~7× speedup).
+  Implementar SOLO después de que v5 termine y pase `evaluate_outdoor.py`.
+  Principio rector: la nube es SUSTRATO, no experimento — misma receta
+  YOLOv8n/3 clases/augmentations outdoor, solo cambia el hardware.
+  Corrección clave al plan original: hay que portar `outdoor_transforms.py`
+  (augmentations Albumentations) o el modelo nube no es el v5.
+
+### Monitor v3 (14-nov ~19:20) — brief senior Tkinter/Windows/Ultralytics
+
+- **Bug tabla por clase corregido**: antes insertaba 5 valores en tabla de
+  4 columnas (nombre corría P/R/mAP). Ahora 8 columnas alineadas:
+  clase, Img, Inst, P, R, F1, mAP50, mAP50-95.
+- **`args.yaml` → yaml.safe_load**: ficha de hiperes en cabecera
+  (imgsz/batch/optimizer=AdamW/workers/patience/device) + estado Mosaic
+  (ON hasta ép 40 con close_mosaic=10, OFF después).
+- **Parser logs mejorado**: ANSI strip, tqdm `it/s` y `s/it` (ITER_RE
+  dual), ETA por iteración (`sit*(tot-it)`), epoch por línea `N/50 ..G`.
+- **Historial 12 columnas**: +tBOX tCLS tDFL vDFL LR(lr/pg0); scroll
+  horizontal incluido.
+- **Overfit**: racha ≥3 épocas val/box_loss↑ + train/box_loss↓ → alerta.
+- **Mejor modelo fijo**: "Época 6 · mAP50-95 0.740 · F1 · P · R" +
+  "Sin mejora: X / 20" (patience real de args).
+- **Speed/FPS**: val_snapshot expone metrics.speed (ms/img) → latencia
+  total y FPS teórico (~7.8 FPS inferencia CPU medida).
+- **Images/Instances por clase**: contados desde labels val (no depende
+  del stdout inaccesible).
+- **Telemetría hardware** (`HardwareMonitor`, hilo daemon 2s):
+  cpu_freq GHz + %clock, batería/AC, RAM%, swap%, disco R/W MB/s,
+  temp CPU por cadena CIM (LibreHardwareMonitor→OpenHardwareMonitor→
+  MSAcpi root\wmi; esta laptop no expone sensor → "temp N/D").
+  Colores semánticos: >80°C/ram>85%/freq<80% → ámbar/rojo.
+- **Trainer**: +hilos, nice, IO MB/s delta, uptime.
+- **GUI con scroll**: canvas + mousewheel (contenido >alto ventana).
+- **Fix crítico encoding**: subprocess.run(text=True) usaba cp1252 →
+  UnicodeDecodeError con output UTF-8 de ultralytics → val nunca
+  llegaba. Ahora encoding="utf-8", errors="replace" + PYTHONIOENCODING.
+- **val_worker con retry**: antes un fallo = nunca reintentaba.
+- Dependencias: psutil 7.2.2 ✓, pyyaml (import yaml) ✓;
+  wmi/pywin32 NO instalados → temp vía PowerShell CIM (sin excepciones).
+
+### Documentación al día (14-nov ~19:45) — commit PENDIENTE hasta fin de v5
+
+- `docs/ai_pipeline.md`: corregido "5 clases"→3 en download_taco/ecosort;
+  fuentes de train_outdoor completas (FloatWaste+copy-paste); filas nuevas
+  en tabla §2b (train_monitor, val_snapshot); **§2c nuevo** documentando
+  el monitor (fuentes, métricas, dependencias, semántica de colores).
+- `README.md`: árbol con los 4 .bat + PROGRESO.md; ai_pipeline/ con
+  train_monitor/val_snapshot; best.onnx ya no dice "v2".
+- `docs/componentes.md`: subsección "Monitoreo" en pipeline IA.
+- `docs/manual_uso.md`: aclarado que "el monitor" = train_monitor.py.
+- `requirements.txt`: psutil + pyyaml explícitos (antes solo transitivos
+  de ultralytics).
+- Limpieza: 3 ventanas cmd huérfanas de train_monitor cerradas (shells
+  /k vacíos de reinicios; el monitor vivo es proceso independiente).
+- **Commit de todo esto se hace CUANDO TERMINE v5** (petición del usuario).
+
+### Plan post-v5 reestructurado (15-nov ~04:00)
+
+- **`docs/plan_post_v5.md` (NUEVO, runbook maestro)**: lo que la prueba
+  real_water reveló (spot check 8 imgs: ve materiales pero conf
+  0.20-0.56, confusión ocasional, objetos <100px² invisibles, conf=0.35
+  pierde ~la mitad de TP reales); secuencia eval→umbral→go/no-go con
+  pisos definidos ANTES de ver números; rama A despliegue / rama B
+  plan de datos; checklist de captura de campo (meta ≥200-500).
+- **`docs/plan_nube_colab_kaggle.md`**: degradado a "fase 2" — gate de
+  entrada = escenario GPU-justificado del plan post-v5 (dataset nuevo,
+  sweep, v8s). Mismos datos + más épocas = NO usar nube.
+- Umbral: `tune_confidence.py --data datasets/REBA_real_val/data.yaml`
+  — el óptimo en agua real probablemente <0.35.
+- real_water ya es set decisivo nativo en `evaluate_outdoor.py`.
+
+### Migración cloudflared → zrok + simulador ESP32 (15-nov ~14:30)
+
+- **zrok2 v2.0.9 instalado** (`C:\Users\sebas\bin\zrok2.exe`), cuenta habilitada.
+  Nombre reservado **`reba-cam`** (namespace `public`, RESERVED=true) →
+  URL fija **`https://reba-cam.shares.zrok.io`** — verificada end-to-end
+  (`/api/health` y `/simulador_esp32.html` → HTTP 200 vía túnel).
+  `.env`: `ZROK_RESERVED_NAME=reba-cam` (+`ZROK_TARGET_URL` ya existía).
+- **`tools/zrok_tunnel.ps1`** (nuevo): detecta `zrok`/`zrok2`, lee `.env`,
+  modo reservado con **self-healing** (si el nombre queda "in use by share"
+  por un túnel anterior cerrado sin limpieza → `zrok2 delete share
+  public:<nombre>` y reintenta una vez), fallback a share efímero,
+  log a `logs/tunnel.log` + URL en `logs/zrok_url.txt`. Fix: zrok2
+  `--headless` imprime hostname pelado en JSON (sin `https://`) — regex
+  actualizada para capturarlo y normalizar el esquema.
+- **`setup_zrok.bat`** (nuevo): asistente único — verifica binario
+  (`zrok` v1 `reserve` / `zrok2` v2 `create name`+`modify --reserved`),
+  `status`/`enable <token>`, valida nombre, escribe `.env`. Fix: `echo(`
+  rompía el regex de validación; `&&`→`&` en upsert de `.env`.
+- **`campo.bat` / `retomar.bat`**: sin cloudflared; uvicorn con
+  `--proxy-headers --forwarded-allow-ips=*`; 4 ventanas intactas.
+- **`static/simulador_esp32.html`** (nuevo, ~1100 líneas, mobile-first,
+  sin CDN): emula `fotos_nc.ino` completo — cámara real del celular
+  (getUserMedia trasera → canvas 640×480 → JPEG q0.72), torch ~350 ms con
+  fallback visual, slider HC-SR04 con zona activa + debounce 2.5 s,
+  cola FIFO 6 con worker 15 s (`POST /upload`, `X-Evento: ingreso`, drain
+  solo en 2xx), bomba NC con `pump_cmd`+ACK, poll config 60 s + "Sync
+  ahora", consola serie 115200, indicador HTTPS/HTTP, fetch con timeout
+  (red móvil inestable no congela la cola). Se sirve en
+  `/simulador_esp32.html` por el mount estático.
+- **Dominio real corregido**: `.shares.zrok.io` (plural) en los 11
+  archivos que lo mencionaban.
+- **Hallazgo operativo — cloudflared zombie**: `cloudflared.exe` (PID
+  22352, desde 14-nov 18:16) sigue corriendo un quick tunnel →
+  `localhost:5000`. La ESP32 **remota** (casa de Nabiki) depende de él:
+  firmware rechaza `https://` (TLS/mbedTLS → FB-OVF en cámara,
+  verificado en banco) → zrok no le sirve. URL trycloudflare viva:
+  `dale-finishing-evans-had.trycloudflare.com` (HTTP 200). **No matarlo
+  mientras la ESP32 remota la use** — si muere, la URL cambia y el
+  dispositivo queda inalcanzable hasta reconfigurar `server_url` in situ.
+- **`.ino`**: sin cambios funcionales (TLS prohibido por hardware).
+  Solo comentarios: rechazo `https://` documentado + nota de topología
+  en cabecera.
+- **Docs**: `plan_apagado_retorno.md` (sección ESP32 remota + cloudflared
+  zombie), `manual_uso.md` (nota ESP32 remoto), `server.md` (heartbeat
+  compartido con simulador), `firmware.md` (motivo TLS/FB-OVF).
+- **Verificación**: config.py AST OK, zrok_tunnel.ps1 Parser OK,
+  simulador `node --check` + HTML parser OK, cero cloudflared en `.bat`.
+  Entrenamiento intacto (`last.pt` fresco, checkpoints sanos).
+- **Pendiente conocido**: DOS uvicorn en :5000 (PIDs 16964 y 18120,
+  ambos sin `--proxy-headers` en cmdline — uvicorn lo trae ON por
+  defecto). `device_state` es por-proceso: unificar cuando sea seguro
+  (no se tocaron por la restricción del entrenamiento activo).

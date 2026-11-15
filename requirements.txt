@@ -18,3 +18,7 @@ onnxslim>=0.1.82
 
 # Outdoor data augmentation for the training pipeline (used by ai_pipeline/)
 albumentations>=1.4.15
+
+# Training monitor GUI (ai_pipeline/train_monitor.py) — hardware telemetry
+psutil>=6.0.0
+pyyaml>=6.0

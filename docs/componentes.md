@@ -221,10 +221,28 @@ La PC corre el servidor en `0.0.0.0:5000`. Para abrir el dashboard desde el tel�
 | Celular en la Wi-Fi **REBA-AP** (hotspot de la PC) | `http://192.168.137.1:5000` |
 | Celular en la misma Wi-Fi que la PC (cualquier otra LAN) | `http://<IP-de-la-PC>:5000` (ver `ipconfig`) |
 | Celular con hotspot propio y la PC conectado a él | `http://<IP-de-la-PC-en-esa-red>:5000` |
+| **Cualquier red con Internet** (túnel zrok) | `https://<nombre>.shares.zrok.io` — ver §abajo |
+| **Simulador ESP32** (celular, misma URL) | `/simulador_esp32.html` — emula el firmware con la cámara real |
+| **ESP32 en campo sin Wi-Fi** | `server_url=http://<IP-PC>:5000` — va por la LAN/hotspot compartido con la PC, **no** por el túnel (zrok es solo HTTPS) |
 
-- La red `REBA-AP` es la recomendada: aísla REBA del resto de tu tráfico (el celular puede mantener datos móviles activos en paralelo).
+- La red `REBA-AP` es la recomendada en banco: aísla REBA del resto de tu tráfico (el celular puede mantener datos móviles activos en paralelo).
 - Si la página no carga: verificar que el servidor esté corriendo (`uvicorn server.main:app --host 0.0.0.0 --port 5000`) y que el firewall de Windows permita entrada TCP 5000.
 - El ESP32 solo necesita 2.4 GHz; el celular puede estar en 5 GHz o en la red que sea — son caminos independientes.
+
+### Túnel zrok (acceso remoto del dashboard/simulador)
+
+`tools/zrok_tunnel.ps1` (invocado por `campo.bat`/`retomar.bat`) abre un share público de zrok hacia `http://127.0.0.1:5000`:
+
+- **Reservado** (`ZROK_RESERVED_NAME` en `.env`, creado con `setup_zrok.bat`): URL **fija** `https://<nombre>.shares.zrok.io` — gratis, sin dominio, sobrevive reinicios.
+- **Efímero** (sin reserva): URL nueva por arranque del túnel → `logs/tunnel.log` + `logs/zrok_url.txt`. Fallback automático si el reservado falla.
+- Soporta binarios `zrok` (v1) y `zrok2` (v2) detectados en el PATH.
+
+**Usos:**
+
+- **Dashboard remoto**: el navegador usa la URL `https://` — WebSocket `wss://` automático.
+- **Simulador ESP32** (`/simulador_esp32.html`): la cámara del celular requiere contexto seguro → la URL HTTPS del túnel (o `localhost`) lo habilita.
+
+**Restricciones**: sin auth → la URL es el secreto; free tier 5 GB/día; *interstitial* anti-phishing ~1 vez/semana solo para navegadores (se salta con un clic); **la ESP32 no puede usar el túnel** (sin TLS) → en campo va por la LAN/hotspot con la PC.
 
 ---
 
@@ -237,6 +255,14 @@ La PC corre el servidor en `0.0.0.0:5000`. Para abrir el dashboard desde el tel�
 **Decisión:** el dominio objetivo es basura flotando bajo condiciones variables; augmentations outdoor cierran el gap sim→real mejor que más arquitectura. Early stopping por mAP50-95; mejor época → `best.pt` → ONNX.
 
 **Uso:** `python ai_pipeline/train_outdoor.py` (largo, CPU); resultados en `runs/detect/`.
+
+### Monitoreo (`train_monitor.py`, `val_snapshot.py`)
+
+**Función:** GUI tkinter de solo lectura sobre `results.csv`/`args.yaml`/logs + telemetría Windows (psutil + CIM): progreso y ETAs, losses+LR por época, tabla por clase con F1 e Images/Instances, alerta de overfitting y de thermal-throttling.
+
+**Decisión:** no instrumentar Ultralytics — leer sus artefactos; `val_snapshot.py` corre `model.val()` en subprocess una vez por época para métricas por clase que el stdout no expone de forma fiable.
+
+**Uso:** `python ai_pipeline/train_monitor.py --run <run>` o `monitor_entrenamiento.bat`; `--once` para snapshot en consola.
 
 ### Evaluación (`evaluate_outdoor.py`, `eval_upload_path.py`, `tune_confidence.py`)
 
