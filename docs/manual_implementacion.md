@@ -54,6 +54,15 @@ arduino-cli compile --fqbn esp32:esp32:esp32cam esp32_firmware/fotos_nc
 arduino-cli upload -p COMx --fqbn esp32:esp32:esp32cam esp32_firmware/fotos_nc
 ```
 
+> **OTA (updates sin USB):** para que el ESP32 pueda auto-actualizarse,
+> compila con partition scheme **`min_spiffs`** (`--fqbn
+> "esp32:esp32:esp32cam:PartitionScheme=min_spiffs"` — la placa `esp32cam`
+> defaultea a `huge_app` **sin** OTA). El repartition conserva las
+> credenciales NVS. Los binarios listos para el flash USB inicial están
+> en `firmware/` (`bootloader.bin`, `partitions.bin`, `fotos_nc.bin`)
+> y se sirven por HTTP en `/firmware/`; las actualizaciones posteriores
+> van por `ota_url` o el comando serie `OTA`. Detalle: `docs/firmware.md` → OTA.
+
 Salida esperada en Serial (115200):
 
 ```text

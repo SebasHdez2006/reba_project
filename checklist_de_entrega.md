@@ -3,7 +3,7 @@
 - **Fecha límite de entrega:** Lunes 16 de noviembre, 6:00 p.m.
 - **Horario de trabajo:** se inicia el **lunes ~06:00** (al llegar a la oficina, avisar para arrancar) y TODO debe estar listo antes de las **13:00**. Salida de casa 04:30–05:00 a.m., llegada ~06:00. Colchón 13:00–18:00 solo para imprevistos.
 - **Domingo 15:** no requiere acción — `REBA_outdoor_v5` sigue entrenando solo. Para el lunes ~06:00 estará ~época 40+ (o terminado / early-stop ~ép 35–50 según `docs/plan_post_v5.md`).
-- **Estado base:** `v5` superó el *baseline* en época 20 (`mAP50: 0.978`, `mAP50-95: 0.775`, `F1: 0.953`).
+- **Estado base:** `v5` sigue mejorando — mejor checkpoint **época 26** (`mAP50-95: 0.842`, `mAP50: 0.986`, `F1: 0.982` en val sintético); al 15-nov ~15:45 va en la época 30/50 (~54-70 min/época).
 - **Estrategia:** al llegar, check-in del entorno → corte de `v5` → exportación ONNX → evaluación `real_water` + umbral → restart + `/upload` → E2E hardware → docs + commit, todo antes de las 13:00. `REBA_outdoor_v6` (GPU nube + `REBA_field`) queda como **Fase 2 / Trabajo Futuro**.
 
 ## Cronograma — Lunes 16

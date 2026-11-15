@@ -59,8 +59,9 @@ Demostrar un sistema IoT + visión artificial **100% offline** que:
 Tres vías redundantes, todas con la misma validación estricta y **reversión automática** ante configuraciones malas:
 
 - Portal Wi-Fi `REBA-Setup` (celular, sin instalar nada)
-- Comandos serie USB (`GET`/`SET`/`CAPTURE`/`STATUS`/`REBOOT`)
+- Comandos serie USB (`GET`/`SET`/`CAPTURE`/`STATUS`/`REBOOT`/`OTA`)
 - Dashboard web (canal `device_config` servidor→ESP32 con heartbeat)
+- **Auto-actualización OTA del firmware**: `ota_url` por config remota o `OTA` por serie → descarga `firmware.bin`, flashea la partición inactiva y reinicia (sin USB tras el flash inicial; requiere partition scheme con OTA — `firmware.md`)
 
 ### 2.5 Pipeline de IA
 

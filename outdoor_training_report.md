@@ -1,5 +1,12 @@
 # Reporte de entrenamiento outdoor — REBA
 
+> **⚠ Reporte histórico (pre-pivote):** corresponde al modelo **v2 de 5
+> clases** (`plastico, tela, organico, unicel, metal`). Desde el
+> 2026-11-14 el sistema usa **3 clases** (`plastico, unicel, metal`) y el
+> experimento vigente es `REBA_outdoor_v5`. Este archivo se **regenera
+> automáticamente** con `ai_pipeline/evaluate_outdoor.py` cuando se
+> evalúe el modelo nuevo — mientras tanto se conserva como baseline.
+
 Generado: 2026-11-13 10:15 UTC
 
 ## Contexto

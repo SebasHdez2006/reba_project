@@ -276,7 +276,7 @@ Detalle: [docs/server.md](docs/server.md)
 
 ### 3. Modelo de visión
 
-`models/best.onnx` ya está incluido — es el modelo **outdoor v2** entrenado con `ai_pipeline/train_outdoor.py`. Si falta, el servidor arranca igual pero reporta `backend: none` en `/api/health` y no clasifica.
+`models/best.onnx` ya está incluido — es un export ONNX de `ai_pipeline/train_outdoor.py` (YOLOv8n, **3 clases**: `plastico,unicel,metal`). Si falta, el servidor arranca igual pero reporta `backend: none` en `/api/health` y no clasifica.
 
 1. Genera un dataset sintético con `ai_pipeline/generate_synthetic_dataset.py` o usa fotos reales ya curadas (las capturas guardadas en SQLite sirven como dataset real; **Exportar YOLO** del dashboard las empaqueta).
 2. Entrena con `ai_pipeline/train_outdoor.py` → exporta `models/best.onnx`.

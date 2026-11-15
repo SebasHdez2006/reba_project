@@ -844,3 +844,25 @@ v5 ni el acceso remoto. Runbook completo: `docs/plan_apagado_retorno.md`.
 - **Pendiente**: Nabiki flashea por USB (una vez) → desde ahí, updates
   remotas por `ota_url`. Server en ejecución no tiene la ruta nueva
   hasta reiniciar uvicorn (seguro para el train: proceso aparte).
+
+### Estado v5 + fix `/firmware.bin` (15-nov ~15:45)
+
+- **v5 sigue entrenando**: `results.csv` al día con 29/50 épocas;
+  `last.pt` fresco (~54-70 min/época). **Mejor época = 26**:
+  mAP50-95 **0.842**, mAP50 0.986, P 0.984, R 0.979 (val sintético).
+  patience=20 → early stop posible desde la época 46 si no hay mejora.
+  Proyección: ~época 40+ al lunes 06:00, coherente con el checklist.
+- **Fix `FileResponse`** (commit `ed8f4c2`): el `import` de
+  `fastapi.responses` se perdió en el reset externo de las ~15:00 y la
+  ruta `/firmware.bin` quedaba rota; re-aplicado y commiteado.
+  `/firmware.bin` + mount `/firmware/` (bootloader/partitions) quedan
+  operativos tras el próximo restart de uvicorn.
+- **Docs al día**: README corregido (el ONNX desplegado es el export
+  v5 de 3 clases, no "outdoor v2"); `outdoor_training_report.md`
+  marcado como reporte pre-pivote (5 clases) hasta que
+  `evaluate_outdoor.py` lo regenere; `componentes.md` y
+  `manual_implementacion.md` ahora cubren el OTA; checklist de entrega
+  actualizado al mejor checkpoint actual (época 26).
+- **Pendiente sin cambios**: evaluación `real_water` + umbral al
+  terminar v5 (runbook `docs/plan_post_v5.md`); Nabiki flashea por USB
+  una vez; cloudflared zombie sigue vivo para la ESP32 remota.

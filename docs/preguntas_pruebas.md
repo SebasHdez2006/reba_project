@@ -269,6 +269,7 @@ en `docs/manual_uso.md` §4. Marcar resultados al terminar el día.
 | 161 | ¿Latencia de inferencia en campo? `[◐]` | `inference_ms` puede subir (CPU compartida con entrenamiento v5): registrar media/rango real | `inference_ms` en uploads | ☐ |
 | 162 | ¿Confianza de detecciones reales? `[◐]` | Distribución por clase en objetos acuáticos reales — insumo para `tune_confidence.py` posterior | Captures + detections de la jornada | ☐ |
 | 163 | ¿Export YOLO post-jornada? `[◐]` | `Exportar YOLO` descarga ZIP con fotos reales de campo + labels → dataset para próximo entrenamiento | Botón en dashboard → Analítica | ☐ |
+| 164 | ¿OTA actualiza sin USB? `[◐]` | `ota_url` (config remota o `SET` serie) → ESP32 descarga `firmware.bin`, flashea partición inactiva, reinicia y reporta `ota_last` en `GET` | Tras el flash USB inicial de Nabiki | ☐ |
 
 ---
 
@@ -283,5 +284,6 @@ en `docs/manual_uso.md` §4. Marcar resultados al terminar el día.
 | Media | Estrés de cola offline (>6 fotos) | Parcialmente probado |
 | Media | Reversión Wi-Fi/server_url remotos | Verificado en banco |
 | Media | Retención `CAPTURE_RETENTION` | Verificado con prune manual |
+| Media | OTA: primer flash USB (Nabiki) + update remoto posterior | Binarios listos en `firmware/`; update OTA compilado, sin probar en hardware aún |
 | Baja | `SET pump_cmd` por serie | Discrepancia doc/código |
 | Baja | Carcasa estanca y montaje | Pendiente fabricación |

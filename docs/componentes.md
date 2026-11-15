@@ -106,6 +106,14 @@ Referencia componente por componente del sistema: qué hace cada pieza, por qué
 
 **Uso:** dashboard → "Activar ahora" en el panel Bomba; o `SET pump_cmd=<ts>:<s>` por serie.
 
+### Auto-actualización OTA
+
+**Función:** permite actualizar el firmware del ESP32 **sin USB ni reflasheo** una vez instalado el primer binario.
+
+**Decisión:** `ota_url` viaja por el canal `device_config` existente (o comando serie `OTA`); el ESP32 descarga el `.bin` por HTTP plano con `WiFiClient` (sin HTTPClient/TLS, mismas restricciones que `httpSimple`) y lo escribe con `Update` en la partición OTA inactiva — descarga truncada aborta sin tocar la app. Dedup por NVS `ota_last` evita re-flasheos; backoff de 10 min tras fallo. Requiere partition scheme **con OTA** (`min_spiffs`); los binarios de flasheo USB inicial (`bootloader.bin`, `partitions.bin`, `fotos_nc.bin`) se sirven desde `/firmware/`.
+
+**Uso:** compilar con `PartitionScheme=min_spiffs` (ver `firmware.md` → OTA); actualizar con `ota_url=http://<IP-PC>:5000/firmware.bin` vía `POST /api/admin/device-config` o `SET ota_url=…`/`OTA` por serie.
+
 ### Robustez de tiempo y memoria
 
 **Función:** operación continua de semanas/meses sin degradación.
@@ -154,9 +162,9 @@ Referencia componente por componente del sistema: qué hace cada pieza, por qué
 
 **Función:** canal servidor→ESP32: overrides clave=valor que el firmware descarga cada 60 s y aplica en caliente.
 
-**Decisión:** tabla key/value con whitelist de claves; el firmware re-valida todo del lado del dispositivo (el servidor confía pero no obedece ciegamente). `pump_cmd` usa la misma vía con TTL.
+**Decisión:** tabla key/value con whitelist de claves; el firmware re-valida todo del lado del dispositivo (el servidor confía pero no obedece ciegamente). `pump_cmd` usa la misma vía con TTL; `ota_url` usa la misma vía para disparar la auto-actualización OTA.
 
-**Uso:** dashboard → "Guardar y aplicar"; `GET/POST /api/admin/device-config`.
+**Uso:** dashboard → "Guardar y aplicar"; `GET/POST /api/admin/device-config`. Además `GET /firmware.bin` y `/firmware/*` sirven los binarios OTA/USB al ESP32.
 
 ---
 
