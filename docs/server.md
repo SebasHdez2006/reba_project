@@ -40,26 +40,37 @@ python -m server.main
 
 > El puerto **debe coincidir** con `SERVIDOR_URL` del firmware (`http://<IP_PC>:<PORT>/upload`).
 
-### Acceso remoto (túnel zrok)
+### Acceso remoto (túnel Cloudflare `rebaserver.tech`)
 
-Para alcanzar el servidor desde otra red — dashboard del celular, simulador
-ESP32 — se usa **zrok** (openziti/zrok, gratis en zrok.io):
+El acceso remoto definitivo es un **Cloudflare named tunnel** sobre el
+dominio propio `rebaserver.tech` (.tech gratis del GitHub Student Pack):
+
+- **`https://rebaserver.tech`** → dashboard remoto (HTTPS + `wss://`
+  automáticos) — uso principal.
+- **`http://rebaserver.tech`** → HTTP plano puerto 80 → **lo usa la
+  ESP32** como `server_url_alt` (failover automático del firmware).
+- `cloudflared` corre oculto vía `reba-cloudflared.vbs` en Startup →
+  `tools/run_cloudflared.bat` (`--protocol http2` — QUIC/UDP hace
+  timeout en la red institucional). Log: `logs/cloudflared.log`.
+  Reconecta solo; config: `tools/cloudflared_config.yml`, credenciales
+  en `~/.cloudflared/` (no commitear).
+- Verificación: `http://rebaserver.tech/api/health` y
+  `https://rebaserver.tech/api/health` → 200.
+
+**Respaldo — túnel zrok** (`tools/zrok_tunnel.ps1`, invocado por
+`campo.bat`/`retomar.bat`): share público `https://reba-cam.shares.zrok.io`
+(reservado, URL fija). Solo HTTPS → dashboard/simulador, **no la ESP32**.
 
 ```bat
 setup_zrok.bat   :: una sola vez: cuenta + reserva de nombre
-campo.bat        :: levanta uvicorn + tunel (ventana REBA-Tunnel)
+campo.bat        :: levanta uvicorn + tunel zrok (ventana REBA-Tunnel)
 ```
 
-El lanzador real es `tools/zrok_tunnel.ps1` (lo invocan los `.bat`):
-
-- **Con `ZROK_RESERVED_NAME` en `.env`** → share **reservado**: URL fija
-  `https://<nombre>.shares.zrok.io` entre reinicios, sin comprar dominio.
-- **Sin reserva** → share **efímero**: URL nueva por arranque
-  (`logs/tunnel.log` y `logs/zrok_url.txt`). Si el reservado falla al
-  arrancar, cae al efímero automáticamente.
-- Detecta `zrok` (v1: `share reserved`) o `zrok2` (v2: `share public -n
-  public:<nombre>`) en el PATH — ambos soportados.
-- HTTPS + `wss://` automáticos para el dashboard; uvicorn corre con
+- Con `ZROK_RESERVED_NAME` en `.env` → share **reservado**: URL fija
+  `https://reba-cam.shares.zrok.io`. Sin reserva → share **efímero**
+  (`logs/tunnel.log`, `logs/zrok_url.txt`), fallback automático.
+- Detecta `zrok` (v1) o `zrok2` (v2) en el PATH.
+- HTTPS + `wss://` automáticos; uvicorn corre con
   `--proxy-headers --forwarded-allow-ips=*` para aceptar los headers del
   proxy (IP real del cliente en `device.ip`).
 - **Ojo**: `device.online`/`device.ip` en `/api/health` reflejan al
@@ -67,17 +78,12 @@ El lanzador real es `tools/zrok_tunnel.ps1` (lo invocan los `.bat`):
   (`/simulador_esp32.html`) usa los mismos endpoints, así que su polling
   también "enciende" el heartbeat. Un `EN LÍNEA` puede ser el simulador,
   no necesariamente la ESP32 física.
-- **La ESP32 NO usa el túnel zrok**: zrok solo expone HTTPS y el
-  firmware habla HTTP plano → la ESP32 va por LAN/hotspot directo a
-  `HOST:PORT`, o por el **túnel Portwarp** `http://93togsum.free.tryportwarp.cc:16404`
-  (HTTP plano, dirección fija — migración 16-nov, ver
-  `docs/plan_tunel_fijo.md`).
-- Sin auth → tratar la URL como secreta. Free tier: 5 GB/día.
-- *Interstitial page*: cuentas gratuitas sin verificar muestran un aviso
-  anti-phishing ~1 vez/semana **solo a navegadores** (UA `Mozilla/*`); la
-  ESP32 (`REBA-ESP32`) y clientes HTTP la evitan.
+- **La ESP32 usa el túnel Cloudflare** (`http://rebaserver.tech` como
+  `server_url_alt`) o la LAN directa — **no zrok** (HTTPS-only).
+- Sin auth → tratar las URLs como secretas. zrok free tier: 5 GB/día.
+- *Interstitial page* zrok: ~1 vez/semana solo a navegadores.
 - Detalles y alternativas evaluadas: `docs/manual_uso.md` §1,
-  `docs/componentes.md` §Acceso.
+  `docs/componentes.md` §Acceso, `docs/plan_tunel_fijo.md`.
 
 ---
 

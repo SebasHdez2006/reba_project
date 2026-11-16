@@ -156,13 +156,17 @@ REBA/
 ├── PROGRESO.md               ← bitácora de sesiones y estado del proyecto
 ├── .env.example              ← plantilla de configuración del servidor
 ├── requirements.txt
-├── campo.bat                 ← arranque campo: server + túnel zrok
+├── campo.bat                 ← arranque campo: server + túnel Cloudflare + zrok
 ├── detener_entrenamiento.bat ← respaldo de pesos + stop seguro del train
-├── retomar.bat               ← retorno: server + túnel zrok + --resume v5 + monitor
-├── setup_zrok.bat            ← setup único del túnel zrok (URL fija gratis)
+├── retomar.bat               ← retorno: server + túneles + --resume v5 + monitor
+├── setup_zrok.bat            ← setup único del túnel zrok (respaldo, URL fija)
 ├── monitor_entrenamiento.bat ← launcher del monitor GUI de entrenamiento
 ├── tools/
-│   └── zrok_tunnel.ps1       ← lanza el share zrok headless (reservado/efímero)
+│   ├── run_cloudflared.bat       ← túnel nombrado Cloudflare → rebaserver.tech
+│   ├── cloudflared_tunnel_hidden.vbs ← launcher oculto (Startup folder)
+│   ├── cloudflared_config.yml    ← ingress del túnel (localhost:5000)
+│   ├── zrok_tunnel.ps1           ← lanza el share zrok headless (respaldo)
+│   └── vps_*.{sh,bat,vbs}        ← scripts Oracle VPS (reserva, sin usar)
 ├── docs/
 │   ├── manual_implementacion.md ← implementación E2E (hardware→campo)
 │   ├── manual_uso.md         ← operación del dashboard
@@ -262,7 +266,7 @@ uvicorn server.main:app --host 0.0.0.0 --port 5000
 
 Dashboard: [http://localhost:5000](http://localhost:5000)
 
-**Acceso remoto (túnel zrok):** `campo.bat` levanta además un túnel zrok que expone el dashboard como `https://<nombre>.shares.zrok.io` — URL **fija y gratuita** si se reservó con `setup_zrok.bat` (una sola vez; cuenta gratuita en zrok.io, sin dominio). La ESP32 no usa el túnel (HTTP plano en LAN); el túnel es para el celular/dashboard y el simulador `/simulador_esp32.html`. Detalle: [docs/server.md](docs/server.md) §Acceso remoto y [docs/manual_uso.md](docs/manual_uso.md) §1.
+**Acceso remoto (túnel Cloudflare `rebaserver.tech`):** `campo.bat` levanta el servidor + el túnel nombrado de Cloudflare (autostart vía `tools/cloudflared_tunnel_hidden.vbs` en la carpeta Startup; también lo relanza si falta) + zrok como respaldo. Un solo dominio sirve ambos protocolos: `https://rebaserver.tech` para el dashboard/celular y `http://rebaserver.tech` (HTTP plano) como `server_url_alt` de la ESP32 remota — ver [docs/server.md](docs/server.md) §Acceso remoto y [docs/manual_uso.md](docs/manual_uso.md) §1. Respaldo zrok: `https://reba-cam.shares.zrok.io` (solo HTTPS).
 
 Prueba sin hardware (envía una foto cualquiera como si fuera el ESP32):
 

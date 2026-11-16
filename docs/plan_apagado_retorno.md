@@ -2,33 +2,36 @@
 
 Contexto: laptop Dell Vostro 3400 (Windows, Modern Standby S0). Entrenamiento
 `REBA_outdoor_v5` en curso (~54 min/época, CPU). Servidor uvicorn :5000 +
-túnel **zrok** activos. ESP32-CAM **apagada** durante el cierre.
+túneles **Cloudflare** (`rebaserver.tech`, definitivo) y **zrok** (respaldo)
+activos. ESP32-CAM **apagada** durante el cierre.
 
 Scripts creados para esto:
 
 | Script | Cuándo | Qué hace |
 |---|---|---|
 | `detener_entrenamiento.bat` | Antes de apagar | Respalda `last.pt`/`best.pt` → `.bak` y mata los procesos de `train_outdoor.py` |
-| `retomar.bat` | Al encender la PC | Levanta server + túnel zrok + `--resume` de v5 + monitor |
-| `setup_zrok.bat` | Una sola vez (ya hecho) | Reserva el nombre público fijo del túnel zrok |
+| `retomar.bat` | Al encender la PC | Levanta server + túnel Cloudflare (si no corre) + túnel zrok + `--resume` de v5 + monitor |
+| `setup_zrok.bat` | Una sola vez (ya hecho) | Reserva el nombre público fijo del túnel zrok (respaldo) |
+| `reba-cloudflared.vbs` (Startup folder) | Automático al iniciar sesión | Lanza el túnel nombrado Cloudflare → `rebaserver.tech` |
 | `train_outdoor.py --resume` | (lo usa retomar.bat) | Reanuda el run desde `weights/last.pt` y reexporta ONNX al terminar |
 
 ## Respuestas rápidas
 
-### ¿Cambia la URL del túnel zrok?
+### ¿Cambia la URL del túnel?
 
-- **Con reserva configurada (`ZROK_RESERVED_NAME` en `.env`)**: NO. La URL
-  es fija para siempre — `https://<nombre>.shares.zrok.io` (ej. `reba-cam`). Se
-  crea una sola vez con `setup_zrok.bat` (cuenta gratuita en zrok.io, sin
-  dominio ni tarjeta). Sobrevive reinicios de PC y del túnel.
-- **Sin reserva**: SÍ, cada arranque genera una URL nueva
-  (`https://<random>.shares.zrok.io`). Queda en `logs/tunnel.log` y
-  `logs/zrok_url.txt`, y en la ventana `REBA-Tunnel`.
-- **El servidor uvicorn puede reiniciarse** sin afectar al túnel (son
-  procesos independientes), igual que antes con cloudflared.
-- **La ESP32 NO usa el túnel**: zrok solo expone HTTPS y el firmware habla
-  HTTP plano (WiFiClient sin TLS). La ESP32 se conecta directo por LAN o
-  hotspot compartido con la PC (ver `docs/manual_uso.md` §4).
+- **Cloudflare `rebaserver.tech` (principal)**: NO — es dominio propio,
+  fija para siempre (mientras se renueve el dominio .tech). Sirve
+  `http://` a la ESP32 y `https://` al dashboard desde el mismo túnel.
+  Se lanza solo al iniciar sesión (Startup folder →
+  `tools/run_cloudflared.bat`); `retomar.bat` lo relanza si falta.
+- **zrok (respaldo)**: con `ZROK_RESERVED_NAME` en `.env` la URL es fija
+  `https://reba-cam.shares.zrok.io`; sin reserva cambia por arranque
+  (`logs/tunnel.log`, `logs/zrok_url.txt`, ventana `REBA-Tunnel`).
+- **El servidor uvicorn puede reiniciarse** sin afectar a los túneles
+  (procesos independientes).
+- **La ESP32 usa el túnel Cloudflare**: `server_url_alt=http://rebaserver.tech`
+  (HTTP plano — el edge acepta HTTP sin redirect). zrok sigue siendo
+  HTTPS-only → solo dashboard/simulador.
 
 ### ¿Cómo interfiere con el entrenamiento v5?
 
@@ -48,7 +51,9 @@ Scripts creados para esto:
 
 ### ¿Qué más cambia?
 
-- **uvicorn y zrok**: hay que relanzarlos → `retomar.bat` lo hace.
+- **uvicorn y túneles**: uvicorn lo relanza `retomar.bat`; cloudflared se
+  auto-lanza al iniciar sesión (Startup folder) y `retomar.bat` lo
+  verifica; zrok lo relanza `retomar.bat`.
 - **Monitor GUI**: se reabre con `retomar.bat` (opcional, se puede cerrar).
 - **Suspensión**: ya desactivada en AC y batería (verificado con powercfg).
   OJO: es laptop con Modern Standby — **"cerrar la tapa" NO es apagar**;
@@ -86,11 +91,11 @@ Scripts creados para esto:
 2. Doble clic `retomar.bat` → abre 4 ventanas: Server, Tunnel, Train, Monitor.
 3. Verificar:
    - `http://localhost:5000/api/health` → `backend: onnx`, `ok: true`
+   - `http://rebaserver.tech/api/health` → 200 (túnel Cloudflare arriba)
    - Ventana `REBA-Train` → "Reanudando REBA_outdoor_v5: N/50 épocas hechas"
-   - `logs\tunnel.log` o `logs\zrok_url.txt` → URL del túnel
-     (con reserva: siempre `https://<nombre>.shares.zrok.io`)
-4. Dashboard desde el celular: abrir la **URL fija** del túnel (HTTPS).
-   El bookmark sirve siempre — a diferencia del quick tunnel de Cloudflare.
+   - `logs\cloudflared.log` → "Registered tunnel connection"
+4. Dashboard desde el celular: abrir **`https://rebaserver.tech`** (fija
+   para siempre). Respaldo: `https://reba-cam.shares.zrok.io`.
 
 ## Cuando termine v5
 
@@ -132,30 +137,31 @@ El túnel zrok **no** sirve para la ESP32 (sin TLS); si el ESP32 está fuera
 de la LAN de la PC, la vía es conectarla al mismo hotspot que la PC.
 Detalle operativo: `docs/manual_uso.md` §1 y §4.
 
-**ESP32 físicamente remota (caso real: dispositivo en otra casa):**
+**ESP32 físicamente remota (resuelto 16-nov):**
 
-La topología dual anterior asume ESP32 y PC en la misma LAN/hotspot. Si el
-ESP32 queda en otra ubicación (ej. casa de un compañero), necesita un
-**túnel que acepte HTTP plano** — zrok no sirve (solo HTTPS, y el firmware
-rechaza `https://` porque TLS/mbedTLS provoca FB-OVF en el driver de
-cámara, verificado en banco). Opciones:
+La ESP32 en otra ubicación (ej. casa de un compañero) se resuelve con el
+túnel Cloudflare nombrado — **ya desplegado**:
 
-- **Cloudflare quick tunnel** (`cloudflared tunnel --url http://localhost:5000`):
-  el edge acepta HTTP:80 sin TLS → el ESP32 apunta a
-  `http://<id>.trycloudflare.com`. **Ojo**: la URL cambia si el proceso
-  muere → el ESP32 queda inalcanzable hasta reconfigurar `server_url`
-  (portal `REBA-Setup` o serie `SET`, requiere acceso físico).
-  Estado al 15-nov: un cloudflared quick tunnel sigue corriendo en esta
-  PC (proceso independiente de los `.bat`) manteniendo viva la URL que
-  usa la ESP32 remota — **no matarlo mientras el dispositivo la use**.
-- Otras alternativas HTTP plano (bore.pub TCP, localtunnel, etc.) tienen
-  la misma fragilidad de URL-por-arranque; ninguna da URL fija gratuita
-  como zrok para HTTPS.
+- `server_url` = `http://192.168.137.1:5000` (LAN/hotspot REBA-AP,
+  primaria) · `server_url_alt` = `http://rebaserver.tech` (túnel,
+  respaldo).
+- El edge de Cloudflare acepta **HTTP plano en puerto 80** sin redirect
+  forzado → el firmware (`http://` solamente, sin TLS por el bug de
+  cámara) lo usa directo.
+- **Failover automático del firmware**: 3 polls fallidos en la LAN →
+  conmuta a `server_url_alt` (~3 min tras boot en red con Internet);
+  re-sondea la LAN cada 5 min y vuelve si reaparece.
+- `ota_url=http://rebaserver.tech/firmware.bin` — OTA remoto por el
+  mismo túnel.
+- Verificado: `http://rebaserver.tech/api/health` → 200 y
+  `https://rebaserver.tech/` → 200 desde fuera de la LAN.
 
-Mientras la ESP32 remota dependa de cloudflared, ese proceso es un
-"zombie" deliberado: los `.bat` ya no lo gestionan, pero sigue vivo hasta
-que se decida migrar el dispositivo (requiriría firmware con TLS —
-bloqueado por el bug de cámara — o aceptar la fragilidad del túnel).
+**Historial de intentos** (para no repetir — detalle en
+`docs/plan_tunel_fijo.md`): Portwarp (listener público murió, agente sin
+API), playit.gg (auth roto; TCP requiere Premium), Oracle VPS (tarjeta
+rechazada), Azure for Students (UES no está en la base de instituciones
+de Microsoft), DigitalOcean (oferta eliminada del pack 2026), cloudflared
+quick tunnel (URL efímera — solo respaldo histórico).
 
 **Notas zrok:**
 

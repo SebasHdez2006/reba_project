@@ -65,7 +65,7 @@ Actualiza la configuración de producción de REBA con los resultados calibrados
 
 ## Fase 3 — Lunes 09:00–10:15 EN LA OFICINA: Pruebas E2E con hardware (presencial)
 
-> Todo el hardware (ESP32-CAM, HC-SR04, bomba 12 V) está en la oficina junto al usuario — la prueba es presencial, sin acceso remoto. El ESP32 usa WiFiManager: si la WiFi guardada no coincide con la red de la oficina, tras ~10 min reabre el portal de provisión (reconfigurar con el celular). Además descarga `server_url` y config del server cada 60 s vía `device-config`, así que el server solo necesita ser alcanzable desde el LAN local (o un hotspot compartido si el ESP32 queda fuera de ella — el túnel zrok es solo HTTPS y no lo usa el firmware).
+> Todo el hardware (ESP32-CAM, HC-SR04, bomba 12 V) está en la oficina junto al usuario — la prueba es presencial, sin acceso remoto. El ESP32 usa WiFiManager: si la WiFi guardada no coincide con la red de la oficina, tras ~10 min reabre el portal de provisión (reconfigurar con el celular). Además descarga `server_url` y config del server cada 60 s vía `device-config`, así que el server solo necesita ser alcanzable desde el LAN local (o un hotspot compartido si el ESP32 queda fuera de ella — el túnel zrok es solo HTTPS y no lo usa el firmware; el túnel Cloudflare `rebaserver.tech` sí acepta HTTP plano y ya está configurado como `server_url_alt`).
 
 ### - [ ] Tarea 5: Verificar conectividad ESP32-CAM, ciclo de bomba NC y túnel
 ```text
@@ -73,7 +73,7 @@ Audita el entorno físico de REBA para la prueba E2E con la ESP32-CAM, el sensor
 0. Conectividad de red: enciende el ESP32 y verifica que se asocia a la WiFi de la oficina. Si levanta el portal WiFiManager (AP propio), reconfigúralo desde el celular con la red local y la `server_url` correcta (IP local del server o URL del túnel). Confirma que el ESP32 empieza a reportar (`/api/captures/latest`, `/api/pump/events`, `/api/stats` muestran actividad reciente).
 1. Consulta `GET /api/config`, `GET /api/pump-status` y `GET /api/admin/device-config` para verificar que los parámetros del servidor (`dist_min_cm=0`, `dist_max_cm=23`, `pump_photos=3`, `pump_seconds=10`) estén alineados con los que el ESP32 descarga del device-config y con el firmware `esp32_firmware/fotos_nc/fotos_nc.ino`.
 2. Verifica que el ciclo de bomba NC responde al rango de distancia configurado (acercar/alejar un objeto frente al HC-SR04) y que las capturas llegan a `/upload` con detecciones del nuevo `models/best.onnx`.
-3. Ejecuta la prueba física con muestras de plástico, unicel y metal mientras monitoreas `/api/captures/latest`, `/api/pump/events` y `/api/stats` en tiempo real. Si `logs/tunnel.log` existe o hay un túnel zrok activo, extrae la URL pública vigente para acceso del celular al dashboard. No modifiques el firmware `.ino`.
+3. Ejecuta la prueba física con muestras de plástico, unicel y metal mientras monitoreas `/api/captures/latest`, `/api/pump/events` y `/api/stats` en tiempo real. La URL pública fija es `https://rebaserver.tech` (túnel Cloudflare; respaldo zrok `https://reba-cam.shares.zrok.io` si `logs/tunnel.log` muestra otra). No modifiques el firmware `.ino`.
 4. Al terminar, captura el estado final (`/api/stats`, últimos `/api/captures/latest`, `/api/pump/events`) y pégalo en `PROGRESO.md` como evidencia E2E.
 ```
 
@@ -134,8 +134,8 @@ Leyenda: **P** = probabilidad (A alta / M media / B baja) · **I** = impacto en 
 
 | # | Riesgo | P | I | Mitigación |
 |---|---|---|---|---|
-| C1 | El ESP32 no toma la WiFi de la oficina (credenciales distintas, red enterprise/captive portal) | M | A | Portal WiFiManager + celular (Tarea 5 paso 0). Fallback: hotspot del celular uniendo ESP32 y laptop a la misma red (el túnel zrok es solo HTTPS — no sirve para el ESP32). |
-| C2 | Firewall de Windows bloquea `:5000` entrante desde el ESP32 (perfil público de red de oficina) | M | A | Detectarlo en Tarea 5 paso 0/2: si el ESP32 no alcanza `/api/health`, unir la PC al hotspot del celular junto al ESP32 (LAN compartida, sin abrir puertos) o regla de firewall entrante (requiere admin). El túnel zrok no aplica al ESP32. |
+| C1 | El ESP32 no toma la WiFi de la oficina (credenciales distintas, red enterprise/captive portal) | M | A | Portal WiFiManager + celular (Tarea 5 paso 0). Fallback: hotspot del celular uniendo ESP32 y laptop a la misma red; si está en otra red con Internet, `server_url_alt=http://rebaserver.tech` (túnel Cloudflare HTTP) ya es el respaldo automático del firmware. |
+| C2 | Firewall de Windows bloquea `:5000` entrante desde el ESP32 (perfil público de red de oficina) | M | A | Detectarlo en Tarea 5 paso 0/2: si el ESP32 no alcanza `/api/health`, unir la PC al hotspot del celular junto al ESP32 (LAN compartida, sin abrir puertos) o regla de firewall entrante (requiere admin). El túnel zrok no aplica al ESP32 (solo HTTPS); el Cloudflare `rebaserver.tech` sí (HTTP plano). |
 | C3 | `server_url` del ESP32 desactualizado (IP del laptop cambió por DHCP) | M | M | El ESP32 descarga config cada 60 s: actualizar `server_url` vía `GET/POST /api/admin/device-config` a la IP actual y verificar que `/api/captures/latest` muestre actividad. |
 | C4 | Bomba no dispara o dispara incorrectamente (NC vs NO, umbrales de distancia, relé) | M | M | Verificar `BOMBA_EN_NC` del firmware vs config del server (`dist_min_cm=0`, `dist_max_cm=23`, `pump_photos=3`, `pump_seconds=10`); prueba con objeto a distintas distancias; confirmar clic del relé y alimentación 12 V adecuada. |
 | C5 | ESP32 en boot loop por brownout (cámara + WiFi + flash sobre fuente débil) | B | M | Fuente 5 V/2 A decente; si las capturas cesan abruptamente, power cycle y revisar que vuelva a reportar. |

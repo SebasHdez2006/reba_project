@@ -44,7 +44,8 @@ En Arduino IDE: abrir la carpeta `fotos_nc` (el `.ino` debe llevar el nombre de 
 | Clave | Rango | Default | Notas |
 |-------|-------|---------|-------|
 | `wifi_ssid` / `wifi_pass` | ssid 1-32, pass ≤63 | — | pass vacío = red abierta. Cambio remoto lleva backup y **revierte solo en 90 s** si no conecta |
-| `server_url` | `http://…` ≤96 chars | `http://93togsum.free.tryportwarp.cc:16404` | Sin https. Default = túnel Portwarp de dirección fija (16-nov); también acepta LAN `http://<IP-PC>:5000`. **No** acepta el túnel zrok (solo HTTPS). Backup y **revierte en 6 min** si no responde |
+| `server_url` | `http://…` ≤96 chars | `http://192.168.137.1:5000` (LAN REBA-AP) | Sin https. Acepta LAN `http://<IP-PC>:5000` o túnel `http://rebaserver.tech`. **No** acepta zrok (HTTPS-only). Con `server_url_alt` hay **failover automático**: 3 polls fallidos → conmuta a la alternativa, re-sondea la principal cada 5 min |
+| `server_url_alt` | `http://…` ≤96 chars | `http://rebaserver.tech` | URL de respaldo del failover (túnel Cloudflare). Se prueba solo cuando la principal falla; la elección persiste en NVS `srv_act` |
 | `pump_photos` | 1-50 | 3 | Fotos por ciclo de bomba |
 | `pump_seconds` | 1-300 | 10 | Duración del ciclo |
 | `dist_min_cm` / `dist_max_cm` | 0-500, min<max | 0 / 23 | Rango ultrasónico de disparo |
@@ -188,7 +189,7 @@ Todos los deadlines usan `(long)(millis() - deadline) < 0` — **seguro ante el 
 | `init OK pero sin frames` / FB-OVF | Verificar `camera_config_t config = {}` en `configCamara()`; alimentación 5 V |
 | No conecta Wi-Fi | SSID/pass en NVS (`GET`), red **2.4 GHz**, `STATUS` → `wifi=` |
 | Cola crece sin enviar | `server_url` correcto, PC alcanzable, firewall puerto 5000 |
-| `server_url` dejó de responder | La PC cambió de IP o el hotspot se reinició → reconfigurar `server_url` (portal `REBA-Setup` si el dispositivo no alcanza otra red). El ESP32 **no puede** descubrir la IP nueva solo. (El túnel zrok no aplica: es solo HTTPS para el dashboard) |
+| `server_url` dejó de responder | La PC cambió de IP o el hotspot se reinició → el failover la lleva a `server_url_alt` (túnel `rebaserver.tech`) si hay Internet; si no, reconfigurar por portal `REBA-Setup`. El ESP32 **no puede** descubrir la IP nueva solo si no hay Internet |
 | `SET` dice "rechazada" | Valor fuera de rango/formato — ver tabla de claves |
 | Bomba no responde a comando manual | `GET /api/pump/events` → `pending_cmd`; ESP32 online (`device.online` en dashboard); ack perdido → TTL 10 min |
 | Distancia siempre -1 | HC-SR04 cableado (TRIG 14 / ECHO 15 con divisor / 5 V), objeto a <4 m |

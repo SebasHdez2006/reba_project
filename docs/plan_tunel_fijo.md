@@ -1,13 +1,21 @@
-# Plan — Túnel de dirección fija para la ESP32-CAM (reemplazo cloudflared)
+# Plan — Túnel de dirección fija para la ESP32-CAM
 
-> Estado: **EN CURSO** (16-nov) — Portwarp elegido y activo pero
-> **inestable** (alerta "conexión inestable" de la app; nodo Hong Kong
-> ~255 ms + PC en WiFi). Mientras tanto la ESP32 migra primero por
-> **LAN directa** (`http://<IP-PC>:5000`) y el server le empuja
-> `server_url`=Portwarp remoto con `srv_bak` como red de seguridad.
-> Objetivo: que la ESP32 remota (casa de Nabiki) reconecte sola cada
-> vez que el server esté encendido, sin reconfiguración física ni URLs
-> efímeras.
+> Estado: **DESPLEGADO** (16-nov noche) — Cloudflare named tunnel sobre
+> dominio propio `rebaserver.tech` (.tech gratis del GitHub Student
+> Pack). HTTP plano puerto 80 para la ESP32 + HTTPS para el dashboard,
+> mismo túnel. Autostart vía Startup folder (`reba-cloudflared.vbs` →
+> `tools/run_cloudflared.bat`, `--protocol http2`). ESP32:
+> `server_url_alt=http://rebaserver.tech` + `ota_url` ya configurados.
+>
+> Descartados en el camino: Portwarp (listener público muerto, agente
+> sin API), playit.gg (auth roto + TCP requiere Premium), Oracle VPS
+> (tarjeta rechazada en verificación), Azure for Students (UES no está
+> en la base de instituciones de Microsoft), DigitalOcean (oferta
+> eliminada del pack 2026). zrok sigue de respaldo para el dashboard.
+>
+> Historial: la ESP32 migra primero por **LAN directa**
+> (`http://192.168.137.1:5000` en REBA-AP); el túnel es el fallback
+> automático del firmware cuando hay Internet.
 
 ## 0. Problema actual
 
@@ -122,18 +130,42 @@ GET    # confirmar valores aplicados
   → Nabiki dispara OTA por `ota_url` o serie `OTA`. Si la ESP32 no
   alcanza el server → camino USB.
 
-## 4. Variante VPS (si se quiere $0 a largo plazo)
+## 4. Solución desplegada — Cloudflare named tunnel + dominio propio
 
-Oracle Cloud Always Free (VM ARM 4c/24GB o AMD micro, IP pública fija):
+Implementación final (16-nov noche, **verificada end-to-end**):
 
-- **C1 — relay TCP**: `ssh -R 5000:localhost:5000 usuario@VPS` persistente
-  desde la PC (autossh/Task Scheduler) → ESP32 apunta a
-  `http://IP_VPS:5000`. Mínimo cambio; la laptop sigue siendo el server.
-- **C2 — server completo en la VM**: uvicorn + ONNX + SQLite viven en la
-  VM → ESP32 alcanzable **24/7 con la laptop apagada**. Migración mayor
-  (copiar `server/`, `models/best.onnx`, `.env`, `data/` inicial) pero
-  elimina el problema de raíz; la laptop queda para entrenar/dashboard.
-  zrok podría reapuntarse a `http://IP_VPS:5000` para el dashboard.
+- **Dominio**: `rebaserver.tech` — .tech gratis 1 año vía GitHub
+  Student Pack (Namecheap/get.tech). Nameservers → Cloudflare.
+  Renovación ~$10-15/año si el proyecto sigue vivo.
+- **Túnel**: `cloudflared tunnel reba`
+  (`8b5b1785-5afc-42f8-a075-a3a607b615fc`), ingress
+  `rebaserver.tech → http://localhost:5000`.
+  - `http://rebaserver.tech` → HTTP plano → **ESP32**
+    (`server_url_alt=http://rebaserver.tech`, puerto 80 default).
+  - `https://rebaserver.tech` → dashboard remoto (reemplaza zrok).
+- **Protocolo**: `--protocol http2` obligatorio — QUIC/UDP hace
+  timeout en la red institucional (PROGRESO sesión 11).
+- **Autostart**: `reba-cloudflared.vbs` en
+  `%APPDATA%\...\Startup` → `tools/run_cloudflared.bat` (oculto,
+  log `logs/cloudflared.log`). cloudflared reconecta solo.
+- **Archivos**: `tools/cloudflared_config.yml` (plantilla con IDs
+  reales), `tools/run_cloudflared.bat`, `tools/cloudflared_tunnel_hidden.vbs`.
+- **Credenciales**: `~/.cloudflared/cert.pem` + `<tunnel-id>.json`
+  (NO commitear — son secretos de la cuenta Cloudflare).
+- **Pendiente E2E**: ESP32 en WiFi con Internet → failover LAN→
+  `rebaserver.tech` (el firmware ya lo hace solo tras 3 polls
+  fallidos en la principal).
+
+### Variantes evaluadas y descartadas (resumen)
+
+- **Oracle Cloud Always Free + ssh -R**: tarjeta rechazada en la
+  retención de verificación (fondos insuficientes). Scripts quedaron
+  en `tools/vps_*.{sh,bat,vbs}` por si se reintenta con otra tarjeta.
+- **Azure for Students**: $100 sin tarjeta pero UES no figura en la
+  base de instituciones de Microsoft — verificación académica falló.
+- **C2 — server completo en VPS** (descartada): uvicorn + ONNX +
+  SQLite en la VM → ESP32 alcanzable 24/7 con la laptop apagada.
+  Reevaluar si el relay resulta insuficiente.
 
 ## 5. Checklist de ejecución
 

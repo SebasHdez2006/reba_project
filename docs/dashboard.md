@@ -2,7 +2,7 @@
 
 Interfaz servida por FastAPI desde `static/` — abrir por HTTP en **http://localhost:5000** o la IP de la PC (nunca como archivo `file://`).
 
-**Acceso desde el celular:** conectar el teléfono a la misma red que la PC (ej. hotspot `REBA-AP`) y abrir `http://<IP-PC>:5000` — con el hotspot activo suele ser `http://192.168.137.1:5000`. También es posible abrirlo desde **cualquier red con Internet** mediante el túnel zrok (`https://<nombre>.shares.zrok.io`, URL fija si se reservó con `setup_zrok.bat`, ver "Requisitos de red"). Sin autenticación por decisión: la red `REBA-AP` aísla el sistema en LAN; el túnel expone la URL a Internet — tratarla como secreta durante la prueba.
+**Acceso desde el celular:** conectar el teléfono a la misma red que la PC (ej. hotspot `REBA-AP`) y abrir `http://<IP-PC>:5000` — con el hotspot activo suele ser `http://192.168.137.1:5000`. Desde **cualquier red con Internet** abrir `https://rebaserver.tech` (túnel Cloudflare de dirección fija — también sirve a la ESP32 por `http://rebaserver.tech`); respaldo: `https://reba-cam.shares.zrok.io` (zrok). Sin autenticación por decisión: la red `REBA-AP` aísla el sistema en LAN; el dominio expone la URL a Internet — tratarla como secreta durante la prueba.
 
 ---
 
@@ -40,7 +40,7 @@ Archivos:
 
 **Tema claro/oscuro:** el switch del topbar conmuta `data-theme` en `<html>` y lo guarda en `localStorage` (`reba-theme`); un mini-script en `<head>` aplica el tema guardado antes de pintar (sin flash). Los canvas se repintan leyendo `--chart-*` del tema activo.
 
-**Caché:** el servidor envía `Cache-Control: no-cache` en `/`, `.html`, `.css` y `.js` (middleware en `server/main.py`) — el navegador revalida en cada carga, así las actualizaciones se propagan por el túnel zrok sin recarga dura. Los assets llevan además `?v=<fecha>` en el HTML como rompe-caché extra.
+**Caché:** el servidor envía `Cache-Control: no-cache` en `/`, `.html`, `.css` y `.js` (middleware en `server/main.py`) — el navegador revalida en cada carga, así las actualizaciones se propagan por el túnel sin recarga dura. Los assets llevan además `?v=<fecha>` en el HTML como rompe-caché extra.
 
 ---
 
@@ -61,18 +61,14 @@ Archivos:
 - Windows Firewall debe permitir entrada TCP 5000.
 - El dashboard y el ESP32 pueden usar un punto de acceso sin Internet; el modelo y la base de datos residen en la PC.
 
-### Acceso remoto — túnel zrok
+### Acceso remoto — dominio `rebaserver.tech` (principal) + zrok (respaldo)
 
 Para operar desde una red distinta a la LAN (datos móviles, otro sitio):
 
-```bat
-setup_zrok.bat   :: una vez: reserva https://<nombre>.shares.zrok.io (gratis, fijo)
-campo.bat        :: levanta el tunel en la ventana REBA-Tunnel
-```
+- **`https://rebaserver.tech`** — túnel Cloudflare nombrado de dirección fija (autostart vía `reba-cloudflared.vbs` → `tools/run_cloudflared.bat`, `--protocol http2`). HTTPS + `wss://` automáticos. Es la URL principal y **también la usa la ESP32** por `http://rebaserver.tech` cuando está fuera de la LAN.
+- **`https://reba-cam.shares.zrok.io`** — respaldo zrok (reservado, URL fija; se levanta con `campo.bat`/`retomar.bat` → `tools/zrok_tunnel.ps1`, log en `logs/tunnel.log`).
 
-- Usa la URL `https://<nombre>.shares.zrok.io` en el navegador (HTTPS + `wss://` automáticos). Con reserva es **siempre la misma**; sin reserva cambia por arranque del túnel (`logs/tunnel.log`, `logs/zrok_url.txt`).
-- **El ESP32 no usa el túnel** (zrok solo HTTPS; el firmware habla HTTP plano): va por la LAN/hotspot con la PC — `server_url=http://<IP-PC>:5000`.
-- El servidor puede reiniciarse sin afectar al túnel; `campo.bat`/`retomar.bat` relanzan ambos.
+Detalles del failover ESP32 y del túnel: `docs/plan_tunel_fijo.md`, `docs/server.md` §Acceso remoto.
 
 ---
 

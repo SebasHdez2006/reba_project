@@ -2,7 +2,7 @@
 
 Guía práctica para operar el sistema día a día: abrir el dashboard, leer lo que muestra y ejecutar las acciones disponibles. No requiere conocimientos de programación.
 
-> **Formas de conexión:** el dashboard se abre por la **red local** (misma Wi-Fi o hotspot `REBA-AP`, sin Internet) o por el **túnel zrok** desde cualquier lugar con Internet. La ESP32 se conecta por **HTTP plano en la LAN/hotspot** — el túnel zrok es solo HTTPS y no lo usa el firmware (ver §1 y §4). También existe `/simulador_esp32.html`: un emulador del nodo ESP32-CAM que corre en el navegador del celular usando su cámara real.
+> **Formas de conexión:** el dashboard se abre por la **red local** (misma Wi-Fi o hotspot `REBA-AP`, sin Internet) o por el **dominio `rebaserver.tech`** desde cualquier lugar con Internet. La ESP32 usa **HTTP plano**: por la LAN/hotspot en campo, o por `http://rebaserver.tech` (túnel Cloudflare de dirección fija) cuando está en una red con Internet — el firmware conmuta solo (failover). También existe `/simulador_esp32.html`: un emulador del nodo ESP32-CAM que corre en el navegador del celular usando su cámara real.
 
 ---
 
@@ -13,30 +13,30 @@ Guía práctica para operar el sistema día a día: abrir el dashboard, leer lo 
 | 1 | En la PC servidor | `http://localhost:5000` | uvicorn corriendo |
 | 2 | Celular/laptop en la **misma Wi-Fi** que la PC | `http://<IP-de-la-PC>:5000` (ver `ipconfig`) | firewall Windows permite TCP 5000 |
 | 3 | Celular en el **hotspot de la PC** (`REBA-AP`) | `http://192.168.137.1:5000` | hotspot móvil activo; **no requiere Internet** |
-| 4 | **Túnel zrok** — cualquier dispositivo con Internet | `https://<nombre>.shares.zrok.io` | `zrok` corriendo (ver abajo) |
+| 4 | **Dominio `rebaserver.tech`** — cualquier dispositivo con Internet | `https://rebaserver.tech` | túnel Cloudflare activo (autostart) |
 | 5 | **Simulador ESP32** en el celular | `/simulador_esp32.html` en la misma base | cámara del celular + contexto HTTPS |
+| 6 | **Dashboard remoto (respaldo zrok)** | `https://reba-cam.shares.zrok.io` | `zrok` corriendo (ver abajo) |
 
 - Funciona en cualquier navegador moderno (Chrome, Edge, Safari).
 - Si la página no carga por LAN: confirma que el servidor esté encendido y que el firewall permita el **puerto 5000**.
 - La interfaz está diseñada **móvil primero**: en el teléfono usa la barra inferior con 3 pestañas; en PC todo se ve en una sola pantalla con secciones.
 
-### Sobre el túnel zrok (escenario 4)
+### Sobre el dominio `rebaserver.tech` (escenarios 4 y 6)
 
-- Expone el servidor como `https://<nombre>.shares.zrok.io` — **URL fija y gratuita** si se reservó una vez con `setup_zrok.bat` (cuenta gratuita en zrok.io, sin dominio). Se levanta con `campo.bat`/`retomar.bat` o manualmente vía `tools/zrok_tunnel.ps1`.
-- **Sin reserva** el share es efímero: la URL cambia en cada arranque del túnel (reiniciar `uvicorn` **no** la cambia — son procesos independientes). Queda en `logs/tunnel.log` y `logs/zrok_url.txt`.
-- **HTTPS obligatorio**: zrok solo sirve HTTPS → sirve para el navegador (dashboard, simulador), **no para la ESP32** (firmware sin TLS). La ESP32 va por la LAN/hotspot directo a `http://<IP-PC>:5000`.
+- **`https://rebaserver.tech`** — túnel Cloudflare nombrado de **dirección fija permanente** (dominio propio `.tech` gratis del GitHub Student Pack). Sirve el dashboard a cualquier navegador y **también a la ESP32** por `http://rebaserver.tech` (HTTP plano puerto 80 — la placa no soporta TLS pero este túnel sí acepta HTTP sin redirect forzado).
+- **Autostart**: se lanza solo al iniciar sesión de Windows (`reba-cloudflared.vbs` en Startup → `tools/run_cloudflared.bat`). Reconecta solo si cae; log en `logs/cloudflared.log`.
+- **Failover de la ESP32**: `server_url`=LAN (REBA-AP) es la primaria; `server_url_alt=http://rebaserver.tech` es la respaldo. En la LAN la placa ni intenta el túnel; en una red con Internet la LAN falla ~3 polls y conmuta sola al dominio (~3 min), re-sondeando la LAN cada 5 min.
+- **`ota_url=http://rebaserver.tech/firmware.bin`** — las actualizaciones OTA remotas también pasan por este túnel.
+- Sin auth → el dominio es el secreto; gratis mientras el dominio exista (renovación ~$10-15/año tras el año del pack).
+
+### Sobre el túnel zrok (respaldo, escenario 6)
+
+- Expone el servidor como `https://reba-cam.shares.zrok.io` — **URL fija y gratuita** (reserva única con `setup_zrok.bat`, cuenta zrok.io sin dominio). Se levanta con `campo.bat`/`retomar.bat` o manualmente vía `tools/zrok_tunnel.ps1`.
+- **Sin reserva** el share es efímero: la URL cambia en cada arranque del túnel. Queda en `logs/tunnel.log` y `logs/zrok_url.txt`.
+- **HTTPS obligatorio**: zrok solo sirve HTTPS → solo para el navegador (dashboard, simulador), **no para la ESP32** (firmware sin TLS) — esa función la cumple `rebaserver.tech`.
 - **Regla de oro**: con reserva configurada la URL no cambia nunca; sin ella, anota la URL nueva tras cada reinicio del túnel.
 - Cuentas gratuitas sin verificar muestran una página intermedia anti-phishing ~1 vez por semana **solo en navegadores** — se salta con un clic; la ESP32 y `curl` la evitan.
 - Gratuito hasta 5 GB/día; sin auth → tratar la URL como secreta.
-
-> **ESP32 remoto (fuera de tu LAN):** zrok no le sirve (HTTPS-only y el
-> firmware rechaza `https://` por el bug de cámara documentado en
-> `fotos_nc.ino`). Desde el 16-nov el camino es el **túnel Portwarp**
-> `http://93togsum.free.tryportwarp.cc:16404` (HTTP plano, dirección
-> fija — ver `docs/plan_tunel_fijo.md`). Si el dispositivo está en la
-> misma red que la PC, también sirve directo `http://<IP-PC>:5000`.
-> El cloudflared quick tunnel quedó como respaldo temporal (URL
-> efímera `*.trycloudflare.com` — cambia en cada reinicio).
 
 ---
 

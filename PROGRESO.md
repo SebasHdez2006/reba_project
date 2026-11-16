@@ -1095,3 +1095,97 @@ reinicio de la PC → dispositivo inalcanzable. Se ejecuta la migración a
 - [ ] Prueba E2E de failover: tumbar la URL principal → 3 polls →
       conmuta a `srv_alt`; restaurar → ≤5 min → vuelve a principal.
 - [ ] Prueba física con muestras (plástico/unicel/metal) en la oficina.
+
+---
+
+## 16-nov (tarde-noche) — Túnel definitivo Cloudflare + métricas dashboard + validación campo
+
+### Túnel remoto definitivo: `rebaserver.tech` (DESPLEGADO)
+
+Tras agotar los candidatos gratuitos, el túnel definitivo es un
+**Cloudflare named tunnel** sobre dominio propio gratis:
+
+- **Dominio**: `rebaserver.tech` (.tech gratis del GitHub Student Pack
+  vía Namecheap/get.tech — 1 año; renovación ~$10-15/año después).
+  Nameservers migrados a Cloudflare (`javier`/`itzel.ns.cloudflare.com`).
+- **Túnel**: `cloudflared` named tunnel `reba`
+  (id `8b5b1785-5afc-42f8-a075-a3a607b615fc`), config en
+  `~/.cloudflared/config.yml` + `tools/cloudflared_config.yml`.
+  Ingress: `rebaserver.tech` → `http://localhost:5000`.
+- **Verificado end-to-end**: `http://rebaserver.tech/api/health` → 200
+  (HTTP plano — la ESP32 lo usa) y `https://rebaserver.tech/` → 200
+  (dashboard remoto, reemplaza funcionalmente a zrok que sigue de
+  respaldo). `--protocol http2` obligatorio: QUIC/UDP hace timeout en
+  la red institucional (sesión 11).
+- **Autostart**: `reba-cloudflared.vbs` en Startup folder del usuario →
+  `tools/run_cloudflared.bat` (oculto, log en `logs/cloudflared.log`).
+  Sin admin (Register-ScheduledTask denegado; Startup folder basta).
+  cloudflared reconecta solo ante caídas del edge.
+- **ESP32**: `server_url=http://192.168.137.1:5000` (LAN REBA-AP,
+  primaria) + `server_url_alt=http://rebaserver.tech` (failover
+  automático ya flasheado) + `ota_url=http://rebaserver.tech/firmware.bin`.
+  En REBA-AP (sin Internet) sigue por LAN; en cualquier WiFi con
+  Internet el failover la lleva al túnel en ~3 polls (~3 min).
+
+### Descartados en el camino (documentado para no repetir)
+
+| Opción | Motivo del descarte |
+|---|---|
+| Portwarp (`93togsum...:16404`) | Listener público murió; agente UWP sin API de control (solo GUI); inestable toda la sesión |
+| playit.gg | Agente con auth roto (miles de timeouts aun tras restart del servicio); túneles TCP genéricos requieren Premium $3/mes |
+| Oracle Cloud Always Free | Registro rechazado: tarjeta sin fondos suficientes para la retención de verificación |
+| Azure for Students ($100 sin tarjeta) | Verificación académica falló: UES no está en la base de datos de instituciones de Microsoft |
+| DigitalOcean (GitHub Student Pack) | Oferta eliminada del pack en 2026 |
+| bore.pub / pinggy / localhost.run / serveo / zrok público | Puerto random por sesión, HTTPS-only, o servidor hobby sin SLA |
+
+### Limpieza de sesión legacy (16-nov ~10:00)
+
+- Matados: 2-3 uvicorn duplicados/huérfanos, cloudflared quick tunnel,
+  zrok viejo + share fantasma `4wuciomwvv7g` (bloqueaba el nombre
+  `reba-cam`, liberado y recreado). Estado limpio: **1 uvicorn** en
+  `0.0.0.0:5000` + **1 cloudflared** named tunnel + zrok respaldo.
+- playitd/portwarp quedan como servicios del sistema (autostart propio)
+  pero rotos/descartados — no los usa el proyecto.
+
+### Validación de intemperie REBA-AP / REBA-Setup (16-nov mañana)
+
+- **REBA-AP** (hotspot móvil Windows, sin Internet): server responde en
+  `192.168.137.1:5000`, dashboard carga, ESP32 con IP `192.168.137.195`,
+  telemetría fluyendo (RSSI -50 dBm, uptime >1.5 h estable).
+- **Aprovisionamiento remoto**: `POST /api/admin/device-config` con
+  `wifi_ssid`/`wifi_pass`/`server_url` → ESP32 migró sola de
+  `Sistemas-Industrial` a `REBA-AP` sin tocarla.
+- **REBA-Setup** (portal sin credenciales): NVS borrada → portal abrió
+  solo → celular configuró `REBA-AP` + `server_url` → placa unida a la
+  red de campo. Ciclo completo validado sin Internet externo.
+- **Failover `server_url` probado en vivo**: principal muerta (`:59999`)
+  → 3 polls fallidos → conmutó a `server_url_alt` (`:5000`) → online de
+  nuevo sin intervención (~4 min). Re-sondeo de principal cada 5 min.
+
+### Dashboard — paneles nuevos (16-nov)
+
+- **Rendimiento** (vista En vivo): RTT de red real (ping cada 5 s),
+  latencia ONNX avg/p95, heartbeat del ESP32, uploads/h, uptime server,
+  clientes WS — todo vía `GET /api/perf` + WS.
+- **Estado del circuito**: telemetría real del ESP32 cada ~60 s
+  (`POST /api/device/status` desde firmware): uptime, heap, RSSI,
+  cámara, distancia, cola, relé, bomba, config efectiva.
+- **Controles**: "Vaciar álbum" (DELETE `/api/captures?scope=photos`),
+  "Borrar todos los datos" (scope=all), "Vaciar cola ESP32"
+  (`queue_clear` remota → firmware descarta pendientes en loop).
+- Firmware: `reportarEstado()` + `queue_clear` + failover
+  `server_url`/`server_url_alt` — compilado y flasheado (app-only en
+  `0x10000`, NVS preservada).
+
+### Pendiente
+
+- [ ] Prueba E2E del túnel con la ESP32 en WiFi CON Internet (cuando
+      Nabiki la tenga en otra red): failover LAN→`rebaserver.tech`.
+- [ ] Verificar `ota_url` remoto cuando haya binario nuevo.
+- [ ] Decisión de zrok: hoy es respaldo del dashboard; `rebaserver.tech`
+      HTTPS ya lo cubre — se puede retirar si se quiere simplificar.
+- [ ] Portwarp/playit servicios del sistema: valorar desinstalar para
+      limpieza (no los usa el proyecto).
+- [ ] Seguridad: `rebaserver.tech` expone el dashboard sin auth a
+      Internet — el dominio es el secreto; evaluar token si se vuelve
+      problema (firmware no manda headers custom hoy).

@@ -250,8 +250,10 @@ de prueba física · `[📄]` solo documental
 
 Plan de la jornada en intemperie (**PC + ESP32 + celular en el hotspot del
 celular** — misma LAN, sin depender de Internet para el ESP32; el dashboard
-del celular puede abrirse por `http://<IP-PC>:5000` o por el túnel zrok si
-se quiere acceso desde otra red). Procedimiento operativo
+del celular puede abrirse por `http://<IP-PC>:5000`, por `https://rebaserver.tech`
+(túnel Cloudflare) o por el respaldo zrok si se quiere acceso desde otra red;
+la ESP32 remota usa `server_url_alt=http://rebaserver.tech` por failover).
+Procedimiento operativo
 en `docs/manual_uso.md` §4. Marcar resultados al terminar el día.
 
 | # | Pregunta | Comportamiento esperado | Prueba | Res. |
@@ -280,7 +282,7 @@ en `docs/manual_uso.md` §4. Marcar resultados al terminar el día.
 | Alta | Trigger HC-SR04 con objeto <23 cm | Pendiente (sin lecturas en banco) |
 | Alta | Ciclo automático 3 fotos → relé/bomba | Pendiente verificación física |
 | Alta | Capturas acuáticas reales → dataset | Pendiente (~4 fotos en DB) — **en curso: jornada de campo 14-nov** |
-| Alta | ESP32 + PC + celular en hotspot compartido (sin Wi-Fi local) | Preparado — pendiente ejecución en campo (zrok no aplica al ESP32: solo HTTPS) |
+| Alta | ESP32 + PC + celular en hotspot compartido (sin Wi-Fi local) | Preparado — pendiente ejecución en campo; remoto con Internet: `server_url_alt=http://rebaserver.tech` (Cloudflare, HTTP plano) |
 | Media | Estrés de cola offline (>6 fotos) | Parcialmente probado |
 | Media | Reversión Wi-Fi/server_url remotos | Verificado en banco |
 | Media | Retención `CAPTURE_RETENTION` | Verificado con prune manual |
