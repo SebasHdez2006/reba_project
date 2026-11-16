@@ -13,34 +13,96 @@
   </head>
   <body>
     <div class="app">
-      <header class="topbar">
+      <aside class="sidebar">
         <div class="brand">
           <span class="brand-sigil" aria-hidden="true"></span>
-          <span class="brand-mark">REBA</span>
-        </div>
-        <div class="topbar-right">
-          <span id="lastPingText" class="ping-note" title="Último contacto del ESP32-CAM">—</span>
-          <div id="deviceStatus" class="status-pill offline" title="Estado del ESP32-CAM (heartbeat)">
-            <span class="status-dot" aria-hidden="true"></span>
-            <span id="deviceStatusText">ESP32: —</span>
-          </div>
-          <div id="wsStatus" class="status-pill offline" title="Estado del WebSocket">
-            <span class="status-dot" aria-hidden="true"></span>
-            <span id="wsStatusText">Desconectado</span>
+          <div class="brand-text">
+            <span class="brand-mark">REBA</span>
+            <span class="brand-tag">Monitoreo flotante</span>
           </div>
         </div>
-      </header>
+        <nav class="side-nav" aria-label="Secciones del dashboard">
+          <button type="button" class="nav-tab is-active" data-view="live" aria-selected="true">
+            <svg class="nav-ico" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+              <path d="M2.5 10.5h3l1.8-5 3.4 9 1.8-5.4h5.5" fill="none" stroke="currentColor"
+                    stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="nav-text">
+              <span class="nav-label">En vivo</span>
+              <span class="nav-desc">Capturas y bomba</span>
+            </span>
+          </button>
+          <button type="button" class="nav-tab" data-view="analytics" aria-selected="false">
+            <svg class="nav-ico" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+              <path d="M4 16.5v-5M9.3 16.5V6M14.6 16.5v-8.5M3 16.5h14" fill="none" stroke="currentColor"
+                    stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="nav-text">
+              <span class="nav-label">Analítica</span>
+              <span class="nav-desc">Stats y archivo</span>
+            </span>
+          </button>
+          <button type="button" class="nav-tab" data-view="device" aria-selected="false">
+            <svg class="nav-ico" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+              <rect x="5.5" y="5.5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor"
+                    stroke-width="1.7"/>
+              <path d="M8 3v2.5M12 3v2.5M8 14.5V17M12 14.5V17M3 8h2.5M3 12h2.5M14.5 8H17M14.5 12H17"
+                    fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+            <span class="nav-text">
+              <span class="nav-label">Dispositivo</span>
+              <span class="nav-desc">Config y telemetría</span>
+            </span>
+          </button>
+        </nav>
+        <div class="sidebar-foot">
+          <span class="sidebar-note">REBA · panel local<br />ESP32-CAM · YOLOv8 ONNX</span>
+        </div>
+      </aside>
 
-      <div id="alertBanner" class="alert" role="alert" aria-live="assertive">
-        <strong>ALERTA</strong>
-        <span id="alertText">Bomba activada.</span>
-      </div>
+      <div class="content">
+        <header class="topbar">
+          <div class="topbar-left">
+            <div class="brand brand-topbar">
+              <span class="brand-sigil" aria-hidden="true"></span>
+              <span class="brand-mark">REBA</span>
+            </div>
+            <div class="view-heading">
+              <h1 class="view-title" id="viewTitle">En vivo</h1>
+              <p class="view-sub" id="viewSub">Telemetría y capturas en tiempo real</p>
+            </div>
+          </div>
+          <div class="topbar-right">
+            <span id="lastPingText" class="ping-note" title="Último contacto del ESP32-CAM">—</span>
+            <div id="deviceStatus" class="status-pill offline" title="Estado del ESP32-CAM (heartbeat)">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span id="deviceStatusText">ESP32: —</span>
+            </div>
+            <div id="wsStatus" class="status-pill offline" title="Estado del WebSocket">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span id="wsStatusText">Desconectado</span>
+            </div>
+          </div>
+        </header>
+
+        <div id="alertBanner" class="alert" role="alert" aria-live="assertive">
+          <strong>ALERTA</strong>
+          <span id="alertText">Bomba activada.</span>
+        </div>
 
       <main class="views">
         <!-- ======================= EN VIVO ======================= -->
         <section class="view view-live" id="view-live" role="tabpanel" aria-label="En vivo">
           <section class="panel panel-capture">
             <div class="panel-header">
+              <span class="panel-ico" aria-hidden="true">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="1.8" y="4.2" width="12.4" height="8.8" rx="1.8"/>
+                  <circle cx="8" cy="8.6" r="2.4"/>
+                  <path d="M5.2 4.2 6.2 2.6h3.6l1 1.6"/>
+                </svg>
+              </span>
               <h2>Última captura</h2>
               <span id="captureCount" class="status-pill">0 fotos</span>
             </div>
@@ -81,6 +143,13 @@
 
           <section class="panel panel-pump">
             <div class="panel-header">
+              <span class="panel-ico" aria-hidden="true">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M8 2c2.3 3.2 4 5.4 4 7.5a4 4 0 1 1-8 0C4 7.4 5.7 5.2 8 2z"/>
+                  <path d="M6.4 9.6a1.8 1.8 0 0 0 1.6 1.9"/>
+                </svg>
+              </span>
               <h2>Bomba</h2>
               <span id="pumpState" class="status-pill">esperando fotos</span>
             </div>
@@ -133,12 +202,68 @@
               </details>
             </div>
           </section>
+
+          <section class="panel panel-perf">
+            <div class="panel-header">
+              <span class="panel-ico" aria-hidden="true">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1.8 8.4h2.4l1.4-3.8 2.8 7 1.5-4.1h4.3"/>
+                </svg>
+              </span>
+              <h2>Rendimiento</h2>
+              <span id="perfUpdated" class="meta-u">—</span>
+            </div>
+            <div class="panel-body">
+              <div class="metric-grid">
+                <div class="metric">
+                  <span class="metric-k">Red · RTT</span>
+                  <strong id="mNetMs">—</strong><span class="metric-u">ms</span>
+                </div>
+                <div class="metric">
+                  <span class="metric-k">IA · promedio</span>
+                  <strong id="mInferAvg">—</strong><span class="metric-u">ms</span>
+                </div>
+                <div class="metric">
+                  <span class="metric-k">IA · p95</span>
+                  <strong id="mInferP95">—</strong><span class="metric-u">ms</span>
+                </div>
+                <div class="metric">
+                  <span class="metric-k">Heartbeat ESP32</span>
+                  <strong id="mHeartbeat">—</strong>
+                </div>
+                <div class="metric">
+                  <span class="metric-k">Uploads última hora</span>
+                  <strong id="mUploadsH">—</strong>
+                </div>
+                <div class="metric">
+                  <span class="metric-k">Uptime servidor</span>
+                  <strong id="mUptime">—</strong>
+                </div>
+                <div class="metric">
+                  <span class="metric-k">Clientes WS</span>
+                  <strong id="mWsClients">—</strong>
+                </div>
+                <div class="metric">
+                  <span class="metric-k">Último dato en vivo</span>
+                  <strong id="mWsAge">—</strong>
+                </div>
+              </div>
+            </div>
+          </section>
         </section>
 
         <!-- ======================= ANALÍTICA ======================= -->
         <section class="view view-analytics" id="view-analytics" role="tabpanel" aria-label="Analítica" hidden>
           <section class="panel panel-metrics">
             <div class="panel-header">
+              <span class="panel-ico" aria-hidden="true">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="8" cy="8" r="5.6" opacity=".4"/>
+                  <path d="M8 2.4A5.6 5.6 0 0 1 13.6 8L8 8z"/>
+                </svg>
+              </span>
               <h2>Materiales acumulados</h2>
             </div>
             <div class="panel-body">
@@ -170,6 +295,12 @@
 
           <section class="panel panel-activity">
             <div class="panel-header">
+              <span class="panel-ico" aria-hidden="true">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3.4 13v-3.8M7.4 13V4.4M11.4 13V7.2M2.4 13h11.2"/>
+                </svg>
+              </span>
               <h2>Actividad</h2>
               <select id="tsDays" class="ts-days" title="Rango de días">
                 <option value="7">7 días</option>
@@ -188,6 +319,15 @@
 
           <section class="panel panel-gallery">
             <div class="panel-header">
+              <span class="panel-ico" aria-hidden="true">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="2" width="4.6" height="4.6" rx="1"/>
+                  <rect x="9.4" y="2" width="4.6" height="4.6" rx="1"/>
+                  <rect x="2" y="9.4" width="4.6" height="4.6" rx="1"/>
+                  <rect x="9.4" y="9.4" width="4.6" height="4.6" rx="1"/>
+                </svg>
+              </span>
               <h2>Galería de capturas</h2>
               <div class="gallery-controls">
                 <input type="search" id="galleryFilter" class="gallery-filter"
@@ -200,6 +340,8 @@
                   </svg>
                   Exportar YOLO
                 </a>
+                <button type="button" id="btnClearAlbum" class="btn ghost danger"
+                        title="Borra todas las fotos y detecciones del álbum (útil en pruebas)">Vaciar álbum</button>
                 <button type="button" id="galleryMore" class="btn ghost">Cargar más</button>
               </div>
             </div>
@@ -216,6 +358,13 @@
         <section class="view view-device" id="view-device" role="tabpanel" aria-label="Dispositivo" hidden>
           <section class="panel panel-device">
             <div class="panel-header">
+              <span class="panel-ico" aria-hidden="true">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="4.6" y="4.6" width="6.8" height="6.8" rx="1.2"/>
+                  <path d="M6.4 2.6v2M9.6 2.6v2M6.4 11.4v2M9.6 11.4v2M2.6 6.4h2M2.6 9.6h2M11.4 6.4h2M11.4 9.6h2"/>
+                </svg>
+              </span>
               <h2>Dispositivo ESP32-CAM</h2>
               <span id="deviceConfigState" class="status-pill">—</span>
               <details class="help">
@@ -302,8 +451,55 @@
               </form>
             </div>
           </section>
+
+          <section class="panel panel-circuit">
+            <div class="panel-header">
+              <span class="panel-ico" aria-hidden="true">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="3.6" cy="8" r="1.7"/>
+                  <circle cx="12.4" cy="3.8" r="1.7"/>
+                  <circle cx="12.4" cy="12.2" r="1.7"/>
+                  <path d="M5 7.2 11 4.5M5 8.8l6 2.7"/>
+                </svg>
+              </span>
+              <h2>Estado del circuito</h2>
+              <span id="circuitState" class="status-pill">—</span>
+            </div>
+            <div class="panel-body">
+              <div class="circuit-grid">
+                <div class="circuit-row"><span>ESP32-CAM</span><strong id="cDevState">—</strong></div>
+                <div class="circuit-row"><span>IP · último contacto</span><strong id="cDevIp">—</strong></div>
+                <div class="circuit-row"><span>Sensor HC-SR04</span><strong id="cDist">—</strong></div>
+                <div class="circuit-row"><span>Relé GPIO13</span><strong id="cRelay">—</strong></div>
+                <div class="circuit-row"><span>Cola de fotos</span><strong id="cQueue">—</strong></div>
+                <div class="circuit-row"><span>Cámara OV2640</span><strong id="cCam">—</strong></div>
+                <div class="circuit-row"><span>Heap libre</span><strong id="cHeap">—</strong></div>
+                <div class="circuit-row"><span>WiFi RSSI</span><strong id="cRssi">—</strong></div>
+                <div class="circuit-row"><span>Bomba manual</span><strong id="cPumpManual">—</strong></div>
+                <div class="circuit-row"><span>Fotos hacia ciclo</span><strong id="cPumpProg">—</strong></div>
+              </div>
+              <div class="circuit-actions">
+                <button type="button" id="btnQueueClear" class="btn ghost danger"
+                        title="El ESP32 descarta las fotos tomadas aún no subidas en su próximo poll">Vaciar cola ESP32</button>
+                <button type="button" id="btnResetAll" class="btn ghost danger"
+                        title="Borra capturas, detecciones, contadores y eventos de bomba">Borrar todos los datos</button>
+              </div>
+              <p id="circuitNote" class="footer-note">
+                La telemetría del dispositivo llega con cada poll (~60 s).
+                Si el firmware es anterior a esta versión, las filas del
+                sensor/relé/cola muestran "sin datos".
+              </p>
+            </div>
+          </section>
         </section>
       </main>
+
+      <p class="footer-note">
+        REBA · Dashboard local · Parámetros configurables en
+        <code>.env</code> (servidor) y en el sketch <code>fotos_nc.ino</code>
+      </p>
+      </div><!-- /.content -->
 
       <nav class="bottom-nav" aria-label="Secciones del dashboard">
         <button type="button" class="nav-tab is-active" data-view="live" aria-selected="true">
@@ -340,11 +536,6 @@
           <div id="lightboxMeta" class="lightbox-meta"></div>
         </div>
       </div>
-
-      <p class="footer-note">
-        REBA · Dashboard local · Parámetros configurables en
-        <code>.env</code> (servidor) y en el sketch <code>fotos_nc.ino</code>
-      </p>
     </div>
 
     <script src="/app.js" defer></script>

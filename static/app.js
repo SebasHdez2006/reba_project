@@ -43,6 +43,7 @@
     donutHover: null,         // clase resaltada en el donut (null = normal)
     tsGeom: null,             // geometría de la gráfica de actividad (tooltips)
     pumpSegCount: 0,          // segmentos renderizados en la barra de progreso
+    lastWsMsg: null,          // epoch ms del último mensaje WS recibido
   };
 
   // ---------------------------------------------------------------------------
@@ -83,6 +84,7 @@
     });
 
     ws.addEventListener("message", (ev) => {
+      state.lastWsMsg = Date.now();
       let msg;
       try {
         msg = JSON.parse(ev.data);
@@ -1030,7 +1032,198 @@
   if (lb) lb.addEventListener("click", (e) => { if (e.target === lb) closeLightbox(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeLightbox(); });
 
-  // --- Navegación por pestañas (móvil / tablet) ---
+  // --- Botones de reset / comandos al dispositivo ---
+  const btnClearAlbum = $("btnClearAlbum");
+  if (btnClearAlbum) btnClearAlbum.addEventListener("click", () => resetServerData("photos", btnClearAlbum));
+  const btnResetAll = $("btnResetAll");
+  if (btnResetAll) btnResetAll.addEventListener("click", () => resetServerData("all", btnResetAll));
+  const btnQueueClear = $("btnQueueClear");
+  if (btnQueueClear) btnQueueClear.addEventListener("click", () => queueClearEsp(btnQueueClear));
+
+  // ---------------------------------------------------------------------------
+  // Rendimiento en tiempo real + estado del circuito + reset de datos
+  // ---------------------------------------------------------------------------
+  function fmtAgo(ms) {
+    if (ms == null || Number.isNaN(ms)) return "—";
+    const s = Math.max(0, Math.round(ms / 1000));
+    if (s < 5) return "ahora";
+    if (s < 60) return `hace ${s} s`;
+    if (s < 3600) return `hace ${Math.floor(s / 60)} min`;
+    return `hace ${Math.floor(s / 3600)} h`;
+  }
+
+  function fmtUptime(s) {
+    if (s == null) return "—";
+    s = Math.round(s);
+    if (s < 60) return `${s} s`;
+    if (s < 3600) return `${Math.floor(s / 60)} min`;
+    if (s < 86400) return `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`;
+    return `${Math.floor(s / 86400)} d ${Math.floor((s % 86400) / 3600)} h`;
+  }
+
+  // RTT al servidor: fetch cronometrado a /api/health (cada 5 s)
+  async function measureNetLatency() {
+    const el = $("mNetMs");
+    if (!el) return;
+    const t0 = performance.now();
+    try {
+      await fetch(`/api/health?_=${Date.now()}`, { cache: "no-store" });
+      el.textContent = String(Math.round(performance.now() - t0));
+      el.classList.remove("warn");
+    } catch {
+      el.textContent = "—";
+      el.classList.add("warn");
+    }
+  }
+
+  async function loadPerf() {
+    try {
+      const perf = await fetch("/api/perf").then((r) => r.json());
+      const inf = perf.inference || {};
+      setText("mInferAvg", inf.count ? String(inf.avg) : "—");
+      setText("mInferP95", inf.count ? String(inf.p95) : "—");
+      setText(
+        "mHeartbeat",
+        perf.device?.heartbeat_age_s != null
+          ? fmtAgo(perf.device.heartbeat_age_s * 1000)
+          : "sin contacto"
+      );
+      setText("mUploadsH", String(perf.uploads_last_hour ?? "—"));
+      setText("mUptime", fmtUptime(perf.server?.uptime_s));
+      setText("mWsClients", String(perf.server?.ws_clients ?? "—"));
+      const upd = $("perfUpdated");
+      if (upd) upd.textContent = `actualizado ${new Date().toLocaleTimeString()}`;
+      state.telemetry = perf.telemetry || null;
+    } catch (_) { /* reintenta en el próximo ciclo */ }
+  }
+
+  // Edad del último mensaje WS + RTT — refresco ligero cada 5 s
+  function updateRealtimeBits() {
+    const el = $("mWsAge");
+    if (el) {
+      el.textContent = state.lastWsMsg ? fmtAgo(Date.now() - state.lastWsMsg) : "—";
+      el.classList.toggle("warn", !state.lastWsMsg || Date.now() - state.lastWsMsg > 90000);
+    }
+  }
+
+  async function loadCircuit() {
+    const pill = $("circuitState");
+    try {
+      const [devRes, pumpRes] = await Promise.all([
+        fetch("/api/device/status").then((r) => r.json()),
+        fetch("/api/pump-status").then((r) => r.json()),
+      ]);
+      const dev = devRes.device || {};
+      const tel = devRes.telemetry || state.telemetry || {};
+      const hasTel = Object.keys(tel).length > 0;
+
+      setText("cDevState", dev.online ? "EN LÍNEA" : "sin señal");
+      if (pill) {
+        pill.textContent = dev.online ? "en línea" : "offline";
+        pill.className = `status-pill ${dev.online ? "online" : "offline"}`;
+      }
+      setText(
+        "cDevIp",
+        `${dev.ip || "—"} · ${dev.last_seen ? fmtAgo((Date.now() / 1000 - dev.last_seen) * 1000) : "—"}`
+      );
+
+      const t = (id, v) => setText(id, hasTel ? v : "sin datos");
+      t("cDist", tel.dist_cm != null ? `${tel.dist_cm} cm` : "—");
+      t("cRelay",
+        tel.rele_pin != null
+          ? (tel.pump_manual ? "bomba manual ON" : `GPIO13=${tel.rele_pin}`)
+          : "—");
+      t("cQueue",
+        tel.cola_n != null ? `${tel.cola_n}/${tel.cola_max ?? "?"} fotos` : "—");
+      t("cCam", tel.camara_ok != null ? (tel.camara_ok ? "OK" : "CAÍDA") : "—");
+      t("cHeap", tel.heap != null ? `${Math.round(tel.heap / 1024)} KB` : "—");
+      t("cRssi", tel.rssi != null ? `${tel.rssi} dBm` : "—");
+      t("cPumpManual", tel.pump_manual != null ? (tel.pump_manual ? "ACTIVA" : "inactiva") : "—");
+
+      const trig = pumpRes.pump_trigger_photos ?? state.config?.pump_trigger_photos ?? 3;
+      setText("cPumpProg", `${pumpRes.photos_since_pump ?? 0}/${trig} fotos`);
+      setText(
+        "circuitNote",
+        hasTel
+          ? `Telemetría recibida hace ${fmtAgo(((Date.now() / 1000) - (tel._ts || 0)) * 1000)} · llega con cada poll (~60 s).`
+          : "La telemetría del dispositivo llega con cada poll (~60 s). Si el firmware es anterior a esta versión, las filas del sensor/relé/cola muestran \"sin datos\"."
+      );
+    } catch (_) { /* silencioso */ }
+  }
+
+  // --- Reset de datos de prueba ---
+  async function resetServerData(scope, btn) {
+    const label = btn ? btn.textContent : "";
+    const ok = confirm(
+      scope === "all"
+        ? "¿Borrar TODAS las capturas, detecciones, contadores de materiales y el historial de eventos de bomba? Esta acción no se puede deshacer."
+        : "¿Borrar todas las fotos del álbum y sus detecciones? Los contadores de materiales se reinician."
+    );
+    if (!ok) return;
+    if (btn) { btn.disabled = true; btn.textContent = "Borrando…"; }
+    try {
+      const res = await fetch(`/api/captures?scope=${scope}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // Refrescar vistas afectadas
+      state.captureIds.clear();
+      state.captureCount = 0;
+      state.captureDets.clear();
+      state.currentCapture = null;
+      const gal = $("captureGallery");
+      if (gal) gal.replaceChildren();
+      const img = $("latestCaptureImage");
+      const emp = $("captureEmpty");
+      if (img) img.hidden = true;
+      if (emp) emp.hidden = false;
+      setText("latestCaptureClasses", "Sin capturas");
+      setText("latestCaptureTime", "—");
+      setText("captureCount", "0 fotos");
+      galleryState.items = [];
+      galleryState.offset = 0;
+      galleryState.done = false;
+      renderGallery();
+      const stats = await fetch("/api/stats").then((r) => r.json());
+      applyStats(stats);
+      loadPumpEvents();
+      loadTimeseries();
+      loadPerf();
+      loadCircuit();
+    } catch (err) {
+      console.warn("Reset failed", err);
+      alert("No se pudo borrar: " + err.message);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = label; }
+    }
+  }
+
+  // Vaciar la cola de fotos pendientes DENTRO de la ESP32 (vía config remota)
+  async function queueClearEsp(btn) {
+    const label = btn ? btn.textContent : "";
+    if (!confirm("¿Ordenar a la ESP32 que descarte las fotos tomadas que aún no ha podido subir? Se aplica en su próximo poll (≤60 s).")) return;
+    if (btn) { btn.disabled = true; btn.textContent = "Enviando…"; }
+    try {
+      const res = await fetch("/api/admin/device-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queue_clear: String(Math.floor(Date.now() / 1000)) }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (btn) btn.textContent = "En cola ✓";
+      setTimeout(() => { if (btn) btn.textContent = label; btn.disabled = false; }, 3000);
+    } catch (err) {
+      console.warn("queue_clear failed", err);
+      if (btn) { btn.disabled = false; btn.textContent = label; }
+      alert("No se pudo enviar el comando: " + err.message);
+    }
+  }
+
+  // --- Navegación por pestañas (sidebar desktop / bottom-nav móvil) ---
+  const VIEW_META = {
+    live: ["En vivo", "Telemetría y capturas en tiempo real"],
+    analytics: ["Analítica", "Materiales, actividad y archivo de capturas"],
+    device: ["Dispositivo", "Configuración y salud del ESP32-CAM"],
+  };
+
   function activateView(name) {
     document.querySelectorAll(".view").forEach((v) => {
       v.hidden = v.id !== `view-${name}`;
@@ -1040,6 +1233,12 @@
       b.classList.toggle("is-active", on);
       b.setAttribute("aria-selected", String(on));
     });
+    const meta = VIEW_META[name];
+    if (meta) {
+      setText("viewTitle", meta[0]);
+      setText("viewSub", meta[1]);
+      document.title = `REBA — ${meta[0]}`;
+    }
     const views = document.querySelector(".views");
     if (views && window.innerWidth < 1024) {
       views.scrollIntoView({ block: "start" });
@@ -1182,6 +1381,13 @@
 
   // "Ping · hace X" se actualiza aunque el ESP32 no contacte seguido
   setInterval(updatePingNote, 20000);
+
+  // Métricas de rendimiento + circuito: RTT cada 5 s, REST cada 15 s
+  setInterval(() => { measureNetLatency(); updateRealtimeBits(); }, 5000);
+  setInterval(() => { loadPerf(); loadCircuit(); }, 15000);
+  measureNetLatency();
+  loadPerf();
+  loadCircuit();
 
   bootstrapFromRest();
   bootstrapCaptures();

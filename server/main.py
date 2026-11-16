@@ -81,6 +81,7 @@ device_state: Dict[str, Any] = {
     "ip": None,
 }
 DEVICE_ONLINE_WINDOW_S = 150.0   # >2 polls perdidos = offline
+SERVER_START_TS = _time.time()  # uptime del proceso (métricas /api/perf)
 
 
 def _touch_device(request: Request) -> None:
@@ -555,6 +556,86 @@ async def pump_events(limit: int = 50):
     limit = max(1, min(limit, 200))
     return {"items": db.get_pump_events(limit),
             "pending_cmd": _pending_pump_cmd()}
+
+
+# ---------------------------------------------------------------------------
+# Reset de datos de prueba + métricas de desempeño + telemetría del dispositivo
+# ---------------------------------------------------------------------------
+
+@app.delete("/api/captures")
+async def reset_captures(scope: str = "photos"):
+    """
+    Borra datos de prueba del dashboard.
+
+    scope=photos (default): capturas + detecciones + contadores de
+    materiales + progreso de bomba en memoria.
+    scope=all: además limpia el historial de eventos de bomba.
+    """
+    include_pump = scope == "all"
+    removed = db.reset_test_data(include_pump=include_pump)
+    # Contadores en memoria del ciclo de bomba (se derivan de las fotos)
+    pump_state["photos_since_pump"] = 0
+    pump_state["uploads_received"] = 0
+    pump_state["last_upload_ts"] = None
+    pump_state["last_pump_event"] = None
+    stats = db.get_stats()
+    stats["device"] = device_status()
+    await broadcast({"type": "stats", "payload": stats})
+    logger.info("Reset de datos de prueba: %s", removed)
+    return {"ok": True, "removed": removed, "scope": scope}
+
+
+@app.get("/api/perf")
+async def perf_metrics():
+    """
+    Métricas de desempeño del software y sus comunicaciones.
+
+    - inference: latencia ONNX de las últimas capturas (avg/p95/min/max)
+    - network: RTT medido por el cliente (el dashboard lo calcula aparte)
+    - device: heartbeat/edad del último contacto del ESP32
+    - server: uptime, clientes WS, uploads recientes
+    """
+    dev = device_status()
+    last = dev.get("last_seen")
+    return {
+        "inference": db.get_inference_stats(60),
+        "uploads_last_hour": db.get_uploads_last_hour(),
+        "device": {
+            **dev,
+            "heartbeat_age_s": round(_time.time() - last, 1) if last else None,
+        },
+        "server": {
+            "uptime_s": round(_time.time() - SERVER_START_TS, 1),
+            "ws_clients": len(ws_clients),
+            "captures_total": db.count_captures(),
+        },
+        "telemetry": device_telemetry,
+    }
+
+
+# Telemetría del circuito reportada por el ESP32 (POST /api/device/status).
+# La llena el firmware en cada poll de config; sin firmware nuevo queda {}.
+device_telemetry: Dict[str, Any] = {}
+
+
+@app.post("/api/device/status")
+async def device_status_report(payload: Dict[str, Any]):
+    """Recibe telemetría del ESP32 (distancia, relé, cola, heap, RSSI…)."""
+    _touch_device_from_payload(payload)
+    device_telemetry.clear()
+    device_telemetry.update(payload)
+    device_telemetry["_ts"] = _time.time()
+    return {"ok": True}
+
+
+def _touch_device_from_payload(payload: Dict[str, Any]) -> None:
+    device_state["last_seen"] = _time.time()
+
+
+@app.get("/api/device/status")
+async def device_status_get():
+    """Última telemetría del dispositivo + estado de heartbeat."""
+    return {"device": device_status(), "telemetry": device_telemetry}
 
 
 # ---------------------------------------------------------------------------

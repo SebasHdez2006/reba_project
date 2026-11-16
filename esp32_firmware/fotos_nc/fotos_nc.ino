@@ -159,6 +159,8 @@ unsigned long  srvRevertEn       = 0;   // idem para server_url
 // (dedup por lastPumpCmdId en RTC) y se confirma con POST /api/device/ack.
 // La ejecución es NO bloqueante: lazo normal sigue vivo durante la bomba.
 RTC_DATA_ATTR unsigned long lastPumpCmdId = 0;
+RTC_DATA_ATTR unsigned long lastQueueClear = 0;  // dedup del comando queue_clear
+unsigned long      queueClearPendiente = 0;      // ts pendiente de vaciar cola (loop)
 bool           cmdBombaPendiente = false;
 unsigned long  cmdBombaId        = 0;
 int            cmdBombaSecs      = 0;
@@ -185,6 +187,9 @@ int httpSimple(const String& method, const String& url,
 // Definida más abajo (sección OTA); la usa aplicarClaveRemota() y el
 // comando serie SET ota_url.
 bool otaUrlValida(const String& u);
+
+// Definida más abajo (sección estado); la usa consultarConfigRemota().
+void reportarEstado();
 
 // Clamp de valores leídos de NVS: una clave corrupta no debe dejar el
 // dispositivo en un estado inválido (p.ej. pump_photos=0 o dist_max=-5).
@@ -450,6 +455,18 @@ bool aplicarClaveRemota(const String& clave, const String& valor) {
     Serial.printf("OTA remoto pendiente: %s\n", v.c_str());
     return true;
   }
+  else if (clave == "queue_clear") {
+    // "<unix_ts>": vacía la cola de fotos pendientes UNA vez por ts nuevo
+    // (dedup RTC — el server puede dejar la clave puesta sin re-disparar).
+    // La cola se declara más abajo en el archivo: se marca pendiente y
+    // loop() ejecuta el vaciado.
+    if (!esEntero(valor)) return false;
+    unsigned long ts = valor.toInt();
+    if (ts == 0 || ts <= lastQueueClear) return true;   // ya aplicado: no-op
+    queueClearPendiente = ts;
+    Serial.printf("Cola vacía pendiente (cmd %lu)\n", ts);
+    return true;
+  }
   return false;   // clave desconocida
 }
 
@@ -488,6 +505,7 @@ void consultarConfigRemota() {
       Serial.println("Nueva URL de servidor confirmada");
     }
     if (body.length() > 0) aplicarConfigRemota(body);
+    reportarEstado();
   } else if (codigo > 0) {
     Serial.printf("Config remota: HTTP %d\n", codigo);
   }
@@ -946,6 +964,35 @@ void colaEnviar() {
 }
 
 // ============================================================
+// Telemetría del circuito -> POST /api/device/status
+// ============================================================
+// Se reporta tras cada GET /api/device/config exitoso (~60 s): estado
+// del sensor, relé, cola de fotos, memoria y radio. El dashboard lo
+// muestra en la sección "Circuito". Sin TLS: mismo httpSimple plano.
+void reportarEstado() {
+  if (WiFi.status() != WL_CONNECTED || srvBase.length() == 0) return;
+  String body = "{\"uptime_s\":" + String((unsigned long)(millis() / 1000))
+    + ",\"boots\":" + String(bootCount)
+    + ",\"heap\":" + String((unsigned)ESP.getFreeHeap())
+    + ",\"rssi\":" + String(WiFi.RSSI())
+    + ",\"camara_ok\":" + String(camaraOk ? 1 : 0)
+    + ",\"dist_cm\":" + String(lastDistCm, 1)
+    + ",\"cola_n\":" + String(colaCantidad)
+    + ",\"cola_max\":" + String(MAX_COLA)
+    + ",\"pump_photos_n\":" + String(fotosTomadas)
+    + ",\"pump_photos_max\":" + String(pumpPhotos)
+    + ",\"pump_manual\":" + String(bombaManualActiva ? 1 : 0)
+    + ",\"rele_pin\":" + String(digitalRead(PIN_RELE))
+    + "}";
+  String url = srvBase + "/api/device/status";
+  const char* hdrs = "Content-Type: application/json\r\n";
+  int codigo = httpSimple("POST", url, hdrs,
+                          (const uint8_t*)body.c_str(), body.length(),
+                          nullptr, 8000);
+  if (codigo != 200) Serial.printf("Status -> HTTP %d\n", codigo);
+}
+
+// ============================================================
 // OTA: auto-actualización por HTTP plano (sin TLS, sin HTTPClient)
 // ============================================================
 // Descarga un .bin desde una URL http:// y lo escribe en la partición
@@ -1285,7 +1332,7 @@ void ejecutarComandoSerial(String cmd) {
     static const char* permitidas[] = {
       "wifi_ssid", "wifi_pass", "server_url",
       "pump_photos", "pump_seconds", "dist_min_cm", "dist_max_cm",
-      "ota_url"
+      "ota_url", "queue_clear"
     };
     bool ok = false;
     for (const char* k : permitidas) if (clave == k) { ok = true; break; }
@@ -1368,6 +1415,20 @@ void loop() {
   procesarSerial();
   procesarCmdBomba();
   aplicarOtaPendiente();
+
+  // Vaciado de cola de fotos pedido por el server (queue_clear).
+  if (queueClearPendiente != 0) {
+    lastQueueClear = queueClearPendiente;
+    queueClearPendiente = 0;
+    int n = colaCantidad;
+    while (colaCantidad > 0) {
+      free(cola[colaInicio].datos);
+      cola[colaInicio].datos = nullptr;
+      colaInicio = (colaInicio + 1) % MAX_COLA;
+      colaCantidad--;
+    }
+    Serial.printf("Cola vaciada por comando remoto (%d fotos descartadas)\n", n);
+  }
 
   // Apagado de la bomba manual al cumplirse el plazo (wrap-safe).
   if (bombaManualActiva && (long)(ahora - bombaManualFin) >= 0) {

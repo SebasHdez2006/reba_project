@@ -441,6 +441,54 @@ class Database:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    # ------------------------------------------------------- reset de pruebas
+
+    def reset_test_data(self, include_pump: bool = False) -> Dict[str, int]:
+        """
+        Borra los datos de prueba del dashboard: capturas (fotos blob),
+        detecciones y contadores de materiales. Con include_pump también
+        limpia el historial de eventos de bomba.
+        """
+        removed = {}
+        for table in ("detections", "captures", "counters"):
+            cur = self.conn.execute(f"DELETE FROM {table}")
+            removed[table] = int(cur.rowcount or 0)
+        if include_pump:
+            cur = self.conn.execute("DELETE FROM pump_events")
+            removed["pump_events"] = int(cur.rowcount or 0)
+        self.conn.commit()
+        return removed
+
+    def get_inference_stats(self, limit: int = 60) -> Dict[str, Any]:
+        """Latencia de inferencia ONNX de las últimas `limit` capturas."""
+        rows = self.conn.execute(
+            "SELECT inference_ms FROM captures ORDER BY id DESC LIMIT ?",
+            (int(limit),),
+        ).fetchall()
+        vals = sorted(float(r["inference_ms"]) for r in rows)
+        if not vals:
+            return {"count": 0}
+        def pct(p: float) -> float:
+            idx = min(len(vals) - 1, int(round(p * (len(vals) - 1))))
+            return round(vals[idx], 1)
+        return {
+            "count": len(vals),
+            "avg": round(sum(vals) / len(vals), 1),
+            "min": round(vals[0], 1),
+            "p95": pct(0.95),
+            "max": round(vals[-1], 1),
+        }
+
+    def get_uploads_last_hour(self) -> int:
+        """Capturas recibidas en la última hora (ventana deslizante)."""
+        import datetime as _dt
+        since = (_dt.datetime.now(_dt.timezone.utc)
+                 - _dt.timedelta(hours=1)).isoformat()
+        row = self.conn.execute(
+            "SELECT COUNT(*) AS n FROM captures WHERE ts >= ?", (since,)
+        ).fetchone()
+        return int(row["n"])
+
     # ---------------------------------------------------------- device config
 
     # Claves que el firmware entiende (ver fotos_nc.ino → /api/device/config)
@@ -456,6 +504,9 @@ class Database:
         # El ESP32 la descarga, la flashea en la particion OTA inactiva y
         # reinicia. Dedup por NVS "ota_last": la misma URL no re-flashea.
         "ota_url",
+        # Comando de un solo uso: "<unix_ts>". El firmware vacía su cola de
+        # fotos pendientes una sola vez por timestamp nuevo (dedup en RTC).
+        "queue_clear",
     )
 
     def get_device_config(self) -> Dict[str, str]:
