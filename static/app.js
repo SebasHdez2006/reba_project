@@ -42,6 +42,7 @@
     deviceLastSeen: null,     // epoch s del último heartbeat del ESP32
     donutHover: null,         // clase resaltada en el donut (null = normal)
     tsGeom: null,             // geometría de la gráfica de actividad (tooltips)
+    tsData: null,             // {series, classNames} cacheado para repintar al cambiar tema
     pumpSegCount: 0,          // segmentos renderizados en la barra de progreso
     lastWsMsg: null,          // epoch ms del último mensaje WS recibido
   };
@@ -54,6 +55,13 @@
   function setText(id, value) {
     const el = $(id);
     if (el) el.textContent = value;
+  }
+
+  // Lee una variable CSS del tema activo (los canvas no heredan var() solos)
+  function cssVar(name, fallback) {
+    const v = getComputedStyle(document.documentElement)
+      .getPropertyValue(name).trim();
+    return v || fallback;
   }
 
   // ---------------------------------------------------------------------------
@@ -220,6 +228,13 @@
     const latestImage = $("latestCaptureImage");
     const emptyState = $("captureEmpty");
     if (latestImage) {
+      latestImage.onerror = () => {
+        latestImage.hidden = true;
+        if (emptyState) {
+          emptyState.hidden = false;
+          emptyState.textContent = "Imagen no disponible para esta captura.";
+        }
+      };
       latestImage.src = `${imageUrl}?v=${encodeURIComponent(id)}`;
       latestImage.hidden = false;
     }
@@ -330,7 +345,7 @@
     badge.textContent =
       names.slice(0, 2).map((n) => n.toUpperCase()).join(" + ") +
       (names.length > 2 ? ` +${names.length - 2}` : "");
-    badge.style.background = "#2a3648";
+    badge.style.background = "#8b96a3";
     badge.classList.remove("is-empty");
     if (!state.captureDets.has(id)) fetchCaptureDetections(id);
   }
@@ -502,7 +517,7 @@
     // Anillo vacío de fondo
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(255,255,255,0.07)";
+    ctx.strokeStyle = cssVar("--chart-ring", "rgba(255,255,255,0.07)");
     ctx.lineWidth = thickness;
     ctx.stroke();
 
@@ -535,6 +550,7 @@
     wifi_ssid: "cfgWifiSsid",
     wifi_pass: "cfgWifiPass",
     server_url: "cfgServerUrl",
+    server_url_alt: "cfgServerUrlAlt",
     pump_photos: "cfgPumpPhotos",
     pump_seconds: "cfgPumpSeconds",
     dist_min_cm: "cfgDistMin",
@@ -641,8 +657,8 @@
     if (classes.length > shown.length) {
       const more = document.createElement("span");
       more.className = "g-tag";
-      more.style.background = "rgba(255,255,255,0.14)";
-      more.style.color = "#c7d0dd";
+      more.style.background = cssVar("--seg-bg", "rgba(255,255,255,0.14)");
+      more.style.color = cssVar("--muted", "#c7d0dd");
       more.textContent = `+${classes.length - shown.length}`;
       badges.appendChild(more);
     }
@@ -837,7 +853,8 @@
       const res = await fetch(`/api/stats/timeseries?days=${days}`);
       if (!res.ok) return;
       const data = await res.json();
-      drawTsChart(data.series || [], data.class_names || []);
+      state.tsData = { series: data.series || [], classNames: data.class_names || [] };
+      drawTsChart(state.tsData.series, state.tsData.classNames);
     } catch (_) { /* silencioso */ }
   }
 
@@ -875,7 +892,7 @@
 
     if (!series.length) {
       state.tsGeom = null;
-      ctx.fillStyle = "rgba(255,255,255,0.4)";
+      ctx.fillStyle = cssVar("--chart-sub", "rgba(255,255,255,0.4)");
       ctx.font = `11px ${MONO}`;
       ctx.textAlign = "center";
       ctx.fillText("SIN DATOS EN EL RANGO", W / 2, H / 2);
@@ -902,14 +919,14 @@
     ctx.textBaseline = "middle";
     for (let v = 0; v <= yMax + 1e-6; v += step) {
       const y = padT + plotH - (v / yMax) * plotH;
-      ctx.strokeStyle = "rgba(255,255,255,0.08)";
+      ctx.strokeStyle = cssVar("--chart-grid", "rgba(255,255,255,0.08)");
       ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
-      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.fillStyle = cssVar("--chart-text", "rgba(255,255,255,0.5)");
       ctx.textAlign = "right";
       ctx.fillText(String(Math.round(v)), padL - 7, y);
     }
     // Eje X base
-    ctx.strokeStyle = "rgba(255,255,255,0.16)";
+    ctx.strokeStyle = cssVar("--chart-axis", "rgba(255,255,255,0.16)");
     ctx.beginPath(); ctx.moveTo(padL, padT + plotH); ctx.lineTo(W - padR, padT + plotH); ctx.stroke();
 
     const n = series.length;
@@ -932,7 +949,7 @@
       }
       // Etiqueta del día (dd/mm), espaciada para no saturar
       if (i % labelEvery === 0 || i === n - 1) {
-        ctx.fillStyle = "rgba(255,255,255,0.45)";
+        ctx.fillStyle = cssVar("--chart-sub", "rgba(255,255,255,0.45)");
         ctx.textAlign = "center";
         ctx.fillText(
           `${day.date.slice(8, 10)}/${day.date.slice(5, 7)}`,
@@ -1247,6 +1264,41 @@
   document.querySelectorAll(".nav-tab").forEach((b) => {
     b.addEventListener("click", () => activateView(b.dataset.view));
   });
+
+  // --- Tema claro/oscuro (persiste en localStorage, aplica en <html>) ---
+  const THEME_KEY = "reba-theme";
+
+  function redrawCharts() {
+    drawDonut(state.stats);
+    if (state.tsData) drawTsChart(state.tsData.series, state.tsData.classNames);
+  }
+
+  function applyTheme(theme, persist = true) {
+    document.documentElement.dataset.theme = theme;
+    if (persist) {
+      try { localStorage.setItem(THEME_KEY, theme); } catch (_) { /* sin storage */ }
+    }
+    const btn = $("themeToggle");
+    const isLight = theme === "light";
+    if (btn) {
+      btn.setAttribute("aria-checked", String(isLight));
+      btn.setAttribute("aria-label",
+        isLight ? "Cambiar a tema oscuro" : "Cambiar a tema claro");
+    }
+    setText("themeToggleLabel", isLight ? "Claro" : "Oscuro");
+    redrawCharts();   // los canvas se repintan con los colores del nuevo tema
+  }
+
+  const themeBtn = $("themeToggle");
+  if (themeBtn) {
+    themeBtn.addEventListener("click", () => {
+      const next = document.documentElement.dataset.theme === "light"
+        ? "dark" : "light";
+      applyTheme(next);
+    });
+  }
+  // Sincroniza el estado del switch con el tema ya aplicado en <head>
+  applyTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark", false);
 
   // --- Chips de duración de la bomba manual ---
   const pumpChips = $("pumpChips");

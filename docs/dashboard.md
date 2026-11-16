@@ -8,15 +8,15 @@ Interfaz servida por FastAPI desde `static/` — abrir por HTTP en **http://loca
 
 ## Módulos
 
-La app está organizada en **3 vistas** con navegación inferior fija en móvil (`<1024px`) y un grid de 12 columnas que muestra todo en escritorio (`≥1024px`):
+La app está organizada en **3 vistas** con navegación por **sidebar** en escritorio (`≥1024px`) y una **píldora flotante inferior** en móvil (`<1024px`). Cada vista tiene su propio grid de 12 columnas:
 
 | Vista | Módulos |
 |-------|---------|
-| **En vivo** | **Última captura**: foto 4:3 con badge de clase + confianza, metadatos en mono (fecha, detecciones, inferencia ms, motor) y tira de 8 miniaturas recientes (tocable → actualiza la principal). **Panel Bomba**: progreso `fotos/N` en 2 columnas + barra segmentada + chips de duración manual (5/10/20/30 s u "Otro") + "Activar ahora" + acordeón "Registro de eventos" |
-| **Analítica** | **KPIs** (total objetos, fotos recibidas) + **donut** por clase con leyenda interactiva + **actividad** (barras apiladas por día/clase, 7/14/30 días, tooltips, rejilla visible) + **galería unificada** (filtro por clase + Exportar YOLO + paginación + lightbox) |
-| **Dispositivo** | **Config remota** del ESP32-CAM en 2 grupos (Red y servidor / Parámetros y sensores), unidades integradas en los inputs, mostrar/ocultar contraseña, ayuda desplegable y feedback "Guardado ✓" |
+| **En vivo** | **Última captura** (7/12 × 2 filas): foto 4:3 con badge de clase + confianza, metadatos en mono (fecha, detecciones, inferencia ms, motor) y tira de 8 miniaturas recientes (tocable → actualiza la principal). **Bomba** (5/12): progreso `fotos/N` + barra segmentada + chips de duración manual (5/10/20/30 s u "Otro") + "Activar ahora" + acordeón "Registro de eventos". **Rendimiento** (5/12, bajo Bomba): RTT de red, latencia ONNX (avg/p95), heartbeat, uploads/h, uptime del servidor, clientes WS |
+| **Analítica** | **Materiales acumulados** (5/12): KPIs + donut por clase con leyenda interactiva. **Actividad** (7/12): barras apiladas por día/clase, 7/14/30 días, tooltips. **Galería** (12/12): filtro por clase + Exportar YOLO + paginación + lightbox |
+| **Dispositivo** | **Config remota** del ESP32-CAM (5/12): Red y servidor / Parámetros y sensores, unidades en los inputs, mostrar/ocultar contraseña, ayuda desplegable y feedback "Guardado ✓". **Estado del circuito** (7/12): sensor HC-SR04, relé GPIO13, cola de fotos, cámara, heap, RSSI + acciones de reset |
 
-El **header sticky** muestra marca REBA, pill del dispositivo (online/offline por heartbeat), pill WebSocket y último ping relativo. El botón **Exportar YOLO** descarga un ZIP con imágenes + labels YOLO + `data.yaml` para reentrenar.
+El **topbar sticky** muestra el título/subtítulo de la vista activa, el **toggle de tema claro/oscuro** (switch tipo píldora; persiste en `localStorage` y respeta `prefers-color-scheme`), pill del dispositivo (online/offline por heartbeat), pill WebSocket y último ping relativo. El botón **Exportar YOLO** descarga un ZIP con imágenes + labels YOLO + `data.yaml` para reentrenar.
 
 ---
 
@@ -34,9 +34,13 @@ El **header sticky** muestra marca REBA, pill del dispositivo (online/offline po
 
 Archivos:
 
-- `static/index.html` — estructura: header, 3 vistas (`view-live`, `view-analytics`, `view-device`), bottom nav y lightbox
-- `static/styles.css` — design system oscuro plano (`#090D12`/`#111720`/`#18212E`), Space Grotesk + JetBrains Mono auto-hospedadas en `static/fonts/`, responsive móvil-first
-- `static/app.js` — WS, canvas donut/gráfica de actividad con tooltips, galería, lightbox, bomba manual (chips + barra segmentada), config remota
+- `static/index.html` — estructura: sidebar, topbar con toggle de tema, 3 vistas (`view-live`, `view-analytics`, `view-device`), bottom-nav móvil y lightbox
+- `static/styles.css` — design system con **tokens por tema** (`:root` oscuro + `[data-theme="light"]`): superficies, líneas, textos, acentos y colores de gráficos todos son variables; Space Grotesk + JetBrains Mono auto-hospedadas en `static/fonts/`, responsive móvil-first
+- `static/app.js` — WS, canvas donut/gráfica de actividad con tooltips (colores leídos de las variables CSS al repintar), galería, lightbox, bomba manual (chips + barra segmentada), config remota, toggle de tema
+
+**Tema claro/oscuro:** el switch del topbar conmuta `data-theme` en `<html>` y lo guarda en `localStorage` (`reba-theme`); un mini-script en `<head>` aplica el tema guardado antes de pintar (sin flash). Los canvas se repintan leyendo `--chart-*` del tema activo.
+
+**Caché:** el servidor envía `Cache-Control: no-cache` en `/`, `.html`, `.css` y `.js` (middleware en `server/main.py`) — el navegador revalida en cada carga, así las actualizaciones se propagan por el túnel zrok sin recarga dura. Los assets llevan además `?v=<fecha>` en el HTML como rompe-caché extra.
 
 ---
 

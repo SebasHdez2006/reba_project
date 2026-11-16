@@ -493,7 +493,7 @@ class Database:
 
     # Claves que el firmware entiende (ver fotos_nc.ino → /api/device/config)
     DEVICE_CONFIG_KEYS = (
-        "wifi_ssid", "wifi_pass", "server_url",
+        "wifi_ssid", "wifi_pass", "server_url", "server_url_alt",
         "pump_photos", "pump_seconds",
         "dist_min_cm", "dist_max_cm",
         # Comando de un solo uso hacia la ESP32: "<unix_ts>:<segundos>".

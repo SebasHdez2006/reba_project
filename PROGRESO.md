@@ -1012,3 +1012,86 @@ reinicio de la PC → dispositivo inalcanzable. Se ejecuta la migración a
       Premium / Oracle VPS (ver plan_tunel_fijo §1).
 - [ ] Retirar cloudflared tras confirmar migración.
 - [ ] Marcar checklist §5 de `docs/plan_tunel_fijo.md`.
+
+---
+
+## 16-nov (tarde) — Rediseño del dashboard + tema claro/oscuro + failover server_url
+
+### Dashboard (static/)
+
+- **Estructura nueva**: sidebar de navegación en escritorio (≥1024px) y
+  píldora flotante inferior en móvil. Cada vista tiene su propio grid de
+  12 columnas — En vivo: captura 7/12 × 2 filas + Bomba 5/12 +
+  Rendimiento 5/12 apilados (sin huecos); Analítica: materiales 5/12 +
+  actividad 7/12 + galería a lo ancho; Dispositivo: config 5/12 +
+  circuito 7/12.
+- **Topbar sticky** con título/subtítulo de la vista activa, toggle de
+  tema, pills de estado (ESP32 heartbeat + WebSocket) y último ping.
+- **Tema claro/oscuro**: switch tipo píldora en el topbar
+  (`role="switch"`, `aria-checked`). Persiste en
+  `localStorage["reba-theme"]`, respeta `prefers-color-scheme` si no hay
+  preferencia guardada, y se aplica con un mini-script en `<head>` antes
+  de pintar (sin flash). Todos los colores pasaron a variables
+  semánticas (`--surface`, `--line`, `--muted`, `--chart-*`, `--nav-bg`…)
+  con el bloque `[data-theme="light"]` invirtiendo la paleta; acento
+  esmeralda oscurecido a `#0b9669` para mantener contraste AA en claro.
+- **Iconos genéricos eliminados**: se quitaron todos los SVG decorativos
+  (nav, encabezados de panel, botón exportar). Quedan la marca REBA,
+  puntos de estado de pills, "?" de ayuda y ✕ del lightbox.
+- **Canvas tema-dependiente**: donut y gráfica de actividad leen
+  `--chart-*` con `getComputedStyle` y se repintan al cambiar el tema
+  (timeseries cacheado en `state.tsData`, sin re-fetch).
+- **Fallback de imagen**: si la JPEG de una captura da 404, el visor
+  muestra "Imagen no disponible para esta captura" en vez del ícono roto.
+- Espaciado corregido: márgenes de ventana, gaps entre paneles y padding
+  interno de módulos; chips y KPIs con `nowrap` (no parten "10 s" ni
+  "0 / 3" en desktops ~1024px).
+
+### Servidor (server/main.py)
+
+- **Middleware `no_cache_dashboard`**: `Cache-Control: no-cache` en `/`,
+  `.html`, `.css`, `.js` → el navegador revalida en cada carga; las
+  actualizaciones del dashboard se propagan por el túnel zrok sin
+  recarga dura. Las imágenes de capturas y `/api/*` no se tocan (los
+  JPEG son inmutables por id). Los assets llevan `?v=<fecha>` en el HTML
+  como rompe-caché adicional.
+- **Nota operativa**: al reiniciar uvicorn puede quedar un proceso
+  huérfano ocupando :5000 — verificar `netstat -ano | findstr :5000` y
+  matar el PID viejo antes de relanzar (pasó en esta sesión: el proceso
+  de las 08:51 seguía sirviendo el dashboard viejo).
+
+### Firmware (esp32_firmware/fotos_nc/fotos_nc.ino)
+
+- **Failover `server_url` → `server_url_alt`**: el ESP32 mantiene dos
+  URLs de servidor — principal (NVS `srv` / clave `server_url`) y
+  alternativa (NVS `srv_alt` / clave `server_url_alt`, nueva en
+  `db.DEVICE_CONFIG_KEYS`). Tras `SRV_FAILOVER_UMBRAL`=3 polls fallidos
+  consecutivos (solo fallos de transporte — un 4xx/5xx cuenta como host
+  alcanzable) conmuta a la alternativa; cada `SRV_PROBE_MS`=5 min
+  re-sondea la principal y vuelve si responde. La elección persiste en
+  NVS `srv_act`. Caso de uso: principal=túnel Portwarp (Internet),
+  alternativa=LAN/hotspot REBA-AP. Reemplaza al antiguo esquema
+  `srv_bak`+`srvRevertEn` (reversión única a los 6 min).
+
+### Estado validado (16-nov ~15:50)
+
+- `uvicorn` :5000 — ONNX OK (`models/best.onnx`, clases
+  plastico/unicel/metal, 640×640), `ws_clients=2`.
+- `zrok2` — `https://reba-cam.shares.zrok.io` → 200 (~0.5 s) sirviendo
+  `Cache-Control: no-cache`; el intersticial "Visit Share" aparece una
+  vez por visitante (limitación del tier gratis).
+- Dashboard verificado en 1440px y móvil 390px, ambos temas, 0 errores
+  de consola; preferencia de tema sobrevive recargas.
+- ESP32 **offline** en `/api/health` (server recién reiniciado + posible
+  reflasheo del firmware nuevo); el heartbeat debe volver en ≤60 s de
+  poll cuando el dispositivo esté alimentado.
+- Datos: álbum vacío (0 capturas — se usó "Vaciar álbum" en pruebas);
+  último `pump_event` id 8 = bomba manual 10 s del dashboard.
+
+### Pendiente
+
+- [ ] Reflashear la ESP32 con el firmware failover + verificar
+      `server_url_alt` en `/api/admin/device-config`.
+- [ ] Prueba E2E de failover: tumbar la URL principal → 3 polls →
+      conmuta a `srv_alt`; restaurar → ≤5 min → vuelve a principal.
+- [ ] Prueba física con muestras (plástico/unicel/metal) en la oficina.

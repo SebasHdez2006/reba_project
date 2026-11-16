@@ -336,6 +336,23 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def no_cache_dashboard(request: Request, call_next):
+    """
+    HTML/CSS/JS del dashboard con Cache-Control: no-cache.
+
+    El navegador revalida en cada carga (304 si no cambió), lo que evita que
+    el tunnel zrok sirva versiones viejas del dashboard por caché heurística.
+    Las imágenes de capturas y /api/* no se tocan (los blobs JPEG son
+    inmutables por id y sí conviene cachearlos).
+    """
+    response = await call_next(request)
+    path = request.url.path
+    if path == "/" or path.endswith((".html", ".css", ".js")):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 # ---------------------------------------------------------------------------
 # Endpoint del ESP32 (la aplicación que se conecta)
 # ---------------------------------------------------------------------------

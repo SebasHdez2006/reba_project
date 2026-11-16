@@ -104,7 +104,8 @@ const unsigned long REINTENTO_WIFI_MS  = 30000;   // espera entre reconexiones
 const unsigned long POLL_CONFIG_MS      = 60000;  // descarga config del server cada 60 s
 const unsigned long WIFI_FAILS_PARA_PORTAL = 20;  // ~10 min sin WiFi -> reabre portal
 const unsigned long WIFI_REVERT_MS      = 90000;  // si creds nuevas no conectan en 90 s, revierte
-const unsigned long SRV_REVERT_MS       = 360000; // si server_url nuevo no responde en 6 min, revierte
+const unsigned long SRV_FAILOVER_UMBRAL = 3;      // polls fallidos -> conmutar a srv_alt
+const unsigned long SRV_PROBE_MS         = 300000; // reintentar URL principal cada 5 min
 const unsigned long PORTAL_RETRY_MS     = 30000;  // reabrir portal si no hay creds
 const unsigned long CAMARA_RETRY_MS     = 30000;  // reintentar init de cámara si falló
 const unsigned long CAMARA_TEST_MS      = 900000; // health check silencioso cada 15 min
@@ -138,7 +139,12 @@ Preferences prefs;
 
 String         wifiSsid;
 String         wifiPass;
-String         srvBase;            // ej. "http://192.168.1.3:5000" (sin /upload)
+String         srvBase;            // URL activa (srv_pri o srv_alt según srvActiva)
+String         srvPri;              // URL principal (NVS "srv", clave server_url)
+String         srvAlt;              // URL alternativa de respaldo (NVS "srv_alt")
+int            srvActiva   = 0;     // 0 = srvPri, 1 = srvAlt
+int            srvFallos   = 0;     // fallos de transporte consecutivos en srvBase
+unsigned long  srvProximoProbe = 0; // cuándo reintentar srvPri si estamos en srvAlt
 
 int            wifiFallos        = 0;
 bool           portalActivo      = false;
@@ -152,7 +158,6 @@ unsigned long  ultimoTestCamara  = 0;      // último health check silencioso
 RTC_DATA_ATTR unsigned long bootCount = 0;
 unsigned long  wifiRevertEn      = 0;   // millis() en que se revierte creds si sigue sin conectar
 unsigned long  ultimoConfigOk    = 0;   // último GET /api/device/config exitoso
-unsigned long  srvRevertEn       = 0;   // idem para server_url
 
 // --- Bomba manual (comando servidor -> ESP32 vía /api/device/config) ---
 // El server encola "pump_cmd=<unix_ts>:<segundos>"; se ejecuta una sola vez
@@ -206,7 +211,9 @@ void cargarConfig() {
   prefs.begin("reba", true);
   wifiSsid = prefs.getString("ssid", "");
   wifiPass = prefs.getString("pass", "");
-  srvBase  = prefs.getString("srv", SRV_BASE_DEFAULT);
+  srvPri   = prefs.getString("srv", SRV_BASE_DEFAULT);
+  srvAlt   = prefs.getString("srv_alt", "");
+  srvActiva = prefs.getString("srv_act", "0") == "1" ? 1 : 0;
   // Las claves numéricas se persisten como string (guardarClave); leerlas
   // con getInt/getFloat devolvería el default por desajuste de tipo en NVS.
   pumpPhotos  = clampInt(prefs.getString("pump_photos", "3").toInt(),   1, 50,   3);
@@ -216,9 +223,17 @@ void cargarConfig() {
   prefs.end();
   // Rango coherente: si min >= max (NVS corrupto), restablecer defaults.
   if (distMinCm >= distMaxCm) { distMinCm = 0.0f; distMaxCm = 23.0f; }
-  // server_url debe ser http:// alcanzable por httpSimple; si no, default.
-  if (!srvBase.startsWith("http://")) srvBase = SRV_BASE_DEFAULT;
-  while (srvBase.endsWith("/")) srvBase.remove(srvBase.length() - 1);
+  // URLs de servidor deben ser http:// alcanzables por httpSimple.
+  auto urlOk = [](String& u) {
+    if (!u.startsWith("http://")) { u = ""; return; }
+    while (u.endsWith("/")) u.remove(u.length() - 1);
+  };
+  urlOk(srvPri);
+  if (srvPri.length() == 0) srvPri = SRV_BASE_DEFAULT;
+  urlOk(srvAlt);
+  if (srvAlt == srvPri) srvAlt = "";         // alternativa idéntica = inútil
+  // Arranque en la URL que quedó activa; si no hay alternativa, siempre srvPri.
+  srvBase = (srvActiva == 1 && srvAlt.length() > 0) ? srvAlt : srvPri;
 }
 
 void guardarClave(const String& clave, const String& valor) {
@@ -237,12 +252,17 @@ void onParamsSaved() {
   prefs.begin("reba", false);
   prefs.putString("ssid", wmP->getWiFiSSID());
   prefs.putString("pass", wmP->getWiFiPass());
-  if (s.length() > 0) prefs.putString("srv", s);
+  if (s.length() > 0) {
+    prefs.putString("srv", s);
+    prefs.putString("srv_act", "0");       // portal define la URL principal
+  }
   prefs.end();
 
   wifiSsid = wmP->getWiFiSSID();
   wifiPass = wmP->getWiFiPass();
-  if (s.length() > 0) srvBase = s;
+  if (s.length() > 0) {
+    srvPri = s; srvBase = s; srvActiva = 0; srvFallos = 0; srvProximoProbe = 0;
+  }
   wifiFallos = 0;
   wifiRevertEn = 0;
 
@@ -367,17 +387,38 @@ bool aplicarClaveRemota(const String& clave, const String& valor) {
     // que acepte HTTP plano (Portwarp u otro).
     // Una URL mala dejaria el dispositivo inalcanzable.
     if (v.length() > 7 && v.length() <= 96 && v.startsWith("http://")
-        && v.indexOf(' ') < 0 && v != srvBase) {
-      // Respaldo: si la URL nueva no responde en ~6 min se revierte.
-      guardarClave("srv_bak", srvBase);
+        && v.indexOf(' ') < 0 && v != srvPri) {
+      // Nueva URL principal: se activa de inmediato; si no responde,
+      // el failover la cambia por srv_alt tras SRV_FAILOVER_UMBRAL polls.
+      srvPri = v;
+      srvActiva = 0; srvFallos = 0; srvProximoProbe = 0;
       srvBase = v;
-      guardarClave("srv", srvBase);
-      srvRevertEn = millis() + SRV_REVERT_MS;
-      Serial.printf("Servidor remoto: %s — probando...\n", srvBase.c_str());
+      guardarClave("srv", v);
+      guardarClave("srv_act", "0");
+      Serial.printf("Servidor remoto (principal): %s\n", srvBase.c_str());
       return true;
     }
     Serial.println("server_url rechazada (debe ser http:// válido, <=96 chars)");
     return false;
+  }
+  else if (clave == "server_url_alt") {
+    // URL alternativa de respaldo: se usa automáticamente cuando la
+    // principal falla SRV_FAILOVER_UMBRAL polls seguidos, y la principal
+    // se re-sondea cada SRV_PROBE_MS para volver cuando se recupere.
+    // Cubre el escenario multi-red: p.ej. principal=túnel (Internet),
+    // alternativa=LAN del hotspot REBA-AP (sin Internet).
+    String v = valor;
+    while (v.endsWith("/")) v.remove(v.length() - 1);
+    if (v.length() <= 7 || v.length() > 96 || v.indexOf(' ') >= 0
+        || !v.startsWith("http://") || v == srvAlt) {
+      Serial.println("server_url_alt rechazada (debe ser http:// válido, <=96 chars)");
+      return false;
+    }
+    srvAlt = v;
+    guardarClave("srv_alt", v);
+    if (srvActiva == 1) srvBase = v;   // actualizar la activa en caliente
+    Serial.printf("Servidor remoto (alternativo): %s\n", srvAlt.c_str());
+    return true;
   }
   else if (clave == "pump_photos") {
     if (!esEntero(valor)) return false;
@@ -487,51 +528,66 @@ void aplicarConfigRemota(const String& body) {
   }
 }
 
+// Conmuta srvBase entre la URL principal (srvPri) y la alternativa
+// (srvAlt). Persiste la elección en NVS "srv_act" para sobrevivir reboots.
+void conmutarSrv() {
+  if (srvActiva == 0 && srvAlt.length() > 0 && srvAlt != srvPri) {
+    srvActiva = 1; srvBase = srvAlt;
+  } else if (srvActiva == 1) {
+    srvActiva = 0; srvBase = srvPri;
+  } else {
+    return;                       // sin alternativa útil: nada que hacer
+  }
+  srvFallos = 0;
+  // Si quedamos en la alternativa, agendar la sonda de la principal.
+  srvProximoProbe = (srvActiva == 1) ? millis() + SRV_PROBE_MS : 0;
+  guardarClave("srv_act", srvActiva ? "1" : "0");
+  Serial.printf(">> Server URL conmutada -> %s\n", srvBase.c_str());
+}
+
 void consultarConfigRemota() {
   if (WiFi.status() != WL_CONNECTED) return;
   if (srvBase.length() == 0) return;
+
+  // Sonda de recuperación: si estamos en la URL alternativa, probar la
+  // principal cada SRV_PROBE_MS. Si responde, volver a ella de inmediato
+  // (el body traído es config válida: se aplica igual que un poll normal).
+  if (srvActiva == 1 && srvAlt.length() > 0 && srvPri.length() > 0
+      && millis() >= srvProximoProbe) {
+    srvProximoProbe = millis() + SRV_PROBE_MS;
+    String pbody;
+    int pc = httpSimple("GET", srvPri + "/api/device/config",
+                        nullptr, nullptr, 0, &pbody, 8000);
+    if (pc == 200) {
+      srvActiva = 0; srvBase = srvPri; srvFallos = 0; srvProximoProbe = 0;
+      guardarClave("srv_act", "0");
+      Serial.println(">> URL principal recuperada: volviendo a ella");
+      if (pbody.length() > 0) aplicarConfigRemota(pbody);
+      reportarEstado();
+      return;
+    }
+  }
 
   String url = srvBase + "/api/device/config";
   String body;
   int codigo = httpSimple("GET", url, nullptr, nullptr, 0, &body, 8000);
   if (codigo == 200) {
     ultimoConfigOk = millis();
-    // Servidor alcanzable: confirmar el cambio de URL (quitar respaldo)
-    if (srvRevertEn != 0) {
-      srvRevertEn = 0;
-      prefs.begin("reba", false);
-      prefs.remove("srv_bak");
-      prefs.end();
-      Serial.println("Nueva URL de servidor confirmada");
-    }
+    srvFallos = 0;
     if (body.length() > 0) aplicarConfigRemota(body);
     reportarEstado();
-  } else if (codigo > 0) {
-    Serial.printf("Config remota: HTTP %d\n", codigo);
+  } else {
+    // Solo fallos de transporte (timeout/rechazo) cuentan para conmutar:
+    // un HTTP 4xx/5xx significa que el host sí es alcanzable.
+    if (codigo <= 0) {
+      srvFallos++;
+      if (srvFallos >= (int)SRV_FAILOVER_UMBRAL) conmutarSrv();
+    } else {
+      Serial.printf("Config remota: HTTP %d\n", codigo);
+    }
   }
 }
 
-void revisarReversionSrv() {
-  // Si la URL nueva lleva >6 min sin un GET exitoso, volver a la anterior.
-  // (long)(millis()-deadline) es seguro ante el wrap de millis() (~49 días).
-  if (srvRevertEn == 0) return;
-  if ((long)(millis() - srvRevertEn) < 0) return;
-  if (millis() - ultimoConfigOk < 180000UL) return;   // aún hay margen
-
-  prefs.begin("reba", true);
-  String srvBak = prefs.getString("srv_bak", "");
-  prefs.end();
-  if (srvBak.length() > 0) {
-    Serial.printf("URL de servidor no responde: revirtiendo a %s\n", srvBak.c_str());
-    srvBase = srvBak;
-    guardarClave("srv", srvBase);
-  }
-  srvRevertEn = 0;
-  prefs.begin("reba", false);
-  prefs.remove("srv_bak");
-  prefs.end();
-  ultimoPollConfig = 0;               // forzar consulta inmediata
-}
 
 // ============================================================
 // Estado
@@ -1304,10 +1360,10 @@ void ejecutarComandoSerial(String cmd) {
     prefs.begin("reba", true);
     String otaLast = prefs.getString("ota_last", "-");
     prefs.end();
-    Serial.printf("wifi_ssid=%s\nwifi_pass=%s\nserver_url=%s\n"
+    Serial.printf("wifi_ssid=%s\nwifi_pass=%s\nserver_url=%s\nserver_url_alt=%s\nsrv_activa=%d\n"
                   "pump_photos=%d\npump_seconds=%d\ndist_min_cm=%.1f\ndist_max_cm=%.1f\n"
                   "ota_last=%s\n",
-                  wifiSsid.c_str(), wifiPass.c_str(), srvBase.c_str(),
+                  wifiSsid.c_str(), wifiPass.c_str(), srvPri.c_str(), srvAlt.c_str(), srvActiva,
                   pumpPhotos, pumpSeconds, distMinCm, distMaxCm,
                   otaLast.c_str());
   }
@@ -1332,7 +1388,7 @@ void ejecutarComandoSerial(String cmd) {
     static const char* permitidas[] = {
       "wifi_ssid", "wifi_pass", "server_url",
       "pump_photos", "pump_seconds", "dist_min_cm", "dist_max_cm",
-      "ota_url", "queue_clear"
+      "ota_url", "queue_clear", "server_url_alt"
     };
     bool ok = false;
     for (const char* k : permitidas) if (clave == k) { ok = true; break; }
@@ -1411,7 +1467,6 @@ void loop() {
   unsigned long ahora = millis();
 
   revisarPortal();
-  revisarReversionSrv();
   procesarSerial();
   procesarCmdBomba();
   aplicarOtaPendiente();
