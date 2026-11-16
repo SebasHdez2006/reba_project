@@ -168,6 +168,7 @@ REBA/
 │   ├── zrok_tunnel.ps1           ← lanza el share zrok headless (respaldo)
 │   └── vps_*.{sh,bat,vbs}        ← scripts Oracle VPS (reserva, sin usar)
 ├── docs/
+│   ├── sistema_general.md    ← visión general: subsistemas, IA y enlaces
 │   ├── manual_implementacion.md ← implementación E2E (hardware→campo)
 │   ├── manual_uso.md         ← operación del dashboard
 │   ├── manual_alcances.md    ← alcance, limitaciones y métricas
