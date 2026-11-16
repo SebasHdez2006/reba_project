@@ -767,9 +767,11 @@
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      const devOffline = data.device && data.device.online === false;
       if (stateEl) {
-        stateEl.textContent =
-          `Comando en cola · el ESP32 lo recoge en su próximo poll (≤60 s).`;
+        stateEl.textContent = devOffline
+          ? "Comando en cola · ESP32 sin señal — expirará en ~10 min si no se conecta."
+          : "Comando en cola · el ESP32 lo recoge en su próximo poll (≤60 s).";
         stateEl.classList.add("is-queued");
       }
       if (btn) {

@@ -192,11 +192,11 @@ Historial de ciclos de bomba (inferidos por fotos y **manuales** del dashboard).
 
 ### `POST /api/pump/run`
 
-Encola un ciclo de bomba **manual** para el ESP32. Body `{"seconds": 10}` (1-300). El comando viaja como `pump_cmd=<unix_ts>:<s>` en el próximo `GET /api/device/config` del dispositivo (≤60 s), expira a los 10 min y se borra cuando el ESP32 hace `POST /api/device/ack`. Respuesta incluye `cmd_id` y `event_id`.
+Encola un ciclo de bomba **manual** para el ESP32. Body `{"seconds": 10}` (1-300). El comando viaja como `pump_cmd=<unix_ts>:<s>` en el próximo `GET /api/device/config` del dispositivo (≤60 s), expira a los 10 min y se borra cuando el ESP32 hace `POST /api/device/ack`. Respuesta incluye `cmd_id`, `event_id` y `device` (estado online/last_seen/ip del ESP32, para que el dashboard avise si está sin señal).
 
 ### `GET /api/pump/events?limit=50`
 
-Igual que `/api/pump-events` + `pending_cmd` (la orden encolada sin confirmar, o `null`).
+Igual que `/api/pump-events` + `pending_cmd` (la orden encolada vigente — `null` si expiró o ya fue confirmada).
 
 ### `POST /api/device/ack`
 

@@ -428,6 +428,20 @@ def _pump_cmd_fresh(value: str) -> bool:
         return False
 
 
+def _pending_pump_cmd() -> str | None:
+    """
+    pump_cmd vigente o None. Limpia perezosamente el override expirado:
+    si el ESP32 nunca vuelve a consultar, la orden vieja no debe seguir
+    reportándose como "en cola" en el dashboard.
+    """
+    cfg = db.get_device_config()
+    cmd = cfg.get("pump_cmd")
+    if cmd is not None and not _pump_cmd_fresh(cmd):
+        db.delete_device_config("pump_cmd")
+        return None
+    return cmd
+
+
 @app.get("/api/device/config", response_class=PlainTextResponse)
 async def device_config(request: Request):
     """
@@ -532,14 +546,15 @@ async def pump_run(payload: Dict[str, Any]):
     )
     logger.info("pump_cmd encolado: %s", cmd)
     return {"ok": True, "cmd_id": cmd_id, "seconds": seconds,
-            "event_id": event["id"], "note": "Se entrega en el próximo poll del ESP32 (<=60 s)"}
+            "event_id": event["id"], "device": device_status(),
+            "note": "Se entrega en el próximo poll del ESP32 (<=60 s)"}
 
 
 @app.get("/api/pump/events")
 async def pump_events(limit: int = 50):
     limit = max(1, min(limit, 200))
     return {"items": db.get_pump_events(limit),
-            "pending_cmd": db.get_device_config().get("pump_cmd")}
+            "pending_cmd": _pending_pump_cmd()}
 
 
 # ---------------------------------------------------------------------------
