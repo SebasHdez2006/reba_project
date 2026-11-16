@@ -4,6 +4,22 @@ Plataforma flotante autónoma de recolección de residuos acuáticos.
 
 La **ESP32-CAM** vigila el área de la cesta con un sensor ultrasónico (0–23 cm). Cuando un objeto entra al rango, enciende el flash, toma una foto JPEG y la envía por **HTTP POST** a la PC. Si no hay Wi-Fi o el servidor no responde, la foto queda en una **cola en RAM** y se reintenta después. Al acumular **3 fotos**, la bomba de 12 V corre durante **10 s** (relé cableado en **NC**). La PC recibe cada foto, la clasifica con **YOLOv8/ONNX local**, guarda imagen y detecciones en SQLite y actualiza el dashboard por WebSocket. Todo funciona en la red local, sin Internet; el túnel Cloudflare **`rebaserver.tech`** es el acceso remoto opcional (HTTPS dashboard, HTTP para la ESP32 con failover automático de `server_url`).
 
+**Estado:** modelo `v5` (época 30) desplegado en producción — ver [PROGRESO.md](PROGRESO.md) y [checklist_de_entrega.md](checklist_de_entrega.md).
+
+## Características principales
+
+- **Detección ultrasónica con debounce** — HC-SR04 a 0–23 cm, 2 lecturas dentro / 3 fuera; ignora ruido y salpicaduras.
+- **Cola anti-pérdida en el edge** — hasta 6 fotos en RAM con reintento cada 15 s; descarte anti poison-pill (HTTP 4xx o ≥25 intentos). La bomba y el trigger siguen operando aunque la PC esté apagada.
+- **IA 100% local** — YOLOv8n→ONNX en CPU (~50–130 ms/foto), 3 clases: `plastico`, `unicel`, `metal`. Sin APIs ni costos en runtime.
+- **Dashboard en vivo** — SPA sin build (HTML+CSS+JS vanilla), WebSocket `/ws`, tema claro/oscuro, galería paginada con lightbox, gráficas Canvas 2D, telemetría del circuito y métricas de desempeño.
+- **Bomba manual remota** — `pump_cmd` con TTL de 10 min, dedup en RTC y ack (`/api/device/ack`); ejecución no bloqueante en la ESP32.
+- **Config sin reflashear** — WiFi, `server_url`, bomba y distancias por portal `REBA-Setup`, serie `SET` o dashboard; validación estricta + reversión automática.
+- **Failover de servidor** — `server_url`/`server_url_alt` en NVS: tras 3 polls fallidos la ESP32 conmuta sola (ej. LAN → túnel) y re-sondea la principal cada 5 min.
+- **OTA por HTTP plano** — `ota_url` remota o `OTA` por serie: descarga `GET /firmware.bin`, flashea la partición inactiva y reinicia (dedup `ota_last`).
+- **Telemetría del circuito** — `POST /api/device/status` tras cada poll (~60 s): uptime, heap, RSSI, cámara, cola, relé.
+- **Acceso remoto opcional** — túnel nombrado Cloudflare `rebaserver.tech` (HTTP :80 para la placa, HTTPS :443 para el dashboard); zrok como respaldo.
+- **Simulador del nodo** — `static/simulador_esp32.html` emula la ESP32-CAM con la cámara del celular (mismo protocolo HTTP).
+- **Dataset re-entrenable** — cada captura guarda JPEG anotado + crudo; **Exportar YOLO** empaqueta imágenes + labels + `data.yaml` en ZIP; `DELETE /api/captures` resetea datos.
 
 ---
 
@@ -16,23 +32,29 @@ La **ESP32-CAM** vigila el área de la cesta con un sensor ultrasónico (0–23 
 ┌─────────────────────────────┐      POST /upload (JPEG + X-Evento)
 │  ESP32-CAM (fotos_nc.ino)   │ ────────────────────────────────►
 │  ultrasónico + flash +      │      reintento c/15 s si falla
-│  cola RAM (máx. 6)         │         ┌────────────────────────┐
-│                             │         │  PC — FastAPI (:5000)  │
-│  cada 3 fotos →             │         │  ├─ ONNX YOLOv8 local  │
-│  bomba ON 10 s (relé NC)    │         │  ├─ SQLite (fotos+clases)
-└─────────────────────────────┘         │  └─ WS /ws ──► static/ │
-                                        └────────────────────────┘
+│  cola RAM (máx. 6)          │         ┌────────────────────────┐
+│  failover server_url(_alt)  │         │  PC — FastAPI (:5000)  │
+│  OTA · telemetría · NVS     │◄────────│  ├─ ONNX YOLOv8 local  │
+│  cada 3 fotos →             │  config │  ├─ SQLite (fotos+clases)
+│  bomba ON 10 s (relé NC)    │  c/60 s │  ├─ /firmware.bin (OTA)│
+└───────────┬─────────────────┘  +status│  └─ WS /ws ──► static/ │
+            │                         └──────────▲─────────────┘
+   WiFi 2.4 GHz                                 │ cloudflared
+   LAN directa :5000 ───────────────────────────┘ (túnel nombrado)
+   o túnel Cloudflare rebaserver.tech :80           ↑ HTTPS
+                                    Dashboard local o remoto
 ```
 
 | Capa | Tecnología |
 |------|------------|
 | Firmware | C++ Arduino, AI-Thinker ESP32-CAM (`esp32_firmware/fotos_nc/`) |
 | Servidor | Python 3.10+, FastAPI, OpenCV, ONNX Runtime |
-| IA | YOLOv8n → `models/best.onnx` (offline, CPU) |
-| UI | HTML/CSS/JS + WebSocket |
+| IA | YOLOv8n → `models/best.onnx` v5 época 30 (offline, CPU) |
+| UI | HTML/CSS/JS + WebSocket (tema claro/oscuro) |
 | Datos | SQLite local, incluidas las fotos clasificadas |
+| Acceso remoto | cloudflared → `rebaserver.tech` (+ zrok de respaldo) |
 
-La ESP32 y la PC deben estar conectadas a la **misma red Wi-Fi de 2.4 GHz** (no se requiere salida a Internet). La ESP32 es cliente: solo sube fotos; no expone endpoints. El servidor, el modelo, la base de datos y el dashboard corren en la PC.
+En campo la ESP32 y la PC comparten una **red Wi-Fi de 2.4 GHz** sin Internet; si la placa está en una red con Internet, el failover la lleva por el túnel. La ESP32 es cliente: solo sube fotos; no expone endpoints. El servidor, el modelo, la base de datos y el dashboard corren en la PC.
 
 ---
 
@@ -42,13 +64,13 @@ La ESP32 y la PC deben estar conectadas a la **misma red Wi-Fi de 2.4 GHz** (no 
 
 | Herramienta | Versión / tipo | Uso en REBA |
 |-------------|----------------|-------------|
-| HTML5 + CSS3 | Estándar, sin framework | Estructura semántica y design system propio (superficies planas, tokens `#090D12`/`#111720`/`#18212E`) |
+| HTML5 + CSS3 | Estándar, sin framework | Estructura semántica y design system propio (superficies planas, tokens `#090D12`/`#111720`/`#18212E` + tema claro) |
 | JavaScript (vanilla) | ES2020+, sin build | Todo `app.js`: WebSocket, fetch, DOM, estado — cero dependencias externas |
 | Canvas 2D API | Nativo del navegador | Donut de materiales y barras apiladas de actividad (con DPR adaptable) |
 | WebSocket API | Nativo | Canal `/ws` en vivo (capturas, detecciones, eventos de bomba) |
 | SVG inline | — | Iconos de navegación, botón exportar, lightbox |
 | Space Grotesk + JetBrains Mono | woff2 variables auto-hospedadas (`static/fonts/`) | Interfaz y datos técnicos; `tabular-nums` en métricas. Sin CDN → funciona offline |
-| Diseño responsivo | Media queries CSS | Móvil primero: bottom nav <1024px, grid 12 col. ≥1024px |
+| Diseño responsivo | Media queries CSS | Móvil primero: bottom nav <1024px, grid 12 col. ≥1024px; toggle claro/oscuro (`localStorage` + `prefers-color-scheme`) |
 
 Referencias de diseño aplicadas: patrones de telemetría de Teenage Engineering, dashboards oscuros tipo Linear/Vercel y Grafana (elevación por luminancia, hairlines 1px, acento único).
 
@@ -74,7 +96,7 @@ Referencias de diseño aplicadas: patrones de telemetría de Teenage Engineering
 | NumPy | ≥1.26 | Pre/post-procesamiento de tensores |
 | OpenCV (headless) | ≥4.10 | Decodificación JPEG, validación magic bytes, dibujo de cajas anotadas |
 
-Scripts del pipeline: `train_outdoor.py` (entrena+exporta), `evaluate_outdoor.py` (compara pesos), `eval_upload_path.py` (evalúa el path real `/upload`), `tune_confidence.py` (umbral óptimo), `build_outdoor_eval.py` (set degradado), `download_taco.py` + `download_ecosort.py` + `generate_synthetic_dataset.py` (datasets).
+Scripts del pipeline: `train_outdoor.py` (entrena+exporta), `train_monitor.py` (GUI del train), `evaluate_outdoor.py` (compara pesos), `eval_upload_path.py` (evalúa el path real `/upload`), `tune_confidence.py` (umbral óptimo), `build_outdoor_eval.py` (set degradado), `balance_oversample.py` (oversampling de clases raras), `download_taco.py` / `download_ecosort.py` / `download_floatwaste.py` / `generate_synthetic_dataset.py` / `generate_copypaste_dataset.py` (datasets), `audit_labels.py` / `audit_pixels.py` / `dedup_audit.py` / `clean_real_val.py` / `filter_classes.py` / `dataset_stats.py` / `val_snapshot.py` (curación y auditoría).
 
 ### Datos y datasets (`datasets/`)
 
@@ -98,8 +120,9 @@ Scripts del pipeline: `train_outdoor.py` (entrena+exporta), `evaluate_outdoor.py
 | Core `esp32` (Espressif) | 3.3.x, placa `esp32cam` | Framework Arduino para ESP32-CAM |
 | C++ (sketch `.ino`) | — | Todo el firmware: sensor, cámara, cola, HTTP, bomba, NVS |
 | WiFiManager | 2.x | Portal de aprovisionamiento `REBA-Setup` |
-| Preferences (NVS) | — | Persistencia de WiFi, `server_url`, bomba, distancias |
+| Preferences (NVS) | — | Persistencia de WiFi, `server_url`(+`_alt`), bomba, distancias, `ota_last` |
 | `WiFiClient` TCP plano | — | HTTP sin `HTTPClient.h`/mbedTLS (ahorra ~122 KB flash, evita FB-OVF) |
+| `Update` (ESP32 core) | — | OTA: flashea el `.bin` en la partición inactiva y reinicia |
 
 ### Hardware
 
@@ -129,6 +152,8 @@ Scripts del pipeline: `train_outdoor.py` (entrena+exporta), `evaluate_outdoor.py
 |------|---------|-------------------|--------------------|
 | **IP del PC (server)** | IPv4, ej. `192.168.1.50`. Obtenerla: `ipconfig` (Windows) → "Dirección IPv4" de la Wi-Fi conectada a la misma red | `192.168.1.3` | `server_url` del ESP32 (NVS) — **sin reflashear**: dashboard → Dispositivo, portal `REBA-Setup` o serie `SET server_url=…` |
 | **`server_url`** (ESP32) | `http://<IP_PC>:<PUERTO>` (sin `/upload` — el firmware lo agrega) | `http://192.168.1.3:5000` | NVS `srv` + overrides remotos |
+| **`server_url_alt`** (ESP32) | `http://…` ≤96 chars — respaldo del failover | `http://rebaserver.tech` (túnel) | NVS `srv_alt` + overrides remotos; tras 3 polls fallidos el ESP32 conmuta solo y re-sondea la principal c/5 min |
+| **`ota_url`** (ESP32) | `http://…/*.bin` ≤128 chars | `http://rebaserver.tech/firmware.bin` | Override remoto — OTA con dedup `ota_last`; vaciar la cola: `queue_clear=<unix_ts>` |
 | **`wifi_ssid` / `wifi_pass`** (ESP32) | Cadena; **solo 2.4 GHz** (el ESP32 no soporta 5 GHz) | — | Portal `REBA-Setup`, serie o dashboard → Dispositivo |
 | **`HOST` / `PORT`** (server) | `0.0.0.0` (escucha en toda la LAN) / entero | `0.0.0.0` / `5000` | `.env` — el puerto **debe coincidir** con `server_url` del ESP32 |
 | **Dashboard** | `http://<IP_PC o localhost>:<PUERTO>` | `http://localhost:5000` | Navegador en la misma LAN |
@@ -154,13 +179,16 @@ Scripts del pipeline: `train_outdoor.py` (entrena+exporta), `evaluate_outdoor.py
 REBA/
 ├── README.md                 ← este archivo
 ├── PROGRESO.md               ← bitácora de sesiones y estado del proyecto
+├── checklist_de_entrega.md   ← plan de cierre y checklist de la entrega
+├── outdoor_training_report.md← métricas del entrenamiento outdoor
 ├── .env.example              ← plantilla de configuración del servidor
+├── .env                      ← config local (no versionada)
 ├── requirements.txt
 ├── campo.bat                 ← arranque campo: server + túnel Cloudflare + zrok
-├── detener_entrenamiento.bat ← respaldo de pesos + stop seguro del train
 ├── retomar.bat               ← retorno: server + túneles + --resume v5 + monitor
-├── setup_zrok.bat            ← setup único del túnel zrok (respaldo, URL fija)
+├── detener_entrenamiento.bat ← respaldo de pesos + stop seguro del train
 ├── monitor_entrenamiento.bat ← launcher del monitor GUI de entrenamiento
+├── setup_zrok.bat            ← setup único del túnel zrok (respaldo, URL fija)
 ├── tools/
 │   ├── run_cloudflared.bat       ← túnel nombrado Cloudflare → rebaserver.tech
 │   ├── cloudflared_tunnel_hidden.vbs ← launcher oculto (Startup folder)
@@ -173,20 +201,24 @@ REBA/
 │   ├── manual_uso.md         ← operación del dashboard
 │   ├── manual_alcances.md    ← alcance, limitaciones y métricas
 │   ├── hardware.md           ← esquema eléctrico, BOM, relé NC, divisor ECHO
-│   ├── firmware.md           ← flasheo, NVS, comandos serie, pump_cmd
-│   ├── server.md             ← instalación, API, WebSocket
+│   ├── firmware.md           ← flasheo, NVS, comandos serie, pump_cmd, OTA
+│   ├── server.md             ← instalación, API REST/WS, acceso remoto
 │   ├── ai_pipeline.md        ← dataset y entrenamiento outdoor
 │   ├── dashboard.md          ← referencia técnica del frontend
-│   └── componentes.md        ← función/decisión/uso por componente
+│   ├── componentes.md        ← función/decisión/uso por componente
+│   ├── preguntas_pruebas.md  ← banco de preguntas de verificación
+│   ├── plan_*.md             ← planes: túnel fijo, apagado/retorno, nube, post-v5
+│   └── diagramas/            ← arquitectura + 13 UML (.puml/.png/.svg)
 ├── esp32_firmware/
 │   └── fotos_nc/
 │       └── fotos_nc.ino      ← sketch (pines #define; config en NVS)
+├── firmware/
+│   ├── fotos_nc.bin          ← app compilada — se sirve por GET /firmware.bin (OTA)
+│   └── *.bin / *.elf / *.map ← artefactos del build Arduino (bootloader, partitions, merged para flash USB)
 ├── ai_pipeline/
-│   ├── generate_synthetic_dataset.py
-│   ├── download_openverse_dataset.py
-│   ├── download_taco.py      ← subset TACO real → YOLO
-│   ├── download_ecosort.py   ← EcoSort (HF) → YOLO-REBA
-│   ├── dataset_builder.py
+│   ├── generate_synthetic_dataset.py / generate_copypaste_dataset.py
+│   ├── download_taco.py / download_ecosort.py / download_floatwaste.py
+│   ├── download_openverse_dataset.py / dataset_builder.py  ← bootstrap opcional
 │   ├── outdoor_transforms.py ← augmentations de intemperie
 │   ├── build_outdoor_eval.py ← eval set degradado
 │   ├── train_outdoor.py      ← entrenamiento actual (sintético+TACO+EcoSort+FloatWaste+copy-paste)
@@ -194,21 +226,28 @@ REBA/
 │   ├── val_snapshot.py       ← val por clase → JSON (lo usa el monitor)
 │   ├── evaluate_outdoor.py   ← comparación de pesos
 │   ├── eval_upload_path.py   ← eval por path real /upload
-│   └── tune_confidence.py    ← umbral óptimo de confianza
+│   ├── tune_confidence.py    ← umbral óptimo de confianza
+│   └── balance_oversample.py / audit_*.py / dedup_audit.py / clean_real_val.py / filter_classes.py / dataset_stats.py
 ├── server/
 │   ├── config.py             ← settings (.env)
 │   ├── main.py               ← POST /upload + API + WS + estáticos
 │   ├── inference.py          ← motor ONNX local
-│   └── database.py           ← SQLite (captures, detections, pump_events)
+│   └── database.py           ← SQLite (captures, detections, pump_events, device_config)
 ├── static/
 │   ├── index.html            ← 3 vistas: En vivo / Analítica / Dispositivo
 │   ├── simulador_esp32.html  ← simulador móvil del nodo ESP32-CAM (cámara real)
 │   ├── app.js                ← WS, gráficas canvas, galería, bomba, config remota
-│   ├── styles.css            ← design system oscuro, móvil primero
+│   ├── styles.css            ← design system claro/oscuro, móvil primero
 │   ├── fonts/                ← Space Grotesk + JetBrains Mono (woff2 locales)
 │   └── favicon.svg
-└── models/
-    └── best.onnx             ← modelo actual (train_outdoor.py → ONNX, 3 clases)
+├── models/
+│   ├── best.onnx / best.pt   ← modelo actual v5 época 30 (3 clases)
+│   └── archive/              ← pesos históricos (baseline, snapshots)
+├── datasets/                 ← solo CATALOGO.md se versiona (imágenes locales)
+├── data/                     ← REBA.db SQLite (no versionada)
+├── logs/                     ← uvicorn.log · cloudflared.log · tunnel.log · zrok_url.txt
+├── reports/                  ← audits, baseline y experimentos.md
+└── runs/                     ← corridas de entrenamiento YOLO (no versionadas)
 ```
 
 ---
@@ -295,8 +334,10 @@ Detalle: [docs/ai_pipeline.md](docs/ai_pipeline.md)
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | POST | `/upload` | Foto JPEG por ingreso. Body binario, `Content-Type: image/jpeg`, header `X-Evento: ingreso`. 2xx = foto entregada (sale de la cola). |
-| GET | `/api/device/config` | Config clave=valor que el ESP32 descarga cada 60 s (heartbeat + `pump_cmd` pendiente) |
+| GET | `/api/device/config` | Config clave=valor que el ESP32 descarga cada 60 s (heartbeat + overrides + `pump_cmd`/`ota_url`/`queue_clear` pendientes) |
 | POST | `/api/device/ack` | ACK del ESP32 tras ejecutar `pump_cmd` |
+| POST | `/api/device/status` | Telemetría del circuito (uptime, boots, heap, RSSI, cámara, cola, relé) tras cada poll |
+| GET | `/firmware.bin` | Binario OTA (`firmware/fotos_nc.bin`) que la placa descarga y reflashea |
 
 ## Endpoints servidor (resumen)
 
@@ -306,18 +347,78 @@ Detalle: [docs/ai_pipeline.md](docs/ai_pipeline.md)
 | GET | `/api/config` | Config pública (clases, umbrales, constantes de bomba) |
 | GET | `/api/stats` | Contadores y % por clase |
 | GET | `/api/stats/timeseries` | Detecciones/día por clase para la gráfica (7/14/30 días) |
+| GET | `/api/perf` | Métricas de desempeño del pipeline de inferencia |
+| GET | `/api/device/status` | Última telemetría reportada por la ESP32 |
 | GET | `/api/pump-status` | Progreso inferido hacia el próximo ciclo de bomba |
 | GET | `/api/pump-events` | Historial de ciclos de bomba inferidos |
 | POST | `/api/pump/run` | Encola ciclo de bomba manual (`{"seconds": N}`) para el ESP32 |
 | GET | `/api/pump/events` | Historial + `pending_cmd` (orden encolada sin confirmar) |
-| GET/POST | `/api/admin/device-config` | Overrides de config del ESP32 (los edita el dashboard) |
+| GET/POST | `/api/admin/device-config` | Overrides de config del ESP32 (los edita el dashboard; whitelist de 11 claves) |
 | GET | `/api/captures` | Fotos clasificadas (paginado) |
 | GET | `/api/captures/latest` | Metadatos de la última captura |
 | GET | `/api/captures/{id}/image` | JPEG anotado (`?orig=1` = crudo del ESP32) |
 | GET | `/api/captures/{id}/detections` | Detecciones de una captura (lightbox) |
+| DELETE | `/api/captures?scope=` | Reset del álbum/datos (`photos`/`all`) |
 | GET | `/api/detections/history` · `/api/detections/latest` | Historial / última inferencia |
 | GET | `/api/export/yolo` | ZIP con imágenes + labels YOLO + `data.yaml` |
+| GET | `/` | Dashboard (`static/index.html`) · `/simulador_esp32.html` → emulador del nodo |
 | WS | `/ws` | Tiempo real al dashboard (`hello`, `capture`, `detections`, `pump_event`) |
+
+Referencia completa: [docs/server.md](docs/server.md)
+
+---
+
+## Operación
+
+### Scripts de arranque (`.bat`)
+
+| Script | Qué hace |
+|--------|----------|
+| `campo.bat` | Arranque de campo: uvicorn :5000 + túnel Cloudflare (`rebaserver.tech`) + zrok de respaldo. Doble clic; dejar la ventana abierta. |
+| `retomar.bat` | Retorno de campo: server + túneles + `--resume` del entrenamiento + monitor GUI. |
+| `detener_entrenamiento.bat` | Stop seguro del train: respalda pesos y cierra el proceso. |
+| `monitor_entrenamiento.bat` | Abre `train_monitor.py` (GUI tkinter: época, ETA, métricas, telemetría HW). |
+| `setup_zrok.bat` | Setup único del túnel zrok de respaldo (reserva la URL fija). |
+
+Logs en `logs/` (`uvicorn.log`, `cloudflared.log`, `tunnel.log`, `zrok_url.txt`).
+
+### Comandos serie de la ESP32 (115200 baud)
+
+| Comando | Acción |
+|---------|--------|
+| `STATUS` | Diagnóstico: heap, cámara, WiFi, cola, sensor |
+| `GET` | Lista la config NVS (`wifi_*`, `server_url`(+`_alt`), `srv_activa`, `pump_*`, `dist_*`, `ota_last`) |
+| `SET clave=valor` | Cambia config en caliente (misma validación que la remota): `wifi_ssid`, `wifi_pass`, `server_url`, `server_url_alt`, `pump_*`, `dist_*`, `ota_url`, `queue_clear` |
+| `CAPTURE` | Fuerza una captura de prueba |
+| `OTA` / `OTA http://…/x.bin` | Auto-actualización manual desde `{server_url}/firmware.bin` o URL explícita |
+| `REBOOT` | Reinicia la placa |
+| `HELP` | Lista los comandos disponibles |
+
+Detalle completo: [docs/firmware.md](docs/firmware.md)
+
+### OTA remota
+
+1. Compila el sketch → copia el `.bin` a `firmware/fotos_nc.bin` (requiere *Partition Scheme* **Minimal SPIFFS / 1.9 MB APP with OTA**).
+2. `POST /api/admin/device-config` con `{"ota_url": "http://rebaserver.tech/firmware.bin"}` — o `SET ota_url=…` por serie.
+3. La ESP32 la recoge en el siguiente poll (≤60 s), descarga, flashea la partición inactiva y reinicia. La misma URL no se re-flashea (dedup `ota_last`); si falla, reintenta en 10 min.
+
+### Failover de `server_url`
+
+La ESP32 mantiene `server_url` (principal, ej. LAN `192.168.x.x:5000`) y `server_url_alt` (túnel `http://rebaserver.tech`). Tras **3 polls de config fallidos** conmuta a la alternativa (`srv_act` persiste en NVS), y mientras esté en la alternativa **re-sondea la principal cada 5 min** para volver apenas responda. Cobertura típica: campo con hotspot sin Internet → LAN directa; placa en WiFi con Internet → conmuta al túnel sola.
+
+### Simulador del nodo
+
+`http://<PC>:5000/simulador_esp32.html` (o `https://rebaserver.tech/simulador_esp32.html` remoto) emula la ESP32-CAM en el navegador del celular: usa la **cámara real** del teléfono, habla el mismo protocolo (`/upload`, `/api/device/config`, telemetría) y sirve para probar el pipeline sin hardware.
+
+---
+
+## Estado del modelo
+
+- **Desplegado:** `models/best.onnx` = YOLOv8n **v5, época 30**, 3 clases (`plastico`, `unicel`, `metal`), `imgsz=640`, opset 12.
+- **Entrenamiento:** `ai_pipeline/train_outdoor.py` sobre `REBA_outdoor` (sintético + boosts + TACO + EcoSort + FloatWaste + copy-paste); augmentations de intemperie vía Albumentations.
+- **Validación:** holdout + `REBA_outdoor_eval` degradado + `REBA_real_val` + eval por path real `/upload` (`eval_upload_path.py`). Métricas: [outdoor_training_report.md](outdoor_training_report.md) y `reports/experimentos.md`.
+- **Pesos históricos:** `models/archive/` (baseline v2 y snapshots para comparación).
+- **Próximo paso:** `REBA_outdoor_v6` en GPU nube con `REBA_field` — Fase 2 / trabajo futuro ([docs/plan_nube_colab_kaggle.md](docs/plan_nube_colab_kaggle.md)).
 
 ---
 
@@ -344,14 +445,28 @@ Detalle: [docs/ai_pipeline.md](docs/ai_pipeline.md)
 
 | Documento | Contenido |
 |-----------|-----------|
+| [docs/sistema_general.md](docs/sistema_general.md) | Visión general: subsistemas, IA, endpoints y enlaces |
 | [docs/hardware.md](docs/hardware.md) | BOM, esquema eléctrico, relé NC, divisor |
-| [docs/firmware.md](docs/firmware.md) | Flasheo, constantes, comandos serie, `pump_cmd` |
-| [docs/server.md](docs/server.md) | venv, `.env`, API REST/WS completa, SQLite |
+| [docs/firmware.md](docs/firmware.md) | Flasheo, constantes, comandos serie, `pump_cmd`, OTA, failover |
+| [docs/server.md](docs/server.md) | venv, `.env`, API REST/WS completa, acceso remoto, SQLite |
 | [docs/ai_pipeline.md](docs/ai_pipeline.md) | Datasets, entrenamiento outdoor, ONNX, reentrenamiento |
-| [docs/dashboard.md](docs/dashboard.md) | Referencia técnica del frontend (vistas, módulos, WS) |
+| [docs/dashboard.md](docs/dashboard.md) | Referencia técnica del frontend (vistas, módulos, WS, tema) |
 | [docs/componentes.md](docs/componentes.md) | Función + decisión + uso de cada componente |
+| [docs/preguntas_pruebas.md](docs/preguntas_pruebas.md) | Banco de preguntas de verificación con pruebas sugeridas |
+| [docs/diagramas/README.md](docs/diagramas/README.md) | Arquitectura + 13 diagramas UML (`.puml`/`.png`/`.svg`) |
+
+### Planes y seguimiento
+
+| Documento | Contenido |
+|-----------|-----------|
+| [docs/plan_tunel_fijo.md](docs/plan_tunel_fijo.md) | Migración de túneles → Cloudflare `rebaserver.tech` (Portwarp/zrok históricos) |
+| [docs/plan_apagado_retorno.md](docs/plan_apagado_retorno.md) | Procedimiento de apagado/retorno del servidor y túneles |
+| [docs/plan_post_v5.md](docs/plan_post_v5.md) | Runbook post-entrenamiento v5 (eval, despliegue, go/no-go) |
+| [docs/plan_nube_colab_kaggle.md](docs/plan_nube_colab_kaggle.md) | Fase 2: entrenamiento v6 en GPU nube |
+| [checklist_de_entrega.md](checklist_de_entrega.md) | Plan de cierre y checklist de entrega (ARC115) |
 | [PROGRESO.md](PROGRESO.md) | Bitácora de sesiones de desarrollo |
 | [outdoor_training_report.md](outdoor_training_report.md) | Métricas del modelo outdoor |
+| [reports/experimentos.md](reports/experimentos.md) | Registro de experimentos y comparaciones |
 
 ---
 
