@@ -45,3 +45,4 @@ logs/
 # Arduino IDE build outputs
 build/
 firmware/*.ino.*
+build_firmware/
