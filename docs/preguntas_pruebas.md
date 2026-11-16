@@ -74,7 +74,7 @@ de prueba física · `[📄]` solo documental
 | # | Pregunta | Comportamiento esperado | Prueba | Res. |
 |---|----------|-------------------------|--------|------|
 | 39 | ¿Los 3 modos de configuración? `[✔]` | Dashboard→server→poll 60 s; serie (HELP/GET/SET/CAPTURE/STATUS/REBOOT); portal `REBA-Setup` | Probar los 3 | ☐ |
-| 40 | ¿Cuándo abre el portal? `[✔]` | Sin credenciales o ~20 fallos Wi-Fi (~10 min); timeout 5 min; reabre cada 30 s sin creds | Borrar NVS/Borrar red | ☐ |
+| 40 | ¿Cuándo abre el portal? `[✔]` | Siempre — AP `REBA-Setup` activo desde el arranque en paralelo al STA; tras guardar se reabre solo | Escanear WiFi con el celular | ☐ |
 | 41 | ¿Qué persiste en NVS? `[✔]` | `ssid, pass, srv, pump_photos, pump_seconds, dist_min/max_cm` + backups `ssid_bak/pass_bak/srv_bak` | `GET` por serie | ☐ |
 | 42 | ¿Validaciones de claves remotas? `[✔]` | `esEntero/esFloat` estricto; rangos; min<max; `server_url` solo `http://` ≤96; ssid≤32 pass≤63 | `SET` con valores malos | ☐ |
 | 43 | ¿Reversión de Wi-Fi nuevo? `[✔]` | `ssid_bak/pass_bak`; revierte en 90 s si no conecta; limpia al conectar | Dashboard→creds malas | ☐ |
@@ -213,7 +213,7 @@ de prueba física · `[📄]` solo documental
 
 | # | Pregunta | Comportamiento esperado | Prueba | Res. |
 |---|----------|-------------------------|--------|------|
-| 129 | ¿Acceso al dashboard? `[✔]` | `http://IP-PC:5000` u `http://192.168.137.1:5000` (REBA-AP); firewall TCP 5000; nunca `file://` | Celular + PC | ☐ |
+| 129 | ¿Acceso al dashboard? `[✔]` | `http://IP-PC:5000` u `http://192.168.137.1:5000` (REBA-AP); firewall TCP 5000; nunca `file://`; la IP del celular en el hotspot (p.ej. `.216`) no es el server | Celular + PC | ☐ |
 | 130 | ¿Cómo se actualiza? `[✔]` | Snapshot REST + WS `hello` + eventos; ping 25 s; poll health 30 s | DevTools Network/WS | ☐ |
 | 131 | ¿Reconexión del WS? `[✔]` | Backoff 1.5 s ×1.5, tope 10 s; muestra "Reconectando" | Cortar server y volver | ☐ |
 | 132 | ¿Módulos del dashboard? `[✔]` | Pill device, última captura, donut, galería+lightbox, bomba, actividad, export YOLO, config ESP32 | Recorrer la UI | ☐ |

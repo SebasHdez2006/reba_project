@@ -37,7 +37,7 @@ En Arduino IDE: abrir la carpeta `fotos_nc` (el `.ino` debe llevar el nombre de 
 
 1. **Dashboard** (`http://<PC>:5000` → panel "Dispositivo ESP32-CAM") → guarda overrides en SQLite; el ESP32 los descarga cada 60 s por `GET /api/device/config` y los aplica en caliente.
 2. **Comandos serie** (USB, 115200): `HELP`, `GET`, `SET clave=valor`, `CAPTURE`, `STATUS`, `REBOOT`.
-3. **Portal Wi-Fi** `REBA-Setup` (AP abierto, `http://192.168.4.1`): se abre solo si no hay credenciales, o si el WiFi falla ~10 min seguidos. En modo no bloqueante — `WiFiManager::process()` corre en `loop()`.
+3. **Portal Wi-Fi** `REBA-Setup` (AP abierto, `http://192.168.4.1`): **siempre activo** desde el arranque, en paralelo al STA (AP_STA) — permite reconfigurar en cualquier momento sin reiniciar. En modo no bloqueante — `WiFiManager::process()` corre en `loop()`; tras un guardado se reabre solo.
 
 ### Claves configurables (NVS + remotas)
 
@@ -70,6 +70,7 @@ ingresoDetectado(): flash 150 ms → tomarFoto() → cola → POST /upload
 - **Cola en RAM** (`MAX_COLA=6`): si el upload falla queda pendiente y reintenta cada 15 s; se descarta en HTTP 4xx o ≥25 intentos (anti poison-pill). **Un reboot pierde la cola** (evidencia transitoria).
 - **HTTP plano** (`httpSimple` con `WiFiClient`): sin `HTTPClient.h`/mbedTLS — ahorra ~122 KB flash y evita problemas de heap estático. **TLS prohibido por hardware**: `WiFiClientSecure`/mbedTLS provoca FB-OVF permanente en el driver de cámara ("init OK pero sin frames"), verificado en banco — por eso `server_url` solo acepta `http://` y las URLs `https://` (zrok) se rechazan a propósito. Body de respuesta cap 4 KB, loops verifican `connected()`.
 - **Cámara**: QVGA JPEG en **DRAM** (`frame_size=6`). `camera_config_t` **debe** ser `= {}` (campos no asignados como `sccb_freq`/`dma_half` quedaban con basura de stack → "init OK pero sin frames" / FB-OVF). `iniciarCamara()` reintenta `fb_get` antes de `deinit`; health check silencioso cada 15 min + re-init de cámara tras 3 fallos.
+- **Sin stream de video**: el firmware solo captura por evento y sube fotos — la vista MJPEG `:8080` se retiró por térmica (la placa se calienta mucho sirviendo frames continuos + el dashboard la re-sondeaba cada 15 s). "En vivo" muestra la última captura y eventos WS.
 - **PSRAM defectuoso en esta placa**: `psramFound()=1` pero `ps_malloc` falla → todo el framebuffer va a DRAM. No depender de PSRAM.
 
 ---
@@ -175,7 +176,7 @@ Al boot siempre `bombaApagar()` (estado seguro). Distancias >450 cm o sin eco (`
 | `POLL_CONFIG_MS` | 60 s | Descarga `GET /api/device/config` |
 | `WIFI_REVERT_MS` | 90 s | Reversa de credenciales WiFi nuevas que no conectan |
 | `SRV_FAILOVER_UMBRAL` / `SRV_PROBE_MS` | 3 polls / 5 min | Failover `server_url`→`server_url_alt` y re-sondeo de la principal |
-| `PORTAL_RETRY_MS` | 30 s | Reapertura del AP si no hay WiFi |
+| `PORTAL_RETRY_MS` | 30 s | Reapertura del portal si el AP estuviera cerrado (normalmente siempre activo) |
 | `CAMARA_RETRY_MS` / `CAMARA_TEST_MS` | 30 s / 15 min | Re-init y health check de cámara |
 
 Todos los deadlines usan `(long)(millis() - deadline) < 0` — **seguro ante el wrap de `millis()` (~49 días)**.

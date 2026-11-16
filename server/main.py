@@ -29,6 +29,7 @@ from dataclasses import replace
 from typing import Any, Dict, List, Set
 
 import cv2
+
 import numpy as np
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware

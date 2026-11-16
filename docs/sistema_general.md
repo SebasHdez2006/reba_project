@@ -98,9 +98,9 @@ Firmware Arduino único (~1500 líneas). Ciclo principal en `loop()`:
   heap, RSSI, cámara OK, distancia, cola, relé, bomba, config efectiva.
 - **OTA**: `ota_url` (serie `OTA` o clave remota) → descarga `.bin`,
   flashea partición inactiva, reinicia, reporta `ota_last`.
-- **Portal cautivo `REBA-Setup`**: si no hay credenciales WiFi o ~10 min
-  sin conexión, abre AP `REBA-Setup` en `192.168.4.1` para configurar
-  desde el celular (WiFi + URL del server).
+- **Portal `REBA-Setup`**: AP abierto **siempre activo** desde el
+  arranque (en paralelo al STA) en `192.168.4.1` — permite configurar
+  WiFi + URL del server desde el celular en cualquier momento.
 - **Respaldo de WiFi**: si las credenciales nuevas no conectan en 90 s,
   revierte a las anteriores.
 
@@ -132,7 +132,7 @@ poda las fotos viejas automáticamente.
 ### 3.4 Dashboard — `static/`
 
 SPA vanilla (sin framework): `index.html` + `app.js` + `styles.css`,
-tema claro/oscuro. Secciones: **En vivo** (stream de capturas,
+tema claro/oscuro. Secciones: **En vivo** (última captura,
 detecciones, eventos WS), **Rendimiento** (RTT, latencia ONNX, heartbeat,
 uploads vía `/api/perf`), **Estado del circuito** (telemetría real del
 ESP32), **Dispositivo** (config remota, "Activar ahora", vaciar cola),

@@ -77,13 +77,13 @@ REBA listo: vigilando rango configurable
 
 | Vía | Cuándo usarla | Cómo |
 |-----|---------------|------|
-| **Portal `REBA-Setup`** | Primera vez sin credenciales | Enciende el AP solo; conecta el celular a `REBA-Setup`, abre `http://192.168.4.1`, llena WiFi + URL servidor |
+| **Portal `REBA-Setup`** | Siempre (AP activo desde el arranque) | Conecta el celular a `REBA-Setup`, abre `http://192.168.4.1`, llena WiFi + URL servidor |
 | **Serie USB** | Banco/debug | `SET wifi_ssid=…`, `SET wifi_pass=…`, `SET server_url=…` |
 | **Dashboard** | Ya hay un server corriendo | Panel `Dispositivo` → `Guardar y aplicar` |
 
 Valores mínimos: `wifi_ssid`, `wifi_pass`, `server_url=http://<IP-PC>:5000`.
 
-> **Truco de campo:** si el ESP32 no tiene Wi-Fi ~10 min, el portal se reabre solo — puedes reconfigurarlo sin cables.
+> **Truco de campo:** el portal `REBA-Setup` está siempre emitiendo — reconfigura la placa sin cables en cualquier momento, aun sin WiFi.
 
 ---
 

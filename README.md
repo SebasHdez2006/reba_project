@@ -276,7 +276,7 @@ REBA/
 1. Abre `esp32_firmware/fotos_nc/fotos_nc.ino` en Arduino IDE.
 2. Placa: **AI Thinker ESP32-CAM**. Sube el sketch — **no hay constantes WiFi/URL que editar** (viven en NVS).
 3. Configura WiFi + `server_url` por una de estas vías (todas sin reflashear):
-   - **Portal** `REBA-Setup`: se abre solo si no hay credenciales → celular a `http://192.168.4.1`.
+   - **Portal** `REBA-Setup`: AP abierto **siempre activo** desde el arranque → celular a `http://192.168.4.1`.
    - **Serie** (115200): `SET wifi_ssid=…`, `SET wifi_pass=…`, `SET server_url=http://<IP_PC>:5000`.
    - **Dashboard** → panel `Dispositivo` → `Guardar y aplicar` (una vez el server esté arriba).
 4. Abre Serial Monitor (115200): verás "Conectado. IP del ESP32-CAM" y `REBA listo`.

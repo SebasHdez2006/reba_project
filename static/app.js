@@ -40,6 +40,8 @@
     captureDets: new Map(),   // captureId -> detections[] (confianza por clase)
     currentCapture: null,     // captura mostrada en el visor principal
     deviceLastSeen: null,     // epoch s del último heartbeat del ESP32
+    deviceOnline: false,      // último estado online del ESP32
+
     donutHover: null,         // clase resaltada en el donut (null = normal)
     tsGeom: null,             // geometría de la gráfica de actividad (tooltips)
     tsData: null,             // {series, classNames} cacheado para repintar al cambiar tema
@@ -167,6 +169,7 @@
   function applyDeviceStatus(device) {
     const pill = $("deviceStatus");
     const txt = $("deviceStatusText");
+    state.deviceOnline = !!device.online;
     if (!pill || !txt) return;
     state.deviceLastSeen = device.last_seen ?? null;
     updatePingNote();

@@ -19,6 +19,7 @@ Guía práctica para operar el sistema día a día: abrir el dashboard, leer lo 
 
 - Funciona en cualquier navegador moderno (Chrome, Edge, Safari).
 - Si la página no carga por LAN: confirma que el servidor esté encendido y que el firewall permita el **puerto 5000**.
+- **Usa la IP de la PC, no la de tu celular.** En el hotspot `REBA-AP` la PC es siempre `192.168.137.1`; las IPs de los clientes (`192.168.137.x`) son DHCP y cambian entre sesiones — la IP que tu celular muestra en sus ajustes Wi-Fi (p. ej. `192.168.137.216`) es la del propio teléfono y no sirve nada. La IP actual de la ESP32 se ve en `Dispositivo` → estado, o con `arp -a` (MAC Espressif `f8:b3:b7…`).
 - La interfaz está diseñada **móvil primero**: en el teléfono usa la barra inferior con 3 pestañas; en PC todo se ve en una sola pantalla con secciones.
 
 ### Sobre el dominio `rebaserver.tech` (escenarios 4 y 6)

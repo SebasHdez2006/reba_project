@@ -219,6 +219,10 @@ Texto plano `clave=valor` que el ESP32 descarga cada 60 s (heartbeat incluido). 
 
 GET: overrides actuales + claves permitidas. POST: body JSON `{clave: valor}` — valor vacío/null borra el override. Claves: `wifi_ssid`, `wifi_pass`, `server_url`, `pump_photos`, `pump_seconds`, `dist_min_cm`, `dist_max_cm`, `pump_cmd`. El firmware re-valida todo al aplicarlo.
 
+### Vista en vivo
+
+El stream MJPEG (`:8080` en la placa + proxy `/api/device/stream` y `/snapshot`) se **retiró** por térmica — la ESP32-CAM se calienta mucho sirviendo frames continuos. La pestaña "En vivo" ahora solo muestra la última captura + eventos WS.
+
 ### `GET /api/stats/timeseries?days=14`
 
 Serie temporal para la gráfica del dashboard: `{days, series: [{date, detections: {clase: n}, captures, pump_events}], class_names}`.

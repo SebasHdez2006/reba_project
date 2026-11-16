@@ -20,22 +20,17 @@
 //
 // Acceso remoto: el dispositivo habla HTTP plano (sin TLS — ver nota de
 // HTTPClient.h abajo). Para alcanzarlo desde fuera de la LAN hace falta
-// un tunel que acepte HTTP plano. Desde el 16-nov el tunel es PORTWARP
-// con direccion fija: http://93togsum.free.tryportwarp.cc:16404
-// (antes cloudflared quick tunnel — URL efimera que cambiaba por
-// reinicio; ver docs/plan_tunel_fijo.md). El tunel HTTPS de zrok NO
-// sirve para este firmware. Dashboard/celular si pueden usar zrok:
-// https://<nombre>.shares.zrok.io.
-//
+// un tunel que acepte HTTP plano: Cloudflare named tunnel
+// `rebaserver.tech` (http :80 para la placa / https :443 dashboard),
+// con zrok `reba-cam.shares.zrok.io` solo para el dashboard (HTTPS —
+// el firmware no habla TLS). server_url_alt activa el failover solo.
 // Configuración (SIN recompilar):
-//  - Primera vez / sin WiFi guardada: el ESP32 levanta el AP
-//    "REBA-Setup". Conéctate desde el celular, abre http://192.168.4.1
-//    y captura: red WiFi, contraseña y URL del servidor.
-//  - Después el dispositivo descarga cada POLL_CONFIG_MS la config del
+//  - El AP "REBA-Setup" está SIEMPRE activo (en paralelo al STA): conecta
+//    el celular a esa red y abre http://192.168.4.1 para reconfigurar
+//    WiFi/URL en cualquier momento — sin reiniciar ni apagar la placa.
+//  - El dispositivo descarga cada POLL_CONFIG_MS la config del
 //    servidor (GET /api/device/config) y aplica cambios en caliente:
 //    WiFi, URL del servidor, umbrales y parámetros de la bomba.
-//  - Si el WiFi guardado deja de funcionar ~10 min (cambiaste de red),
-//    el AP "REBA-Setup" se reactiva solo para reconfigurar.
 //  - OTA: el sketch puede auto-actualizarse descargando un .bin por HTTP
 //    plano (ver sección "OTA" más abajo). Requiere partition scheme CON
 //    OTA: en Arduino IDE → Tools → Partition Scheme → "Minimal SPIFFS
@@ -286,7 +281,7 @@ void iniciarPortal() {
     wmP->addParameter(pSrvP);
     wmP->setSaveParamsCallback(onParamsSaved);
     wmP->setSaveConnect(false);              // conectamos nosotros en el callback
-    wmP->setConfigPortalTimeout(300);        // portal abierto 5 min
+    wmP->setConfigPortalTimeout(0);          // sin timeout: REBA-Setup siempre activo
     wmP->setConfigPortalBlocking(false);     // no bloquea: fotos/cola siguen
   }
   wmP->startConfigPortal("REBA-Setup");
@@ -298,8 +293,10 @@ void revisarPortal() {
   // cada loop — sin esto la página no carga aunque el AP esté arriba.
   wmP->process();
   if (wmP->getConfigPortalActive()) return;   // sigue esperando al usuario
-  portalActivo = false;
-  Serial.println("Portal de configuracion cerrado (timeout o guardado).");
+  // El portal solo se cierra tras un guardado; REBA-Setup debe quedar
+  // disponible SIEMPRE (AP en paralelo al STA), así que se reabre.
+  Serial.println("Portal cerrado tras guardado; reabriendo 'REBA-Setup'");
+  wmP->startConfigPortal("REBA-Setup");
 }
 
 // ------------------------------------------------------------
@@ -802,8 +799,8 @@ bool asegurarWiFi() {
 
   Serial.print("Conectando a WiFi");
   WiFi.disconnect();
-  // Si el portal WiFiManager dejó el chip en modo AP, asegurar STA antes
-  // de reconectar (sin portal activo no hay razón para mantener AP).
+  // El portal REBA-Setup corre siempre en paralelo (AP_STA): no resetear
+  // el modo a STA solo — eso apagaría el AP de configuración.
   if (!portalActivo) WiFi.mode(WIFI_STA);
   WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
   unsigned long inicio = millis();
@@ -1238,7 +1235,8 @@ bool tomarFoto() {
     esp_camera_fb_return(fb);
     fallosCamara++;
     if (fallosCamara >= FALLAS_CAMARA_REINIT) {
-      camaraOk = false; fallosCamara = 0; esp_camera_deinit();
+      camaraOk = false; fallosCamara = 0;
+      esp_camera_deinit();
     }
     return false;
   }
@@ -1284,7 +1282,6 @@ void ingresoDetectado() {
   }
 }
 
-// ============================================================
 void setup() {
   Serial.begin(115200);
   bootCount++;
@@ -1313,13 +1310,17 @@ void setup() {
   cargarConfig();
   ultimoConfigOk = millis();          // margen inicial para el primer poll
   WiFi.mode(WIFI_STA);
-  asegurarWiFi();                          // si no hay creds -> abre portal
+  // REBA-Setup SIEMPRE disponible: AP abierto en paralelo al STA desde el
+  // arranque (http://192.168.4.1) — permite reconfigurar sin reboot.
+  iniciarPortal();
+  asegurarWiFi();
 
   // Dos destellos cortos: "listo"
   for (int i = 0; i < 2; i++) {
     digitalWrite(PIN_FLASH, HIGH); delay(100);
     digitalWrite(PIN_FLASH, LOW);  delay(150);
   }
+
   Serial.println("REBA listo: vigilando rango configurable");
   Serial.println("Config USB: HELP para ver comandos");
 }

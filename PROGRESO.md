@@ -1189,3 +1189,240 @@ Tras agotar los candidatos gratuitos, el túnel definitivo es un
 - [ ] Seguridad: `rebaserver.tech` expone el dashboard sin auth a
       Internet — el dominio es el secreto; evaluar token si se vuelve
       problema (firmware no manda headers custom hoy).
+
+---
+
+## 16-nov (~13:30) — Incidencia campo: hotspot apagado + túnel CF bloqueado + server caído
+
+### Diagnóstico
+
+- **ESP32 offline ~90 min** (último contacto ~12:01): el hotspot móvil
+  **REBA-AP estaba apagado** (adaptadores Wi-Fi Direct "medios
+  desconectados", `192.168.137.1` no existía). La placa solo conoce
+  `REBA-AP` → sin red → sin `pump_cmd` ni fotos → bomba inalcanzable.
+- **Túnel Cloudflare caído desde ~12:29**: `cloudflared` vivo pero
+  timeouts `i/o` a edge `198.41.x.x:7844`. Diagnóstico: **TCP y UDP
+  7844 bloqueados** por la red (443 abre en las mismas IPs; QUIC
+  también falla). `rebaserver.tech` → HTTP 530. Bloqueo externo,
+  cloudflared reintenta solo.
+- **Servidor uvicorn murió dos veces** (~13:13 y ~13:23): la primera
+  instancia (11:48) probablemente se cerró su ventana "REBA-Server";
+  `logs/uvicorn.log` quedó congelado desde 11:47 porque esa instancia
+  logueaba solo a consola.
+- **Telemetría previa a la caída**: `dist_cm=-1.0` = **sin eco del
+  HC-SR04** → aunque la placa vuelva, el trigger no dispara fotos ni
+  bomba automática. Revisar cableado TRIG=14/ECHO=15 (divisor) y
+  alimentación del sensor.
+
+### Acciones aplicadas
+
+- **Hotspot encendido por script**: `tools/enable_hotspot.ps1` (WinRT
+  `NetworkOperatorTetheringManager.StartTetheringAsync`) — SSID
+  `REBA-AP` 2.4 GHz, `192.168.137.1` restaurada. La ESP32 debe
+  reconectar sola si está alimentada.
+- **cloudflared reiniciado** (PID nuevo) — sigue reintentando; si el
+  bloqueo de 7844 cede, el túnel vuelve solo. zrok
+  (`reba-cam.shares.zrok.io`) siguió UP todo el tiempo (respaldo OK).
+- **uvicorn relanzado oculto** (`Start-Process -WindowStyle Hidden`,
+  `>> logs/uvicorn.log`) — ya no depende de ventana de consola y
+  queda logueado en archivo.
+- uvicorn "duplicado" (PID pequeño ~4 MB) es proceso normal de la app,
+  no un huérfano — no tocar.
+
+### Pendiente físico (no resoluble por software)
+
+- [ ] **Alimentar/verificar la ESP32**: ~90 min sin contacto → probable
+      batería 18650 agotada o placa apagada. Revisar LED de power,
+      carga solar/USB. Si el hotspot lleva >5 min arriba y no aparece
+      → portal `REBA-Setup` (`192.168.4.1`) o serie.
+- [ ] **HC-SR04 sin eco** (`dist_cm=-1`): revisar TRIG/ECHO, divisor
+      1k+2k, alimentación del sensor.
+- [ ] Al volver la placa: prueba de bomba manual desde dashboard y de
+      ciclo automático (3 fotos).
+- [ ] Si `rebaserver.tech` sigue en 530: el bloqueo 7844 es de la red
+      institucional — probar desde otra red o esperar; mientras tanto
+      LAN (campo) + zrok (dashboard remoto) cubren las pruebas.
+
+---
+
+## 16-nov (~14:10) — Vista en vivo MJPEG (stream :8080 + proxy + panel)
+
+### Implementado
+
+- **Firmware** (`fotos_nc.ino`): servidor HTTP propio en **:8080** dentro
+  de una tarea FreeRTOS `reba_stream` (core 0, prio 1) — `GET /stream`
+  (MJPEG ~8 fps), `GET /capture` (JPEG suelto), `GET /status` (JSON).
+  Comparte la cámara con los triggers vía `camMutex` (todos los
+  fb_get/fb_return/deinit/re-init serializados) + flag `camReinit`.
+  **Sin buffer intermedio**: la PSRAM de la placa es defectuosa
+  (`ps_malloc` falla) → el frame se escribe directo al socket bajo el
+  mutex (~ms; el único cliente real es el proxy del PC por LAN).
+  `loop()` no se bloquea: sensor/cola/bomba/polls siguen durante el
+  stream. Compila OK (1,144,896 B, 58% partición) →
+  `firmware/fotos_nc.bin` ya sirve el build nuevo por `/firmware.bin`.
+- **Server** (`main.py`): `GET /api/device/stream` → proxy MJPEG al
+  `:8080` de la ESP32 (IP = último heartbeat, `?ip=` override; 503 sin
+  IP, 502 si no responde/firmware viejo); `GET /api/device/snapshot` →
+  JPEG suelto. Verificado end-to-end con mock local (30 frames OK).
+- **Dashboard**: panel "En vivo — cámara" en la vista En vivo (fila
+  completa en desktop, primero en móvil): `<img>` MJPEG con estados
+  conectando/en vivo/reintentando, auto-retry 15 s, pausa con pestaña
+  oculta. Degrada limpio con firmware sin stream.
+
+### Pendiente
+
+- [x] **Flashear la ESP32** con este build — hecho por USB (esptool,
+      ambos slots OTA); ver sección 16-nov ~15:45.
+- [x] Prueba E2E real cuando la placa esté encendida — verificado:
+      `GET /api/device/snapshot` → 200 JPEG vía proxy →
+      `ESP32:8080/capture` (~5.9 KB/frame).
+- [x] Directo sin proxy (misma LAN): `http://<ip-esp32>:8080/stream` —
+      verificado en `192.168.137.121:8080` (`/status` JSON,
+      `/capture` JPEG).
+
+---
+
+## 16-nov (~15:15) — Incidencia resuelta: "dashboard inaccesible" desde el celular (IP confundida)
+
+### Síntoma
+
+El celular en `REBA-AP` no podía abrir `http://192.168.137.216` — el
+navegador reportaba sitio inalcanzable. **No era una falla de red ni del
+servidor.**
+
+### Diagnóstico (evidencia)
+
+- `arp -a` en la PC mostró dos clientes en el hotspot:
+  `192.168.137.163` → MAC `f8:b3:b7` (**Espressif** = ESP32) y
+  `192.168.137.216` → MAC `42:6c:1a` (*locally administered*/aleatoria
+  = **el propio celular**, Android/iOS usan MAC randomizada).
+- `192.168.137.216` rechazaba TCP en :80, :5000 y :8080 — ningún
+  servicio escuchando ahí; era la IP del celular misma, no del server.
+- La PC (host del hotspot) es siempre `192.168.137.1` y
+  `http://192.168.137.1:5000/api/health` respondía 200; la ESP32
+  seguía pollando `/api/device/config` y subiendo capturas — la LAN
+  nunca estuvo caída.
+
+### Causa raíz
+
+Las IPs de los **clientes** del hotspot son DHCP y cambian entre
+sesiones (la ESP32 fue `.161` antes, `.163` ahora). `192.168.137.216`
+— probablemente vista como IP de la ESP32 en una sesión/log anterior —
+esta vez le correspondía al celular. Abrirla en el navegador apuntaba
+al propio teléfono, que no sirve nada.
+
+### Mitigación
+
+Abrir la URL correcta: `http://192.168.137.1:5000` (la PC; IP fija del
+host ICS). `logs/uvicorn.log` registra el primer `GET /` desde
+`.216` (~15:10) cargando dashboard + WS con 200 en todo.
+
+### Lección / regla operativa
+
+- **Nunca usar la IP de un cliente como si fuera fija**: el host del
+  hotspot es siempre `192.168.137.1`; los clientes rotan
+  (`.161` → `.163` → `.216`…). Para saber qué IP tiene la ESP32 ahora:
+  `arp -a` (MAC Espressif) o `GET /api/device/status` → `device.ip`.
+- Identificar dispositivos por MAC: `f8:b3:b7…` = ESP32 (Espressif);
+  MAC con bit local (p.ej. `42:…`, `x2/x6/xA/xE` en el 1er octeto) =
+  celular con MAC aleatoria.
+
+### Estado colateral
+
+- La ESP32 reinició (~15:12, uptime 1140→60 s; `boots=1`) pero **sigue
+  con el firmware previo al stream**: no hubo `GET /firmware.bin` desde
+  `.163` y su `:8080` sigue cerrado → `/api/device/stream` responde
+  502. El flasheo del build `firmware/fotos_nc.bin` (stream :8080)
+  sigue pendiente — vía `OTA` por serie o
+  `SET ota_url=http://192.168.137.1:5000/firmware.bin`.
+
+---
+
+## 16-nov (~15:45) — Flasheo USB del firmware stream (:8080) — resuelto
+
+### Resultado
+
+Firmware nuevo flasheado y verificado end-to-end: serial muestra
+`Stream MJPEG en :8080`; `GET http://192.168.137.121:8080/status` →
+`{"ok":true,"heap":144016,"rssi":-49,"cam":1}`; proxy
+`GET /api/device/snapshot` → 200 JPEG. ESP32 `EN LÍNEA`, IP nueva
+`.121` (DHCP rotó tras re-asociar).
+
+### Incidente durante el flasheo (documentado)
+
+1. Se encoló `ota_url=http://192.168.137.1:5000/firmware.bin?v=…` en
+   el config remoto (la anterior apuntaba a `rebaserver.tech`, caído
+   por el bloqueo 7844 — nunca corría y entraba en backoff 10 min).
+   El hotspot estaba apagado → sin WiFi → OTA no podía correr.
+2. Primer intento USB: `esptool write_flash 0x10000` — write+hash OK,
+   pero el board seguía sin stream: **boot por `ota_1` (0x1F0000),
+   firmware viejo** — `otadata` (0xE000) tenía `ota_seq` apuntando al
+   slot viejo.
+3. Al re-encender el hotspot la placa ejecutó su **OTA propia**:
+   `Update.begin()` apuntó al slot inactivo (app0) y lo borró; las
+   aperturas del monitor serie (DTR glitch resetea la placa en cada
+   open) interrumpieron la escritura → `app0` quedó todo `0xFF` y
+   `verify-flash` falló por digest. El bootloader cayó a `app1`.
+4. Fix: quitar `ota_url` del config remoto (evita OTA concurrente) +
+   `write-flash 0x10000 + 0x1F0000` con el mismo bin → ambos slots
+   verificados → hard reset → stream OK.
+
+### Reglas operativas aprendidas
+
+- **El monitor serie resetea la placa al abrir** (CH340 DTR). No abrir
+  COM durante un OTA/flash en curso — aborta `Update` y deja el slot
+  erizado (backoff RTC 10 min, sobrevive resets suaves).
+- En esquema OTA (app0/app1), flashear **el slot activo o ambos** —
+  solo app0 no basta si `otadata` boota `ota_1`. Verificar el slot
+  activo leyendo `0xE000` (seq) o comparando cabeceras.
+- `ota_url` remoto con una URL muerta martillea cada 10 min por el
+  backoff — retirar la clave del config si el servidor destino cae.
+- IP de la ESP32 rota por DHCP del hotspot: esta sesión fue
+  `.163` → `.121`. `device.ip` del server sigue el heartbeat.
+
+### Comando usado
+
+```
+python -m esptool --chip esp32 --port COM9 --baud 460800 \
+  write-flash 0x10000 firmware/fotos_nc.bin 0x1F0000 firmware/fotos_nc.bin
+```
+
+---
+
+## 16-nov (~17:05) — Firmware slim: stream :8080 eliminado + REBA-Setup siempre activo
+
+### Motivo
+
+La ESP32-CAM se calienta mucho sirviendo MJPEG continuo (el dashboard la
+re-sondeaba cada 15 s) y el nodo perdía señal solo en el dispositivo
+acuático (probable brownout de alimentación). Se pidió lo mínimo:
+capturar → enviar → detectar.
+
+### Cambios firmware (`fotos_nc.ino`)
+
+- **Stream MJPEG eliminado**: `streamServer`/:8080, tarea `reba_stream`,
+  handlers `/stream` `/capture` `/status`, `camMutex`, `camReinit` y
+  `WiFiServer.h`. `tomarFoto()` ya no serializa con mutex (único
+  consumidor). Compila 1,141,537 B (58%), ~3.4 KB más liviano.
+- **`REBA-Setup` siempre disponible**: `iniciarPortal()` corre en
+  `setup()` (no solo sin creds/tras 20 fallos), `setConfigPortalTimeout(0)`
+  (sin timeout) y `revisarPortal()` reabre el AP tras cada guardado —
+  AP `REBA-Setup` activo en paralelo al STA 24/7 para reconfigurar
+  desde el celular (`http://192.168.4.1`) sin reiniciar.
+- Flasheado por USB a **ambos slots** (0x10000 + 0x1F0000) en COM10.
+
+### Cambios server/dashboard
+
+- `main.py`: eliminados `/api/device/stream` y `/api/device/snapshot`
+  (proxy MJPEG), `ESP32_STREAM_PORT`, `_esp32_ip`, imports `httpx` +
+  `StreamingResponse`.
+- `index.html`: panel "En vivo — cámara" eliminado.
+- `app.js`: funciones `camStream*`/`updateCamStream`, estado `stream*`,
+  intervalo de reintento 15 s y listener `visibilitychange` del stream.
+- `styles.css`: reglas `.panel-cam`/`.cam-frame`/`.cam-note`.
+
+### Verificado en banco
+
+Serial: `AP 'REBA-Setup'` activo desde boot (`portal=1`), `Camara OK`,
+sin línea de stream, `REBA listo`. Bin nuevo en `firmware/fotos_nc.bin`
+(servido por `/firmware.bin` para futuras OTAs).
