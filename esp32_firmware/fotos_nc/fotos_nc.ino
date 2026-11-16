@@ -20,9 +20,12 @@
 //
 // Acceso remoto: el dispositivo habla HTTP plano (sin TLS — ver nota de
 // HTTPClient.h abajo). Para alcanzarlo desde fuera de la LAN hace falta
-// un tunel que acepte HTTP plano (cloudflared quick tunnel u otro); el
-// tunel HTTPS de zrok NO sirve para este firmware. Dashboard/celular si
-// pueden usar zrok: https://<nombre>.shares.zrok.io.
+// un tunel que acepte HTTP plano. Desde el 16-nov el tunel es PORTWARP
+// con direccion fija: http://93togsum.free.tryportwarp.cc:16404
+// (antes cloudflared quick tunnel — URL efimera que cambiaba por
+// reinicio; ver docs/plan_tunel_fijo.md). El tunel HTTPS de zrok NO
+// sirve para este firmware. Dashboard/celular si pueden usar zrok:
+// https://<nombre>.shares.zrok.io.
 //
 // Configuración (SIN recompilar):
 //  - Primera vez / sin WiFi guardada: el ESP32 levanta el AP
@@ -59,11 +62,14 @@
 // El HTTP se hace con WiFiClient en httpSimple() más abajo.
 
 // ---------------- Valores por defecto (se sobreescriben por config remota) ----------------
-// SRV_BASE: URL base del servidor FastAPI SIN /upload, ej. http://192.168.1.3:5000
-// Solo se usa como valor inicial del portal; en producción la config
-// remota puede cambiarla (ojo: si el ESP32 no alcanza el servidor no
-// puede descargar la nueva URL — ver docs).
-static const char* SRV_BASE_DEFAULT = "http://192.168.1.3:5000";
+// SRV_BASE: URL base del servidor FastAPI SIN /upload.
+// Default = tunel Portwarp de direccion fija (acceso remoto campo);
+// para banco/LAN se sobreescribe por portal, serie o config remota
+// (ej. http://192.168.1.3:5000). Solo se usa como valor inicial del
+// portal y fallback si NVS queda vacio; en produccion la config remota
+// puede cambiarla (ojo: si el ESP32 no alcanza el servidor no puede
+// descargar la nueva URL — ver docs).
+static const char* SRV_BASE_DEFAULT = "http://93togsum.free.tryportwarp.cc:16404";
 
 // ---------------- Pines ----------------
 #define PIN_RELE   13
@@ -353,7 +359,7 @@ bool aplicarClaveRemota(const String& clave, const String& valor) {
     // permanente en el driver de camara (verificado en banco, ver nota
     // del include). Por eso la URL de zrok (https://*.shares.zrok.io)
     // NO sirve como server_url: el dispostivo remoto necesita un tunel
-    // que acepte HTTP plano (cloudflared u otro).
+    // que acepte HTTP plano (Portwarp u otro).
     // Una URL mala dejaria el dispositivo inalcanzable.
     if (v.length() > 7 && v.length() <= 96 && v.startsWith("http://")
         && v.indexOf(' ') < 0 && v != srvBase) {
