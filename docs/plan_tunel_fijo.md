@@ -47,7 +47,7 @@
 túnel pase la verificación de Fase B desde fuera del LAN. Si la primera
 opción falla → siguiente del menú, sin compromiso.
 
-## 2. Implementación — Portwarp (camino principal)
+## 2. Implementación — Portwarp (camino principal) — HISTÓRICO, no ejecutado
 
 ### Fase A — cuenta y túnel (~15 min, humano + agente)
 
@@ -167,7 +167,12 @@ Implementación final (16-nov noche, **verificada end-to-end**):
   SQLite en la VM → ESP32 alcanzable 24/7 con la laptop apagada.
   Reevaluar si el relay resulta insuficiente.
 
-## 5. Checklist de ejecución
+## 5. Checklist de ejecución (histórico — Portwarp, superado por §4)
+
+> Las secciones §1–§3 y este checklist describen el plan Portwarp que
+> quedó **sin ejecutar**: el listener público murió y el agente no tiene
+> API de control. La implementación real fue §4 (Cloudflare). Se
+> conserva como historial de la decisión.
 
 - [x] Opción elegida → **Portwarp Free**
 - [x] Cuenta/servicio creado + túnel TCP → 127.0.0.1:5000 activo
@@ -188,6 +193,9 @@ Implementación final (16-nov noche, **verificada end-to-end**):
       de la ruta definitiva
 - [ ] `retomar.bat`/`campo.bat` revisados: NO relanzan train_outdoor
       (v5 terminó — `--resume` reentrenaría solo)
+      → **Estado real (16-nov noche)**: v5 quedó en época 30/50 (no
+      terminó); `retomar.bat` SÍ lanza `REBA-Train --resume` a propósito
+      para continuarla. Si no se quiere reanudar, cerrar esa ventana.
 
 ## 6. Riesgos
 
