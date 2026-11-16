@@ -952,3 +952,63 @@ mejor; NO como comparador honesto del incumbente v5-ép1.
   métricas reales, `git add -f models/best.onnx` opcional ~12 MB).
 - Corregir en el checklist/runbook: la rama NO-GO debe restaurar solo
   `best_<ts>.onnx` (NO el .pt — es 5-clases y el server lo rechaza).
+
+---
+
+## 16-nov (madrugada→mañana) — Migración túnel ESP32: cloudflared → Portwarp
+
+### Contexto
+La ESP32-CAM de Nabiki quedó remota pero la URL de cloudflared quick
+tunnel (`dale-finishing-evans-had.trycloudflare.com`) murió con el
+reinicio de la PC → dispositivo inalcanzable. Se ejecuta la migración a
+**Portwarp** (dirección fija HTTP plano) según `docs/plan_tunel_fijo.md`.
+
+### Servidor (esta PC)
+- Levantados: uvicorn :5000 (ONNX OK), zrok `reba-cam.shares.zrok.io`
+  (reservado, sin cambios), cloudflared (URL nueva
+  `related-surge-gba-passport.trycloudflare.com` — solo respaldo),
+  agente Portwarp (PID, app Store `ribeirosoftware.2898231FDCAD4`).
+- **Autostart Portwarp**: la app ya trae `launch_at_login=true` en
+  `preferences.json`; además se creó tarea programada `REBA-Portwarp`
+  (logon → `explorer shell:AppsFolder\<AUMID>`). Verificado: el agente
+  arrancó solo tras el boot de la mañana.
+
+### ESP32-CAM (físico, USB/COM10 CH340)
+- El sketch previo no respondía serial (firmware viejo sin comandos).
+- **Flasheo esptool** (Arduino IDE esptool 5.3.1, COM10):
+  `bootloader@0x1000 + partitions@0x8000 + boot_app0@0xe000 +
+  fotos_nc@0x10000` — `firmware/fotos_nc.bin` compilado la noche
+  anterior con `PartitionScheme=min_spiffs` (OTA) y
+  `SRV_BASE_DEFAULT=http://93togsum.free.tryportwarp.cc:16404`.
+- **NVS borrada** (`erase-region 0x9000 0x5000`): factory reset →
+  `server_url` cae al default Portwarp; portal `REBA-Setup` queda
+  disponible para reingresar WiFi.
+- Diagnóstico serial: los comandos no respondían porque `setup()`
+  quedaba atrapado en `iniciarCamara()` (~17 s/intento, sensor "init
+  OK sin frames") → `loop()`/`procesarSerial()` nunca corrían. En
+  cuanto la cámara completó, `STATUS`/`GET` respondieron normal.
+  Lección: **abrir el puerto serie resetea la placa** (glitch DTR/RTS)
+  y hay que esperar ~60 s de boot antes de mandar comandos.
+- Estado final del dispositivo: `camara=OK`, `server_url`=Portwarp,
+  `wifi_ssid` vacío → portal activo, pendiente credenciales.
+
+### Portwarp — inestabilidad detectada
+- `http://93togsum.free.tryportwarp.cc:16404/api/health` → 200
+  verificado varias veces, pero el túnel **flapea**: la app reporta
+  "conexión inestable" (nodo Hong Kong ~255 ms + PC en WiFi).
+- Plan B para la prueba de hoy: PC y ESP32 en la **misma LAN/hotspot**
+  → `server_url=http://172.16.110.37:5000` directo (sin túnel). Una
+  vez en línea, el server puede empujar `server_url`=Portwarp remoto
+  (el firmware guarda el actual como `srv_bak` y revierte solo si no
+  responde — migración con red de seguridad).
+
+### Pendiente
+- [ ] Nabiki: portal `REBA-Setup` → SSID WiFi 2.4 GHz + pass +
+      `server_url=http://172.16.110.37:5000` (o Portwarp si se
+      estabiliza antes).
+- [ ] `device.online=true` en `/api/health`.
+- [ ] Prueba pump E2E (click → `pump_cmd` → relé → ACK).
+- [ ] Estabilizar Portwarp (otro nodo / Ethernet) o evaluar playit
+      Premium / Oracle VPS (ver plan_tunel_fijo §1).
+- [ ] Retirar cloudflared tras confirmar migración.
+- [ ] Marcar checklist §5 de `docs/plan_tunel_fijo.md`.

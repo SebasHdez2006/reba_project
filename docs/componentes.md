@@ -232,6 +232,7 @@ La PC corre el servidor en `0.0.0.0:5000`. Para abrir el dashboard desde el tel�
 | **Cualquier red con Internet** (túnel zrok) | `https://<nombre>.shares.zrok.io` — ver §abajo |
 | **Simulador ESP32** (celular, misma URL) | `/simulador_esp32.html` — emula el firmware con la cámara real |
 | **ESP32 en campo sin Wi-Fi** | `server_url=http://<IP-PC>:5000` — va por la LAN/hotspot compartido con la PC, **no** por el túnel (zrok es solo HTTPS) |
+| **ESP32 remota (otra casa)** | `server_url=http://93togsum.free.tryportwarp.cc:16404` — túnel **Portwarp** TCP/HTTP plano de dirección fija (16-nov, migración desde cloudflared; ver `docs/plan_tunel_fijo.md`) |
 
 - La red `REBA-AP` es la recomendada en banco: aísla REBA del resto de tu tráfico (el celular puede mantener datos móviles activos en paralelo).
 - Si la página no carga: verificar que el servidor esté corriendo (`uvicorn server.main:app --host 0.0.0.0 --port 5000`) y que el firewall de Windows permita entrada TCP 5000.

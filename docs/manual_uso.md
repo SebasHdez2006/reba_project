@@ -31,11 +31,12 @@ Guía práctica para operar el sistema día a día: abrir el dashboard, leer lo 
 
 > **ESP32 remoto (fuera de tu LAN):** zrok no le sirve (HTTPS-only y el
 > firmware rechaza `https://` por el bug de cámara documentado en
-> `fotos_nc.ino`). Si el dispositivo está en otra casa, hoy se mantiene
-> reachable vía un **cloudflared quick tunnel** que sigue corriendo en la
-> PC (URL `*.trycloudflare.com`, HTTP plano). Si ese proceso muere, la URL
-> cambia y el ESP32 queda inalcanzable hasta reconfigurar `server_url`
-> presencialmente. Detalle: `docs/plan_apagado_retorno.md` §topología.
+> `fotos_nc.ino`). Desde el 16-nov el camino es el **túnel Portwarp**
+> `http://93togsum.free.tryportwarp.cc:16404` (HTTP plano, dirección
+> fija — ver `docs/plan_tunel_fijo.md`). Si el dispositivo está en la
+> misma red que la PC, también sirve directo `http://<IP-PC>:5000`.
+> El cloudflared quick tunnel quedó como respaldo temporal (URL
+> efímera `*.trycloudflare.com` — cambia en cada reinicio).
 
 ---
 

@@ -1,8 +1,13 @@
 # Plan — Túnel de dirección fija para la ESP32-CAM (reemplazo cloudflared)
 
-> Estado: **propuesta** — ejecutar cuando se apruebe. Objetivo: que la
-> ESP32 remota (casa de Nabiki) reconecte sola cada vez que el server
-> esté encendido, sin reconfiguración física ni URLs efímeras.
+> Estado: **EN CURSO** (16-nov) — Portwarp elegido y activo pero
+> **inestable** (alerta "conexión inestable" de la app; nodo Hong Kong
+> ~255 ms + PC en WiFi). Mientras tanto la ESP32 migra primero por
+> **LAN directa** (`http://<IP-PC>:5000`) y el server le empuja
+> `server_url`=Portwarp remoto con `srv_bak` como red de seguridad.
+> Objetivo: que la ESP32 remota (casa de Nabiki) reconecte sola cada
+> vez que el server esté encendido, sin reconfiguración física ni URLs
+> efímeras.
 
 ## 0. Problema actual
 
@@ -132,15 +137,23 @@ Oracle Cloud Always Free (VM ARM 4c/24GB o AMD micro, IP pública fija):
 
 ## 5. Checklist de ejecución
 
-- [ ] Opción elegida (Portwarp → playit Premium → Oracle → CF+dominio)
-- [ ] Cuenta/servicio creado + túnel TCP → 127.0.0.1:5000 activo
-- [ ] `curl http://<dir>/api/health` = 200 desde fuera del LAN (datos móviles)
+- [x] Opción elegida → **Portwarp Free**
+- [x] Cuenta/servicio creado + túnel TCP → 127.0.0.1:5000 activo
+      (`93togsum.free.tryportwarp.cc:16404`)
+- [~] `curl http://<dir>/api/health` = 200 — verificado, pero **flapea**
+      (conexión inestable; reintentar hasta estabilizar o cambiar de opción)
 - [ ] Dirección estable verificada (sobrevive reinicio del agente/PC)
-- [ ] `server_url` + `ota_url` aplicados en ESP32 (físico o device-config)
+- [~] `server_url` en ESP32: firmware flasheado con default Portwarp +
+      NVS reseteada (16-nov); falta credenciales WiFi por portal y
+      `ota_url` (opcional: `/firmware.bin` ya se sirve por la misma URL)
 - [ ] `device.online=true` en `/api/health` por la nueva ruta
-- [ ] cloudflared.exe + ventana cmd eliminados (post-migración)
-- [ ] Autostart del agente configurado (Task Scheduler/Startup)
-- [ ] PROGRESO.md + docs/server.md + docs/componentes.md actualizados
+- [ ] cloudflared.exe + ventana cmd eliminados (post-migración;
+      sigue vivo como respaldo — URL nueva `related-surge-...`)
+- [x] Autostart del agente: `launch_at_login` propio de la app +
+      tarea `REBA-Portwarp` (Task Scheduler) — agente arrancó solo
+- [~] Docs: PROGRESO.md (16-nov) + plan_tunel_fijo + firmware.md +
+      componentes.md + manual_uso.md actualizados; server.md pendiente
+      de la ruta definitiva
 - [ ] `retomar.bat`/`campo.bat` revisados: NO relanzan train_outdoor
       (v5 terminó — `--resume` reentrenaría solo)
 

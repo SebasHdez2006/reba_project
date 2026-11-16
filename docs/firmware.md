@@ -44,7 +44,7 @@ En Arduino IDE: abrir la carpeta `fotos_nc` (el `.ino` debe llevar el nombre de 
 | Clave | Rango | Default | Notas |
 |-------|-------|---------|-------|
 | `wifi_ssid` / `wifi_pass` | ssid 1-32, pass ≤63 | — | pass vacío = red abierta. Cambio remoto lleva backup y **revierte solo en 90 s** si no conecta |
-| `server_url` | `http://…` ≤96 chars | `http://192.168.137.1:5000` | Sin https. Acepta dominios/LAN (p.ej. `http://<IP-PC>:5000`). **No** acepta el túnel zrok (solo HTTPS). Backup y **revierte en 6 min** si no responde |
+| `server_url` | `http://…` ≤96 chars | `http://93togsum.free.tryportwarp.cc:16404` | Sin https. Default = túnel Portwarp de dirección fija (16-nov); también acepta LAN `http://<IP-PC>:5000`. **No** acepta el túnel zrok (solo HTTPS). Backup y **revierte en 6 min** si no responde |
 | `pump_photos` | 1-50 | 3 | Fotos por ciclo de bomba |
 | `pump_seconds` | 1-300 | 10 | Duración del ciclo |
 | `dist_min_cm` / `dist_max_cm` | 0-500, min<max | 0 / 23 | Rango ultrasónico de disparo |

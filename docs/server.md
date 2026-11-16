@@ -67,8 +67,11 @@ El lanzador real es `tools/zrok_tunnel.ps1` (lo invocan los `.bat`):
   (`/simulador_esp32.html`) usa los mismos endpoints, así que su polling
   también "enciende" el heartbeat. Un `EN LÍNEA` puede ser el simulador,
   no necesariamente la ESP32 física.
-- **La ESP32 NO usa el túnel**: zrok solo expone HTTPS y el firmware habla
-  HTTP plano → la ESP32 va por LAN/hotspot directo a `HOST:PORT`.
+- **La ESP32 NO usa el túnel zrok**: zrok solo expone HTTPS y el
+  firmware habla HTTP plano → la ESP32 va por LAN/hotspot directo a
+  `HOST:PORT`, o por el **túnel Portwarp** `http://93togsum.free.tryportwarp.cc:16404`
+  (HTTP plano, dirección fija — migración 16-nov, ver
+  `docs/plan_tunel_fijo.md`).
 - Sin auth → tratar la URL como secreta. Free tier: 5 GB/día.
 - *Interstitial page*: cuentas gratuitas sin verificar muestran un aviso
   anti-phishing ~1 vez/semana **solo a navegadores** (UA `Mozilla/*`); la
@@ -323,6 +326,6 @@ La retención (`CAPTURE_RETENTION`, default 2000) poda las capturas más viejas 
 | `400` en /upload | Body no es JPEG decodificable |
 | Dashboard sin WS | Abre por `localhost:5000` (no file://) |
 | Puerto ocupado | Cambia `PORT` en `.env` **y** `SERVIDOR_URL` en el firmware (reflasheo o config remota) |
-| ESP32 inalcanzable tras reiniciar PC | Verificar IP LAN / `server_url` del ESP32 (el túnel zrok no aplica: es solo HTTPS para el dashboard) |
+| ESP32 inalcanzable tras reiniciar PC | Verificar IP LAN / `server_url` del ESP32 (el túnel zrok no aplica: es solo HTTPS para el dashboard). Si es remota: revisar agente **Portwarp** (`93togsum.free.tryportwarp.cc:16404`, app Store — alerta "conexión inestable" = nodo HK + PC en WiFi) |
 | Dashboard no carga por la URL zrok | Comprobar que `REBA-Tunnel` corre y `logs/zrok_url.txt` tiene la URL; share efímero → URL nueva en cada arranque del túnel |
-| `device.online=false` con túnel activo | El ESP32 perdió el server_url viejo o no tiene datos/senal — el ESP32 va por LAN/hotspot, no por el túnel |
+| `device.online=false` con túnel activo | El ESP32 perdió el server_url viejo o no tiene datos/senal — el ESP32 va por LAN/hotspot, o por Portwarp si es remota (ver `docs/plan_tunel_fijo.md`) |
