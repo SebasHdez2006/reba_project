@@ -13,9 +13,11 @@ component "RebaAPI «FastAPI app — proceso uvicorn»" {
 
   ' ---- Partes: endpoints ----
   component "upload_photo()\n«POST /upload»" as partUpload
-  component "REST router /api/*\n«~15 GET + 4 POST»" as partREST
+  component "REST router /api/*\n«~19 GET · 5 POST · 1 DELETE»" as partREST
   component "device_config handlers\n«GET txt · admin GET/POST»" as partDevCfg
   component "pump_cmd service\n«/api/pump/run · /ack»" as partPump
+  component "device_status\n«POST/GET telemetría · /api/perf»" as partStatus
+  component "firmware_bin + reset\n«GET /firmware.bin (OTA) ·\nDELETE /api/captures»" as partFw
   component "export_yolo()\n«ZIP dataset»" as partExport
   component "websocket_endpoint()\n«/ws handshake + push»" as partWS
 
@@ -43,6 +45,8 @@ component "RebaAPI «FastAPI app — proceso uvicorn»" {
   pinHTTP --> partREST
   pinHTTP --> partDevCfg
   pinHTTP --> partPump
+  pinHTTP --> partStatus
+  pinHTTP --> partFw
   pinHTTP --> partExport
   pinHTTP --> partWS
 
@@ -55,6 +59,7 @@ component "RebaAPI «FastAPI app — proceso uvicorn»" {
   partPump --> partDevCfg : escribe pump_cmd
   partDevCfg --> partDev : touch
   partUpload --> partDev : touch (heartbeat)
+  partStatus --> partDev : heartbeat + telemetría
 
   partREST --> partPipe : lecturas (stats/captures/timeseries)
   partREST --> partBC : snapshot inicial
@@ -74,9 +79,10 @@ note bottom of partPipe
 end note
 
 note bottom of partDevCfg
-  device_config = tabla key/value con whitelist de 8 claves.
-  pump_cmd solo se sirve si <10 min (TTL anti bomba fantasma).
-  El firmware re-valida TODO al aplicar — el server confía pero no obedece.
+  device_config = tabla key/value con whitelist de 11 claves
+  (wifi_*, server_url(+_alt), pump_*, dist_*, pump_cmd, ota_url,
+  queue_clear). pump_cmd solo se sirve si <10 min (TTL anti
+  bomba fantasma). El firmware re-valida TODO al aplicar.
 end note
 
 @enduml

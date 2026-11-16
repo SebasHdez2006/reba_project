@@ -7,7 +7,7 @@ autonumber
 actor "Residuo/Objeto" as obj
 participant "HC-SR04" as sr
 participant "ESP32-CAM\n«fotos_nc»" as esp
-participant "WiFi LAN\n«TCP :5000»" as lan
+participant "Red\n«LAN :5000 · túnel :80»" as lan
 participant "RebaAPI\n«FastAPI /upload»" as api
 participant "process_upload" as pipe
 participant "InferenceEngine\n«ONNX CPU»" as eng
@@ -67,12 +67,24 @@ end
 
 == Fase 4 — Config remota (paralela, cada 60 s) ==
 esp -> api : GET /api/device/config\n«heartbeat + overrides + pump_cmd<10min»
-api --> esp : "wifi_*, server_url, pump_*,\ndist_*, pump_cmd=<ts>:<s>?"
+api --> esp : "wifi_*, server_url(+_alt), pump_*,\ndist_*, pump_cmd=<ts>:<s>?, ota_url?, queue_clear?"
 esp -> esp : aplicarClaveRemota()\n«validación estricta»
+esp -> api : POST /api/device/status\n«telemetría: uptime·heap·RSSI·cámara·cola·relé»
 opt "pump_cmd nuevo y válido"
   esp -> esp : bombaEncender() NO bloqueante\n+ dedup lastPumpCmdId (RTC)
   esp -> api : POST /api/device/ack {cmd_id}
   api -> db : DELETE override pump_cmd
+end
+opt "ota_url nueva (dedup ota_last)"
+  esp -> api : GET /firmware.bin «o URL explícita»
+  api --> esp : firmware .bin
+  esp -> esp : Update → partición inactiva\n→ reboot «pausa loop ~1–2 min»
+end
+opt "queue_clear nuevo (dedup RTC)"
+  esp -> esp : vacía cola RAM de fotos
+end
+alt "3 polls fallidos seguidos"
+  esp -> esp : conmutarSrv() → server_url_alt\n«persiste srv_act · re-sondeo c/5 min»
 end
 
 note right of esp

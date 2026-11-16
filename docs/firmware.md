@@ -174,7 +174,7 @@ Al boot siempre `bombaApagar()` (estado seguro). Distancias >450 cm o sin eco (`
 | `REINTENTO_ENVIO_MS` | 15 s | Reintento de upload fallido |
 | `POLL_CONFIG_MS` | 60 s | Descarga `GET /api/device/config` |
 | `WIFI_REVERT_MS` | 90 s | Reversa de credenciales WiFi nuevas que no conectan |
-| `SRV_REVERT_MS` | 6 min | Reversa de `server_url` nuevo que no responde |
+| `SRV_FAILOVER_UMBRAL` / `SRV_PROBE_MS` | 3 polls / 5 min | Failover `server_url`→`server_url_alt` y re-sondeo de la principal |
 | `PORTAL_RETRY_MS` | 30 s | Reapertura del AP si no hay WiFi |
 | `CAMARA_RETRY_MS` / `CAMARA_TEST_MS` | 30 s / 15 min | Re-init y health check de cámara |
 

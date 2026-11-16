@@ -4,7 +4,7 @@ title REBA — Diagrama de actividades (flujo E2E: detección → captura → up
 skinparam swimlaneStyle plain
 
 |ESP32-CAM «edge»|
-|Red Wi-Fi LAN|
+|Red «LAN :5000 / túnel :80»|
 |Servidor PC «FastAPI :5000»|
 |Dashboard «navegador»|
 start
@@ -34,10 +34,17 @@ if (sí) then
     :reintento cada 15 s\n«máx 25 intentos / 4xx → drop»;
   fork again
     :poll config c/60 s\n«GET /api/device/config»;
+    :reportarEstado() → POST /api/device/status\n«telemetría: heap·RSSI·cola·relé»;
+    if (¿ota_url nueva?) then (sí)
+      :OTA: GET /firmware.bin →\nflashea partición inactiva → reboot;
+    endif
+    if (¿3 polls fallidos?) then (sí)
+      :conmutarSrv() → server_url_alt\n«túnel Cloudflare»;
+    endif
   end fork
 endif
-|Red Wi-Fi LAN|
-:TCP :5000 «sin Internet»;
+|Red «LAN :5000 / túnel :80»|
+:TCP :5000 LAN directa\no :80 vía Cloudflare;
 |Servidor PC «FastAPI :5000»|
 :POST /upload recibe JPEG;
 if (¿magic bytes + tamaño + decode OK?) then (no)
@@ -54,9 +61,9 @@ endif
 :responde 200 {capture_id, detections,\ninference_ms, photos_toward_pump};
 |Dashboard «navegador»|
 :WS recibe capture + detections;
-:actualiza visor, donut, contadores,\nprogreso bomba, pill device.online;
+:actualiza visor, donut, contadores,\nprogreso bomba, pill device.online,\ntelemetría del circuito;
 if (¿orden pump_cmd pendiente?) then (sí)
-  :muestra pending_cmd en panel Bomba;
+  :muestra pending_cmd en panel Bomba\n«avisa si ESP32 offline / cmd expirado»;
 endif
 stop
 

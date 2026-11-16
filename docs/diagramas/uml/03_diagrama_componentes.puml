@@ -39,14 +39,22 @@ node "PC — Servidor (Python 3.13)" as pcNode {
 }
 
 ' ================== ARTEFACTOS ==================
-artifact "models/best.onnx\n«YOLOv8n v2»" as onnxFile
+artifact "models/best.onnx\n«YOLOv8n v5 época 30»" as onnxFile
+artifact "firmware/fotos_nc.bin\n«OTA + flash USB»" as fwBinFile
 database "data/REBA.db\n«5 tablas»" as dbFile
 folder "datasets/ + ai_pipeline/\n«entrenamiento offline»" as dsFolder
 file ".env / requirements.txt" as envFile
 
+' ================== ACCESO REMOTO ==================
+cloud "Cloudflare edge\n«túnel nombrado rebaserver.tech»" as cfEdge
+component [cloudflared\n«daemon PC → localhost:5000»] as cf
+cf --> api : proxy HTTP
+cfEdge --> cf : http2
+fw ..> cfEdge : «alt: http://rebaserver.tech :80»
+
 ' ================== INTERFACES ==================
-interface "«HTTP» POST /upload\nGET /api/device/config\nPOST /api/device/ack" as iHttp
-interface "«REST» /api/* (~20 endpoints)" as iRest
+interface "«HTTP» POST /upload\nGET /api/device/config\nPOST /api/device/ack\nPOST /api/device/status\nGET /firmware.bin (OTA)" as iHttp
+interface "«REST» /api/* (26 endpoints)" as iRest
 interface "«WS» /ws (capture·detections·pump_event)" as iWs
 interface "«predict(frame)»" as iPredict
 interface "«CRUD captures/detections/counters\npump_events/device_config»" as iCrud
@@ -70,6 +78,7 @@ api ..> iCfgTxt : provee «texto plano al ESP32»
 iCfgTxt ..> fw : consume en poll 60 s
 
 eng --> onnxFile : carga session
+api --> fwBinFile : GET /firmware.bin (OTA)
 dbComp --> dbFile : sqlite3
 cfg --> envFile : lee
 pipe ..> stat : «serve» (indirecto vía api)
@@ -78,6 +87,7 @@ node "Smartphone / PC — Navegador" as browser {
   component [Dashboard SPA\n«vanilla JS, sin build»] as dashUI
   dashUI --> stat : GET / (HTML/JS/CSS)
 }
+dashUI ..> cfEdge : «alt: https://rebaserver.tech»
 
 ' pipeline offline (no runtime)
 dsFolder ..> onnxFile : train_outdoor.py exporta
@@ -87,7 +97,9 @@ note bottom of dsFolder
 end note
 
 note right of api
-  Sin autenticación — red aislada REBA-AP (decisión documentada).
+  Sin autenticación — red aislada REBA-AP (decisión documentada);
+  el túnel Cloudflare es el acceso remoto opcional (HTTP :80 para
+  el ESP32, HTTPS :443 para el dashboard).
   Validación JPEG: magic bytes FF D8 FF + tamaño + decode OpenCV.
 end note
 

@@ -49,7 +49,8 @@ note right of esp
   deja de servir pump_cmd (TTL) → no hay
   "bomba fantasma". Si el ack se pierde,
   el TTL lo expira y el dedup RTC evita
-  re-ejecución.
+  re-ejecución. El dashboard filtra pending_cmd
+  expirados y avisa "ESP32 offline".
 end note
 
 @enduml

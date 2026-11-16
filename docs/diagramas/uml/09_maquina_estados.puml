@@ -53,6 +53,9 @@ note right of IntentandoEnvio
   - HTTP 4xx (servidor rechazó el contenido)
   - ≥25 intentos acumulados
   - cola llena → drop de la foto más vieja
+  Paralelo: 3 polls de config fallidos → conmutarSrv()
+  cambia server_url por server_url_alt (túnel) y la
+  re-sondea cada 5 min — sobrevive cortes de la LAN.
 end note
 
 note bottom of ProcesandoEnServer

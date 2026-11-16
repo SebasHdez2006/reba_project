@@ -45,7 +45,10 @@ loop "cada 15 s"
   esp -> api : reintento cola «si pendientes»
 end
 loop "cada 60 s"
-  esp -> api : GET /api/device/config\n«heartbeat + overrides»
+  esp -> api : GET /api/device/config\n«heartbeat + overrides»\n+ POST /api/device/status «telemetría»
+end
+loop "cada 5 min (solo si en URL alt)"
+  esp -> api : probe de server_url principal\n«vuelve a srvPri si responde»
 end
 loop "cada 30 s"
   dash -> api : GET /api/health\n«device.online <150 s»
@@ -68,14 +71,26 @@ opt "3 fotos acumuladas"
   end note
 end
 
+== Mantenimiento (eventos espaciados) ==
+opt "ota_url recibida / serie OTA"
+  esp -> api : GET /firmware.bin
+  api --> esp : .bin «descarga ~1–2 min,\nloop pausado»
+  esp -> esp : Update → reboot\n«backoff 10 min si falla»
+end
+opt "failover de server_url"
+  esp -> esp : 3 polls fallidos → conmutar a\nserver_url_alt «persiste en NVS»
+end
+
 == Tabla de periodos ==
 note right of api
   Resumen de tiempos:
   sensor 60 ms · debounce ~120 ms · flash 150 ms
   inferencia ~92 ms (p95 121 ms) · upload→200 ≈1 s total
-  reintento 15 s · config poll 60 s · device online <150 s
-  bomba auto 10 s · pump_cmd TTL 10 min · retención 1 h
-  WS ping 25 s · health poll 30 s · serie STATUS on-demand
+  reintento 15 s · config poll + telemetría 60 s
+  device online <150 s · bomba auto 10 s · pump_cmd TTL 10 min
+  retención 1 h · WS ping 25 s · health poll 30 s
+  failover 3 polls fallidos · probe URL principal 5 min
+  OTA ~1–2 min pausa · backoff OTA 10 min · serie STATUS on-demand
 end note
 
 @enduml

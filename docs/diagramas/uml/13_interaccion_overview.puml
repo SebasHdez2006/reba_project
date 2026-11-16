@@ -38,7 +38,8 @@ else (no)
 endif
 
 |Background|
-:Poll config c/60 s\n«overrides + reversión auto»;
+:Poll config c/60 s + telemetría\n«overrides + reversión auto ·\nPOST /api/device/status»;
+:OTA on-demand «ota_url» ·\nfailover server_url «3 fallos»;
 :Poda retención c/1 h\n«CAPTURE_RETENTION»;
 
 stop

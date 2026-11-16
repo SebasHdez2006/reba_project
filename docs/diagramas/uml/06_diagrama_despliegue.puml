@@ -6,8 +6,8 @@ skinparam nodeStyle rectangle
 
 ' ================== DISPOSITIVO EDGE ==================
 node "ESP32-CAM AI-Thinker\n«hardware + firmware»" as esp {
-  artifact "fotos_nc.ino → firmware\n«binario flasheado, sin endpoints»" as fwBin
-  artifact "NVS (Preferences)\n«wifi_ssid, wifi_pass, server_url,\npump_photos, pump_seconds, dist_min/max»" as nvsCfg
+  artifact "fotos_nc.ino → firmware\n«binario flasheado/OTA, sin endpoints»" as fwBin
+  artifact "NVS (Preferences)\n«wifi_ssid, wifi_pass, server_url(+_alt),\nsrv_act, pump_photos, pump_seconds,\ndist_min/max, ota_last»" as nvsCfg
   component "HC-SR04\n«TRIG=GPIO14 · ECHO=GPIO15÷1k/2k»" as hc
   component "OV2640 + flash GPIO4" as ov
   component "Relé GPIO13 (activo-bajo, NC)\n→ bomba 12V" as relay
@@ -32,22 +32,33 @@ node "Cadena de potencia\n«independiente del software»" as pwr {
 }
 
 ' ================== RED ==================
-cloud "Red Wi-Fi 2.4 GHz LAN\n«sin Internet — REBA-AP hotspot\no router local»" as lan
+cloud "Red Wi-Fi 2.4 GHz LAN\n«REBA-AP hotspot o router local\n(sin Internet en campo)»" as lan
+
+cloud "Cloudflare edge\n«túnel nombrado rebaserver.tech»" as cfEdge {
+  artifact "http://rebaserver.tech :80\n«ESP32 — HTTP plano»" as cfHttp
+  artifact "https://rebaserver.tech :443\n«dashboard remoto TLS»" as cfHttps
+}
 
 ' ================== PC ==================
 node "PC — servidor + dashboard" as pc {
   node "SO Windows" {
     artifact "uvicorn server.main:app\n«proceso Python :5000»" as uvicorn
+    artifact "cloudflared.exe\n«túnel → localhost:5000,\nautostart Startup/*.vbs»" as cfDaemon
     artifact "server/*.py + .venv\n«fastapi, onnxruntime, opencv, numpy,\npydantic-settings, sqlite3»" as pyDeps
-    artifact "models/best.onnx\n«YOLOv8n outdoor v2»" as onnxFile
+    artifact "models/best.onnx\n«YOLOv8n v5 época 30»" as onnxFile
     artifact "data/REBA.db\n«SQLite WAL — 5 tablas»" as sqliteFile
-    artifact "static/\n«index.html app.js styles.css fonts/»" as staticDir
+    artifact "static/\n«index.html app.js styles.css\nsimulador_esp32.html fonts/»" as staticDir
+    artifact "firmware/fotos_nc.bin\n«OTA — GET /firmware.bin»" as fwBinArt
     uvicorn --> pyDeps
     uvicorn --> onnxFile
     uvicorn --> sqliteFile
     uvicorn --> staticDir
+    uvicorn --> fwBinArt
+    cfDaemon --> uvicorn : proxy :5000
   }
   artifact ".env\n«HOST, PORT, MODEL_PATH,\nINFERENCE_*, CLASS_NAMES,\nCAPTURE_RETENTION»" as dotenv
+  artifact "tools/cloudflared_config.yml\n«tunnel id + ingress»" as cfCfg
+  cfDaemon --> cfCfg
 }
 
 ' ================== CLIENTES ==================
@@ -58,19 +69,28 @@ node "Navegador — dashboard" as clients {
   node "Navegador en la PC" as pcBrowser {
     artifact "http://localhost:5000" as pcUI
   }
+  node "Celular/PC remoto\n«cualquier red con Internet»" as remote {
+    artifact "https://rebaserver.tech\n«mismo dashboard por el túnel»" as remoteUI
+  }
 }
 
 ' ================== COMUNICACIONES ==================
-esp --> lan : "WiFi STA\nHTTP POST /upload (JPEG)\nGET /api/device/config c/60s\nPOST /api/device/ack"
+esp --> lan : "WiFi STA\nHTTP POST /upload (JPEG)\nGET /api/device/config c/60s\nPOST /api/device/ack + /status"
+esp ..> cfHttp : "«alt: server_url_alt»\nmismo tráfico HTTP por el túnel"
 lan --> pc : "TCP :5000\nHTTP + WebSocket /ws"
+cfEdge --> pc : "cloudflared http2\n→ localhost:5000"
 pc --> lan : "sirve static/ + REST + WS"
 lan --> phone : "HTTP :5000"
 lan --> pcBrowser : "HTTP :5000"
+cfHttps --> remote : "HTTPS dashboard"
 
 note bottom of lan
-  Todo el tráfico es LAN — el sistema opera SIN Internet.
+  Camino primario LAN — el sistema opera SIN Internet.
+  El túnel Cloudflare es el acceso remoto opcional: el ESP32
+  conmuta solo a server_url_alt tras 3 polls fallidos
+  (re-sondeo de la principal cada 5 min).
   Firewall Windows debe permitir TCP 5000 entrante.
-  Sin autenticación: mitigado por red aislada REBA-AP.
+  Respaldo dashboard: zrok https://reba-cam.shares.zrok.io.
 end note
 
 note bottom of esp

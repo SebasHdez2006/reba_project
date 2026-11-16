@@ -84,11 +84,14 @@ package "server/ — Python 3.13 · FastAPI" {
   class "RebaAPI «module main.py»\nFastAPI app + endpoints" {
     + {static} POST /upload : upload_photo()
     + {static} GET /api/health|config|stats|pump-status|pump-events
-    + {static} GET /api/stats/timeseries · /api/export/yolo
+    + {static} GET /api/stats/timeseries · /api/perf · /api/export/yolo
     + {static} GET /api/captures[...] · /api/detections[...]
+    + {static} DELETE /api/captures?scope= «reset datos»
     + {static} GET/POST /api/admin/device-config
     + {static} GET /api/device/config → text/plain
     + {static} POST /api/device/ack · /api/pump/run
+    + {static} POST/GET /api/device/status «telemetría»
+    + {static} GET /firmware.bin «OTA»
     + {static} WS /ws : websocket_endpoint()
     + {static} lifespan(app) — arranque + retention_loop
     - process_upload(body, evento) : dict
@@ -124,11 +127,14 @@ package "esp32_firmware/fotos_nc/ — C++ Arduino · ESP32-CAM" {
     - cargarConfig() / guardarClave(k,v)  // NVS
     - aplicarClaveRemota(k,v) : bool      // validación estricta
     - aplicarConfigRemota(body) / consultarConfigRemota()
+    - conmutarSrv()           // failover srvPri↔srvAlt (3 fallos, probe 5 min)
+    - reportarEstado()        // POST /api/device/status tras cada poll
+    - otaDescargarYFlashear() / aplicarOtaPendiente()  // ota_url → Update → reboot
     - iniciarPortal() / revisarPortal()   // WiFiManager REBA-Setup
     - iniciarCamara() / asegurarWiFi()
-    - ejecutarComandoSerial(cmd) / procesarSerial() / STATUS
+    - ejecutarComandoSerial(cmd) / procesarSerial() / STATUS / SET / OTA
     - parseHttpUrl(url,...) : bool
-    - revisarReversionSrv() / aplicarWifiRemoto()
+    - aplicarWifiRemoto()   // reversa creds WiFi a los 90 s
   }
 }
 
@@ -140,14 +146,17 @@ package "static/ — Dashboard vanilla JS" {
     + drawDonut(stats) / drawActivityChart()
     + renderGallery() / openLightbox(id) / fetchCaptureDetections(id)
     + updateCaptureBadge(capture)
-    + pump manual: chips 5/10/20/30s + "Activar ahora"
+    + pump manual: chips 5/10/20/30s + "Activar ahora" + aviso ESP32 offline
+    + telemetría circuito → GET /api/device/status · perf → /api/perf
+    + reset datos → DELETE /api/captures?scope=
+    + tema claro/oscuro → localStorage + prefers-color-scheme
     + device config form → POST /api/admin/device-config
     + export YOLO → GET /api/export/yolo
   }
 }
 
 ' --- Relaciones entre paquetes (contratos) ---
-fotos_nc "fotos_nc «sketch»" ..> "RebaAPI «module main.py»" : HTTP/WiFi\nPOST /upload · GET config · POST ack
+fotos_nc "fotos_nc «sketch»" ..> "RebaAPI «module main.py»" : HTTP/WiFi\nPOST /upload · GET config · POST ack\nPOST /api/device/status · GET /firmware.bin (OTA)
 "app.js «módulo»" ..> "RebaAPI «module main.py»" : REST /api/* + WS /ws
 
 note bottom of "InferenceEngine"
@@ -164,7 +173,8 @@ end note
 note bottom of fotos_nc
   Cliente puro: no expone endpoints.
   Cola RAM MAX_COLA=6 · reintento 15 s · anti poison-pill (4xx/≥25).
-  Config 100% en NVS — WiFi, server_url, bomba, distancias sin reflashear.
+  Config 100% en NVS — WiFi, server_url(+_alt failover), bomba,
+  distancias, ota_url sin reflashear. OTA por HTTP plano (Update).
 end note
 
 @enduml

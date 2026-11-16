@@ -7,10 +7,13 @@ skinparam classAttributeIconSize 0
 object "esp32 : fotos_nc «sketch»" {
   wifi_ssid = "REBA-AP"
   server_url = "http://192.168.137.1:5000"
+  server_url_alt = "http://rebaserver.tech"
+  srv_activa = 0   // 0=principal · 1=alternativa
   dist_min_cm = 0.0
   dist_max_cm = 23.0
   pump_photos = 3
   pump_seconds = 10
+  ota_last = "<url .bin ya aplicada>"
 }
 object "sensor : HC-SR04" {
   trig_gpio = 14
@@ -29,7 +32,7 @@ object "bomba : BombaRelé «NC»" {
 }
 object "nvs : Preferences «NVS»" {
   namespace = "reba"
-  llaves = "wifi, srv, pump_*, dist_*"
+  llaves = "wifi, srv, srv_alt, srv_act,\npump_*, dist_*, ota_last"
 }
 
 esp32 --> sensor : leerCm() c/60 ms
@@ -62,7 +65,7 @@ object "sqlite : REBA.db «archivo»" {
   detections = "N filas"
   counters / pump_events / device_config
 }
-object "onnxModel : best.onnx «YOLOv8n v2»" {
+object "onnxModel : best.onnx «YOLOv8n v5 ép.30»" {
   imgsz = 640
   opset = 12
   clases = "plastico,unicel,metal"
@@ -97,7 +100,15 @@ object "pumpEv : pump_event" {
 }
 object "devCfg : device_config «key/value»" {
   pump_cmd = "<ts>:5 → borrado tras ack"
+  ota_url = "http://…/firmware.bin «opcional»"
 }
+object "status : device_status «telemetría»" {
+  rssi = "-62 dBm"
+  heap = "~180 KB"
+  cola_n = 1
+  rele_pin = "NC energizado (bomba OFF)"
+}
+server --> status : POST /api/device/status «tras cada poll»
 
 cap10 *-- det1
 cap10 *-- det2

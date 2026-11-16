@@ -17,35 +17,47 @@ package "REBA/ — raíz del proyecto" {
   package "static/ «frontend dashboard»" {
     package "index.html" as pHtml
     package "app.js" as pApp
-    package "styles.css" as pCss
+    package "styles.css «tema claro/oscuro»" as pCss
     package "fonts/ woff2" as pFonts
     package "favicon.svg" as pFav
+    package "simulador_esp32.html\n«emulador nodo en celular»" as pSim
   }
 
   package "esp32_firmware/" {
     package "fotos_nc/fotos_nc.ino" as pFw
   }
 
+  package "firmware/ «binarios compilados»" {
+    package "fotos_nc.bin «OTA»" as pFwBin
+    package "bootloader/partitions/merged" as pFwParts
+  }
+
+  package "tools/ «túneles y ops»" {
+    package "cloudflared_config.yml\nrun_cloudflared.bat + hidden.vbs" as pCf
+    package "zrok_tunnel.ps1 «respaldo»" as pZrok
+    package "vps_setup.sh / vps_tunnel.* «reserva»" as pVps
+  }
+
   package "ai_pipeline/ «entrenamiento offline»" {
-    package "train_outdoor.py" as pTrain
+    package "train_outdoor.py + train_monitor.py" as pTrain
     package "outdoor_transforms.py" as pAug
-    package "generate_synthetic_dataset.py" as pSynth
-    package "download_taco.py / download_ecosort.py" as pDl
+    package "generate_synthetic_dataset.py / generate_copypaste_dataset.py" as pSynth
+    package "download_taco.py / download_ecosort.py / download_floatwaste.py" as pDl
     package "dataset_builder.py (bootstrap)" as pBuild
     package "evaluate_outdoor.py / eval_upload_path.py / tune_confidence.py" as pEval
-    package "build_outdoor_eval.py" as pEvalSet
+    package "build_outdoor_eval.py / balance_oversample.py" as pEvalSet
   }
 
   package "models/" {
-    package "best.onnx / best.pt" as pModel
+    package "best.onnx / best.pt «v5 ép.30»" as pModel
     package "archive/" as pArchive
   }
 
   package "datasets/" {
-    package "REBA_synthetic(+boost,boost2)" as pSyn
-    package "REBA_taco" as pTaco
-    package "REBA_ecosort" as pEco
-    package "REBA_outdoor_eval" as pOutEval
+    package "REBA_outdoor «train v5»" as pOut
+    package "REBA_synthetic(+boost,boost2) + copypaste" as pSyn
+    package "REBA_taco · REBA_ecosort · REBA_floatwaste" as pTaco
+    package "REBA_outdoor_eval · REBA_real_val" as pOutEval
   }
 
   package "data/" {
@@ -53,12 +65,12 @@ package "REBA/ — raíz del proyecto" {
   }
 
   package "docs/ «documentación»" {
-    package "manuales ×3 + referencia ×6" as pDocs
+    package "manuales ×3 + referencia ×10" as pDocs
     package "diagramas/ «este pitch»" as pDiagrams
   }
 
   package "runs/ «runs YOLO»" {
-    package "detect/REBA_outdoor_v2/weights" as pRuns
+    package "detect/REBA_outdoor_v5/weights" as pRuns
   }
 }
 
@@ -79,22 +91,26 @@ pApp --> pFav : <link icon>
 
 ' --- Dependencias del pipeline IA ---
 pTrain --> pAug : augmentations outdoor
+pTrain --> pOut : dataset combinado v5
 pTrain --> pSyn : dataset sintético
-pTrain --> pTaco : dataset real TACO
-pTrain --> pEco : dataset real EcoSort
+pTrain --> pTaco : fuentes reales TACO/EcoSort/FloatWaste
 pTrain --> pModel : exporta best.onnx
 pTrain --> pArchive : archiva pesos previos
 pDl --> pTaco : descarga→YOLO
-pDl --> pEco : descarga→YOLO
 pSynth --> pSyn : genera escenas
-pEval --> pOutEval : eval degradado
+pEval --> pOutEval : eval degradado + real_val
 pEval --> pModel : compara pesos
 pEvalSet --> pOutEval : construye
+pEvalSet --> pOut : oversample clases raras
 pBuild --> pSyn : bootstrap (opcional)
 
 ' --- Dependencias edge / runtime ---
-pFw ..> pMain : cliente HTTP «POST /upload · GET config · POST ack»
+pFw ..> pMain : cliente HTTP «POST /upload · GET config · POST ack\n· POST /api/device/status · GET /firmware.bin (OTA)»
+pFw ..> pFwBin : «OTA lo descarga y reflashea»
 pFw ..> pSqlite : «indirecto vía server»
+pMain --> pFwBin : «GET /firmware.bin sirve firmware/»
+pSim ..> pMain : «POST /upload igual que la placa»
+pCf ..> pMain : «túnel nombrado → localhost:5000»
 pApp ..> pMain : «runtime: REST + WS /ws»
 pDocs --> pDiagrams : resume en diagramas
 
@@ -105,8 +121,9 @@ end note
 
 note bottom of pTrain
   train_outdoor.py auto-descubre fuentes:
-  OPTIONAL_TRAIN_SOURCES = synthetic, boost*, taco, ecosort.
-  Train v2 = 1022 imágenes → best.pt → export ONNX.
+  OPTIONAL_TRAIN_SOURCES = synthetic, boost*, taco, ecosort,
+  floatwaste, copypaste. v5 = 3 clases, cortado en época 30
+  → best.pt → export ONNX opset 12.
 end note
 
 @enduml

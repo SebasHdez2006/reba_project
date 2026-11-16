@@ -28,11 +28,12 @@ skinparam node {
 ' ============================================================
 ' CAPA DE PRESENTACIÓN — navegador en la LAN (sin build, offline)
 ' ============================================================
-rectangle "CAPA DE PRESENTACIÓN\nDashboard web — HTML5 + CSS3 + JS vanilla (sin framework, sin build)\nSe sirve desde el propio FastAPI: http://<PC>:5000" <<layer>> as L1 {
+rectangle "CAPA DE PRESENTACIÓN\nDashboard web — HTML5 + CSS3 + JS vanilla (sin framework, sin build)\nSe sirve desde el propio FastAPI: http://<PC>:5000 · https://rebaserver.tech" <<layer>> as L1 {
   component "static/index.html\n3 vistas: En vivo / Analítica / Dispositivo" as html
-  component "static/app.js\nCliente WS /ws, fetch REST, Canvas 2D (donut + barras),\ngalería paginada + lightbox, bomba manual, config remota" as appjs
-  component "static/styles.css + fonts/\nDesign system oscuro, Space Grotesk + JetBrains Mono woff2" as css
-  database "Navegador (PC o celular en LAN)" as browser
+  component "static/app.js\nCliente WS /ws, fetch REST, Canvas 2D (donut + barras),\ngalería paginada + lightbox, bomba manual, config remota,\ntelemetría del circuito, métricas /api/perf, reset de datos" as appjs
+  component "static/styles.css + fonts/\nTema claro/oscuro (toggle, localStorage),\nSpace Grotesk + JetBrains Mono woff2" as css
+  component "static/simulador_esp32.html\nEmulador del nodo en el navegador\n(cámara del celular → POST /upload)" as sim
+  database "Navegador (PC o celular, LAN o Internet)" as browser
   html --> appjs
   html --> css
   appjs --> browser : renderiza
@@ -42,17 +43,21 @@ rectangle "CAPA DE PRESENTACIÓN\nDashboard web — HTML5 + CSS3 + JS vanilla (s
 ' CAPA DE APLICACIÓN — PC, Python 3.10+, FastAPI + Uvicorn :5000
 ' ============================================================
 rectangle "CAPA DE APLICACIÓN — Servidor PC (Python 3.13, FastAPI ≥0.115, Uvicorn ASGI, 0.0.0.0:5000)" <<layer>> as L2 {
-  component "server/main.py — API REST (~20 endpoints) + WebSocket /ws\n+ hosting de static/ + validación JPEG (magic bytes FF D8 FF, <2MB)" as main
+  component "server/main.py — API REST (26 endpoints) + WebSocket /ws\n+ hosting de static/ + validación JPEG (magic bytes FF D8 FF, <2MB)" as main
   component "server/config.py — Settings (Pydantic Settings, .env tipado)" as config
   component "process_upload() — pipeline por foto:\ndecode OpenCV → inferencia → dibuja cajas →\npersiste doble JPEG → broadcast WS" as proc
-  component "Canal device_config (server→ESP32)\nGET /api/device/config (texto clave=valor, cada 60 s)\nPOST /api/admin/device-config (whitelist 8 claves)" as devcfg
+  component "Canal device_config (server→ESP32)\nGET /api/device/config (texto clave=valor, cada 60 s)\nPOST /api/admin/device-config (whitelist 11 claves)" as devcfg
   component "pump_cmd — comando bomba manual\n<formato <unix_ts>:<s>, TTL 10 min,\ndedup en ESP32, ack por /api/device/ack" as pumpcmd
+  component "Telemetría — POST/GET /api/device/status\nuptime·heap·RSSI·cámara·cola·relé (~cada 60 s)\nGET /api/perf — métricas de desempeño" as telem
+  component "OTA — GET /firmware.bin\nsirve firmware/fotos_nc.bin al ESP32\nDELETE /api/captures — reset álbum/datos" as ota
   component "_retention_loop — poda horaria\nCAPTURE_RETENTION=2000 (ON DELETE CASCADE)" as retention
   component "heartbeat device_state\nonline = último contacto <150 s" as heartbeat
 
   main --> proc
   main --> devcfg
   main --> pumpcmd
+  main --> telem
+  main --> ota
   main --> retention
   main --> heartbeat
   main --> config
@@ -76,16 +81,20 @@ rectangle "CAPA DE DOMINIO / SERVICIOS" <<layer>> as L3 {
 ' ============================================================
 ' CAPA DE INFRAESTRUCTURA / DATOS (todo local, offline)
 ' ============================================================
-rectangle "CAPA DE INFRAESTRUCTURA / DATOS — 100% local, sin Internet" <<layer>> as L4 {
+rectangle "CAPA DE INFRAESTRUCTURA / DATOS — local + túnel opcional" <<layer>> as L4 {
   database "data/REBA.db — SQLite\ncaptures(image_jpeg anotado + image_orig_jpeg crudo)\ndetections · counters · pump_events · device_config" as sqlite
-  database "models/best.onnx — YOLOv8n outdoor v2\n(~6.5 MB, export opset12 simplify)" as onnx
+  database "models/best.onnx — YOLOv8n v5 época 30\n(3 clases: plastico/unicel/metal, opset 12)" as onnx
   folder "models/archive/ — pesos históricos p/ baseline" as archive
-  folder "datasets/ — REBA_synthetic(+boost/boost2) 660\nREBA_taco ~1293 · REBA_ecosort 800\nREBA_outdoor_eval 120 degradadas" as datasets
+  folder "datasets/ — REBA_outdoor (train v5)\nsynthetic+boosts · taco · ecosort · floatwaste\ncopypaste · real_val · outdoor_eval 120 degradadas" as datasets
+  folder "firmware/ — fotos_nc.bin y artefactos\nde build Arduino (OTA + flash USB)" as fwdir
+  component "cloudflared — túnel nombrado Cloudflare\nrebaserver.tech → localhost:5000\n(HTTP :80 para ESP32 · HTTPS dashboard remoto)\nautostart Startup/ + campo.bat/retomar.bat\nrespaldo: zrok https://reba-cam.shares.zrok.io" as tunnel
   component "requirements.txt\nfastapi, uvicorn[standard], onnxruntime, opencv-python-headless,\nnumpy, pydantic-settings, httpx" as deps
 
   db --> sqlite
   inference --> onnx
   inference ..> archive : baseline eval
+  ota --> fwdir : sirve .bin
+  tunnel --> main : proxy → :5000
 }
 
 ' ============================================================
@@ -106,24 +115,30 @@ node "NODO EDGE — ESP32-CAM AI-Thinker (C++ Arduino, core esp32 3.3.x)\nfotos_
   component "Percepción: HC-SR04 (TRIG=14, ECHO=15÷1k/2k)\nleerCm() c/60 ms, debounce 2-in/3-out, rango 0–23 cm" as sensor
   component "Captura: OV2640 → JPEG QVGA en DRAM\ntomarFoto(): flash GPIO4 150 ms → fb_get → magic JPEG" as cam
   component "Cola RAM MAX_COLA=6 (descarta más vieja)\nanti poison-pill: 4xx o ≥25 intentos → drop\nreintento c/15 s" as cola
-  component "httpSimple() — TCP plano WiFiClient (sin mbedTLS, −122 KB)\nPOST /upload · GET /api/device/config c/60 s\nPOST /api/device/ack" as httpcli
-  component "Bomba: cada pump_photos(3) → rele GPIO13 10 s\nrelé NC activo-bajo · pump_cmd manual no-bloqueante" as bomba
+  component "httpSimple() — TCP plano WiFiClient (sin mbedTLS, −122 KB)\nPOST /upload · GET /api/device/config c/60 s\nPOST /api/device/ack · POST /api/device/status (telemetría)\nGET /firmware.bin (OTA)" as httpcli
+  component "Failover server_url — srvPri/srvAlt (NVS)\n3 polls fallidos → conmutarSrv() a la alternativa\nre-sondeo de la principal c/5 min · persiste srv_act" as failover
+  component "OTA — ota_url remota o serie «OTA»\nUpdate→partición inactiva → reboot · dedup ota_last\nbackoff 10 min tras fallo (pausa loop ~1–2 min)" as fwota
+  component "Bomba: cada pump_photos(3) → rele GPIO13 10 s\nrelé NC activo-bajo · pump_cmd manual no-bloqueante\nqueue_clear remoto: vacía la cola una vez (dedup RTC)" as bomba
   component "Config NVS (Preferences) + WiFiManager portal REBA-Setup\nSET serie · validación estricta + reversión auto" as nvs
   component "Robustez: millis() wrap-safe, bootCount RTC,\nhealth check cámara, clamps NVS, STATUS" as robust
+  httpcli --> failover : conmuta tras 3 fallos
+  fwota --> httpcli : descarga .bin
 }
 
 ' ============================================================
 ' FLUJOS PRINCIPALES
 ' ============================================================
-esp --> L2 : "1. POST /upload (JPEG+X-Evento)\nreintento c/15 s · heartbeat" 
-L2 --> esp : "2. GET /api/device/config c/60 s (overrides+\npump_cmd<10min) → POST /api/device/ack"
+esp --> L2 : "1. POST /upload (JPEG+X-Evento)\nreintento c/15 s · heartbeat\nLAN :5000 o túnel :80" 
+L2 --> esp : "2. GET /api/device/config c/60 s (overrides+\npump_cmd<10min·ota_url·queue_clear) → ack +\nPOST /api/device/status (telemetría)"
 L2 --> L1 : "3. WebSocket /ws: capture·detections·pump_event\nREST /api/* snapshot"
 L1 --> L2 : "4. fetch REST + WS ping 25 s"
 L5 ..> L4 : "entrena/exporta (offline, manual)"
 esp --> esp : "5. sensor→foto→cola→upload→bomba (loop autónomo)"
 
 note right of L2
-  Todo el tráfico es LAN 2.4 GHz — sin Internet.
+  Dos caminos al server: LAN directa :5000 (sin Internet)
+  o túnel Cloudflare rebaserver.tech :80/:443 (con Internet).
+  El ESP32 conmuta solo entre server_url / server_url_alt.
   Sin autenticación por decisión (red aislada REBA-AP).
 end note
 

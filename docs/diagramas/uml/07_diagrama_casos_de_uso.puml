@@ -19,6 +19,9 @@ rectangle "Sistema REBA" {
   usecase "UC-05 Exportar dataset YOLO\n«ZIP images+labels+data.yaml»" as uc05
   usecase "UC-06 Ver historial bomba\n«pump_events + pending_cmd»" as uc06
   usecase "UC-07 Consultar salud sistema\n«device.online, inference, contadores»" as uc07
+  usecase "UC-08 Ver telemetría/perf\n«circuito + /api/perf»" as uc08
+  usecase "UC-09 Reset de datos\n«DELETE /api/captures?scope=»" as uc09
+  usecase "UC-19 Cambiar tema\n«claro/oscuro, localStorage»" as uc19
 
   ' ---- Actor: ESP32 (sistema) ----
   usecase "UC-10 Detectar objeto\n«HC-SR04 0-23 cm, debounce 2/3»" as uc10
@@ -27,6 +30,9 @@ rectangle "Sistema REBA" {
   usecase "UC-13 Descargar config remota\n«GET /api/device/config c/60s»" as uc13
   usecase "UC-14 Ejecutar bomba\n«auto: N fotos · manual: pump_cmd»" as uc14
   usecase "UC-15 Confirmar comando\n«POST /api/device/ack»" as uc15
+  usecase "UC-16 Reportar telemetría\n«POST /api/device/status»" as uc16
+  usecase "UC-17 Auto-actualizar OTA\n«ota_url → /firmware.bin → reboot»" as uc17
+  usecase "UC-18 Conmutar servidor\n«failover srv_pri↔srv_alt»" as uc18
 
   ' ---- Actor: Ingeniero IA ----
   usecase "UC-20 Generar/curar datasets\n«sintético, TACO, EcoSort»" as uc20
@@ -41,6 +47,9 @@ rectangle "Sistema REBA" {
   op --> uc05
   op --> uc06
   op --> uc07
+  op --> uc08
+  op --> uc09
+  op --> uc19
 
   ' ---- Relaciones ESP32 ----
   esp --> uc10
@@ -50,6 +59,9 @@ rectangle "Sistema REBA" {
   uc12 ..> uc14 : <<include>> «cada pump_photos fotos'
   uc14 ..> uc15 : <<include>> «tras pump_cmd manual'
   esp --> uc15
+  uc13 ..> uc16 : <<include>> «tras poll OK»
+  uc13 ..> uc17 : <<extend>> «si llega ota_url»
+  uc13 ..> uc18 : <<extend>> «si 3 polls fallan»
 
   ' ---- Relaciones técnico ----
   tech --> uc03 : «alta privilegio: mismas vías»
@@ -62,7 +74,7 @@ rectangle "Sistema REBA" {
   uc22 ..> uc05 : <<extend>> «export YOLO = dataset real»
 
   ' ---- Internas del sistema (no actor) ----
-  usecase "UC-30 Clasificar foto\n«ONNX YOLOv8 → 5 clases»" as uc30
+  usecase "UC-30 Clasificar foto\n«ONNX YOLOv8 → 3 clases»" as uc30
   usecase "UC-31 Persistir evidencia\n«doble JPEG + detections»" as uc31
   usecase "UC-32 Notificar dashboard\n«WS capture/detections»" as uc32
   usecase "UC-33 Poda retención\n«CAPTURE_RETENTION horaria»" as uc33
@@ -82,6 +94,7 @@ note bottom of uc13
   Tres vías de configuración sin reflashear:
   dashboard → admin/device-config · portal REBA-Setup · serie SET.
   Cambios WiFi/URL llevan backup + reversión automática.
+  server_url_alt = túnel Cloudflare (failover automático).
 end note
 
 @enduml

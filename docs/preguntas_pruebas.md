@@ -15,14 +15,14 @@ de prueba física · `[📄]` solo documental
 
 | # | Pregunta | Comportamiento esperado | Prueba | Res. |
 |---|----------|-------------------------|--------|------|
-| 1 | ¿Qué es REBA? `[📄]` | Plataforma flotante: detecta objetos (ultrasónico 0–23 cm), foto+flash, sube a PC, clasifica YOLOv8/ONNX, bomba cada N fotos; todo en LAN sin Internet | Revisar README/docs | ☐ |
+| 1 | ¿Qué es REBA? `[📄]` | Plataforma flotante: detecta objetos (ultrasónico 0–23 cm), foto+flash, sube a PC, clasifica YOLOv8/ONNX, bomba cada N fotos; LAN sin Internet + acceso remoto opcional por túnel `rebaserver.tech` | Revisar README/docs | ☐ |
 | 2 | ¿Cuáles son los 3 componentes? `[✔]` | ESP32-CAM (sensor/foto/cola/upload), PC FastAPI (inferencia/SQLite/WS/config), relé+bomba 12V (actuador) | `curl localhost:5000/api/health` | ☐ |
 | 3 | ¿Por qué el ESP32 no expone endpoints? `[✔]` | Es cliente push: solo `POST /upload`; menos superficie de ataque y complejidad | `curl http://<IP-ESP32>/` debe fallar | ☐ |
-| 4 | ¿Funciona sin Internet? `[✔]` | ONNX local, SQLite local, dashboard servido por la PC; red solo se usó en bootstrap de datasets | Desconectar WAN y operar | ☐ |
+| 4 | ¿Funciona sin Internet? `[✔]` | ONNX local, SQLite local, dashboard servido por la PC; el túnel Cloudflare es solo acceso remoto — sin WAN sigue todo igual | Desconectar WAN y operar | ☐ |
 | 5 | ¿PC apagada o Wi-Fi caído? `[✔]` | Fotos en cola RAM (máx. 6), reintento cada 15 s; si llena, descarta la más vieja | Apagar server, hacer `CAPTURE`, revisar `STATUS` | ☐ |
 | 6 | ¿Qué sobrevive a un reboot del ESP32? `[✔]` | NVS (config), `bootCount`/`lastPumpCmdId` (RTC), backups; se pierde cola y contador de bomba | `REBOOT` por serie → `GET` | ☐ |
 | 7 | ¿Dónde está la verdad del conteo de bomba? `[📄]` | En el firmware (`fotosTomadas`); el server solo infiere por uploads → puede desincronizarse con cola offline | Comparar `STATUS` vs dashboard | ☐ |
-| 8 | ¿Canales ESP32↔PC? `[✔]` | HTTP plano TCP: `GET /api/device/config` (60 s), `POST /upload`, `POST /api/device/ack` | Serial + `server.log` | ☐ |
+| 8 | ¿Canales ESP32↔PC? `[✔]` | HTTP plano TCP: `GET /api/device/config` (60 s), `POST /upload`, `POST /api/device/ack`, `POST /api/device/status` (telemetría), `GET /firmware.bin` (OTA) | Serial + `server.log` | ☐ |
 
 ## 2. Alimentación y potencia
 
