@@ -50,6 +50,7 @@ En Arduino IDE: abrir la carpeta `fotos_nc` (el `.ino` debe llevar el nombre de 
 | `pump_seconds` | 1-300 | 10 | Duración del ciclo |
 | `dist_min_cm` / `dist_max_cm` | 0-500, min<max | 0 / 23 | Rango ultrasónico de disparo |
 | `pump_cmd` | `<unix_ts>:<s>` | — | **Solo servidor→ESP32**: comando de bomba manual de un solo uso (ver abajo) |
+| `capture_cmd` | `<unix_ts>` | — | **Solo servidor→ESP32**: foto remota de un solo uso (botón "Tomar foto ahora" → `POST /api/capture/run`); dedup RTC + ack |
 | `ota_url` | `http://…` ≤128 | — | **Solo servidor→ESP32**: URL de un `.bin` para auto-actualización OTA (ver abajo). Dedup por NVS `ota_last` |
 
 Validación estricta en `aplicarClaveRemota()`: numéricos con `esEntero`/`esFloat` (rechaza `"3abc"`, `"abc"`, fuera de rango), `server_url` solo `http://` con host, longitudes WiFi. El comando serie `SET` reporta `aplicado`/`rechazada` real.

@@ -473,10 +473,11 @@ async def device_config(request: Request):
     """
     _touch_device(request)
     cfg = db.get_device_config()
-    cmd = cfg.get("pump_cmd")
-    if cmd is not None and not _pump_cmd_fresh(cmd):
-        db.delete_device_config("pump_cmd")   # expirado: no entregarlo
-        cfg.pop("pump_cmd", None)
+    for key in ("pump_cmd", "capture_cmd"):
+        cmd = cfg.get(key)
+        if cmd is not None and not _pump_cmd_fresh(cmd):
+            db.delete_device_config(key)      # expirado: no entregarlo
+            cfg.pop(key, None)
     return "\n".join(f"{k}={v}" for k, v in sorted(cfg.items())) + "\n"
 
 
@@ -527,10 +528,17 @@ async def device_ack(payload: Dict[str, Any]):
     except (TypeError, ValueError):
         raise HTTPException(400, "cmd_id inválido")
     cfg = db.get_device_config()
+    cleared = False
     pending = cfg.get("pump_cmd", "")
     if pending.startswith(f"{cmd_id}:"):
         db.delete_device_config("pump_cmd")
-        logger.info("pump_cmd %s confirmado por el dispositivo", cmd_id)
+        cleared = True
+    pending_cap = cfg.get("capture_cmd", "")
+    if pending_cap == str(cmd_id):
+        db.delete_device_config("capture_cmd")
+        cleared = True
+    if cleared:
+        logger.info("cmd %s confirmado por el dispositivo", cmd_id)
         return {"ok": True, "cleared": True}
     return {"ok": True, "cleared": False}
 
@@ -574,6 +582,24 @@ async def pump_events(limit: int = 50):
     limit = max(1, min(limit, 200))
     return {"items": db.get_pump_events(limit),
             "pending_cmd": _pending_pump_cmd()}
+
+
+@app.post("/api/capture/run")
+async def capture_run():
+    """
+    Encola una foto remota para el ESP32 (equivalente al CAPTURE serie).
+
+    La orden viaja en el próximo GET /api/device/config del dispositivo
+    (<=60 s) con formato capture_cmd="<unix_ts>"; expira a los
+    PUMP_CMD_TTL_S si el ESP32 no la recoge. El dispositivo hace ack por
+    POST /api/device/ack. La foto llega por POST /upload como cualquier
+    captura (con detección ONNX y broadcast WS).
+    """
+    cmd_id = int(time.time())
+    db.set_device_config("capture_cmd", str(cmd_id))
+    logger.info("capture_cmd encolado: %s", cmd_id)
+    return {"ok": True, "cmd_id": cmd_id, "device": device_status(),
+            "note": "Se entrega en el próximo poll del ESP32 (<=60 s)"}
 
 
 # ---------------------------------------------------------------------------

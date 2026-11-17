@@ -167,6 +167,14 @@ int            cmdBombaSecs      = 0;
 bool           bombaManualActiva = false;
 unsigned long  bombaManualFin    = 0;   // millis() deadline (wrap-safe)
 
+// --- Foto remota (comando servidor -> ESP32 via /api/device/config) ---
+// El server encola "capture_cmd=<unix_ts>" (botón del dashboard); se toma
+// una sola vez (dedup por lastCaptureCmdId en RTC) y se confirma con
+// POST /api/device/ack. Mismo camino que el trigger del sensor.
+RTC_DATA_ATTR unsigned long lastCaptureCmdId = 0;
+unsigned long      cmdFotoId        = 0;
+bool               cmdFotoPendiente = false;
+
 // --- OTA (auto-actualización por HTTP plano) ---
 // otaUrlPendiente: URL .bin esperando ser flasheada (serie `OTA` o clave
 // remota ota_url). otaReintentoEn: backoff RTC tras un intento fallido.
@@ -503,6 +511,18 @@ bool aplicarClaveRemota(const String& clave, const String& valor) {
     if (ts == 0 || ts <= lastQueueClear) return true;   // ya aplicado: no-op
     queueClearPendiente = ts;
     Serial.printf("Cola vacía pendiente (cmd %lu)\n", ts);
+    return true;
+  }
+  else if (clave == "capture_cmd") {
+    // "<unix_ts>": foto remota de un solo uso (botón del dashboard).
+    // Se marca pendiente; ejecución y ack ocurren en loop() vía
+    // procesarCmdFoto() — igual que el serial CAPTURE.
+    if (!esEntero(valor)) return false;
+    unsigned long id = valor.toInt();
+    if (id == 0 || id <= lastCaptureCmdId) return true;  // ya ejecutado: no-op
+    cmdFotoId = id;
+    cmdFotoPendiente = true;
+    Serial.printf("Cmd foto pendiente: id=%lu\n", cmdFotoId);
     return true;
   }
   return false;   // clave desconocida
@@ -1389,7 +1409,7 @@ void ejecutarComandoSerial(String cmd) {
     static const char* permitidas[] = {
       "wifi_ssid", "wifi_pass", "server_url",
       "pump_photos", "pump_seconds", "dist_min_cm", "dist_max_cm",
-      "ota_url", "queue_clear", "server_url_alt"
+      "ota_url", "queue_clear", "server_url_alt", "capture_cmd"
     };
     bool ok = false;
     for (const char* k : permitidas) if (clave == k) { ok = true; break; }
@@ -1464,12 +1484,35 @@ void procesarCmdBomba() {
   }
 }
 
+// Ejecuta el comando de foto pendiente (botón del dashboard o SET).
+// Mismo camino que el trigger del sensor: flash + foto + cola + upload +
+// contador de bomba; el ack borra el override para que no se re-entregue.
+void procesarCmdFoto() {
+  if (!cmdFotoPendiente) return;
+  cmdFotoPendiente = false;
+  if (cmdFotoId <= lastCaptureCmdId) return;    // dedup: ya se ejecutó
+  lastCaptureCmdId = cmdFotoId;                 // RTC: sobrevive resets
+  Serial.printf("Foto remota (cmd %lu)\n", cmdFotoId);
+  ingresoDetectado();
+
+  if (WiFi.status() == WL_CONNECTED && srvBase.length() > 0) {
+    String url = srvBase + "/api/device/ack";
+    String body = "{\"cmd_id\":" + String(cmdFotoId) + "}";
+    const char* hdrs = "Content-Type: application/json\r\n";
+    int codigo = httpSimple("POST", url, hdrs,
+                            (const uint8_t*)body.c_str(), body.length(),
+                            nullptr, 8000);
+    Serial.printf("Ack foto cmd %lu -> HTTP %d\n", cmdFotoId, codigo);
+  }
+}
+
 void loop() {
   unsigned long ahora = millis();
 
   revisarPortal();
   procesarSerial();
   procesarCmdBomba();
+  procesarCmdFoto();
   aplicarOtaPendiente();
 
   // Vaciado de cola de fotos pedido por el server (queue_clear).

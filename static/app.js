@@ -808,6 +808,45 @@
         stateEl.textContent = `Error: ${err.message}`;
         stateEl.classList.remove("is-queued");
       }
+    }
+  }
+
+  async function runManualCapture() {
+    const btn = $("manualCaptureBtn");
+    const stateEl = $("manualCaptureState");
+    if (btn) btn.disabled = true;
+    const btnLabel = btn ? btn.textContent : "";
+    if (stateEl) {
+      stateEl.textContent = "Encolando…";
+      stateEl.classList.remove("is-queued");
+    }
+    try {
+      const res = await fetch("/api/capture/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      const devOffline = data.device && data.device.online === false;
+      if (stateEl) {
+        stateEl.textContent = devOffline
+          ? "Orden en cola · ESP32 sin señal — expirará en ~10 min si no se conecta."
+          : "Orden en cola · el ESP32 la recoge en su próximo poll (≤60 s).";
+        stateEl.classList.add("is-queued");
+      }
+      if (btn) {
+        btn.textContent = "En cola ✓";
+        setTimeout(() => {
+          if (btn) btn.textContent = btnLabel || "Tomar foto ahora";
+        }, 3500);
+      }
+    } catch (err) {
+      console.warn("capture/run failed", err);
+      if (stateEl) {
+        stateEl.textContent = `Error: ${err.message}`;
+        stateEl.classList.remove("is-queued");
+      }
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -1039,6 +1078,8 @@
   });
   const pumpBtn = $("manualPumpBtn");
   if (pumpBtn) pumpBtn.addEventListener("click", runManualPump);
+  const capBtn = $("manualCaptureBtn");
+  if (capBtn) capBtn.addEventListener("click", runManualCapture);
   const tsDays = $("tsDays");
   if (tsDays) tsDays.addEventListener("change", loadTimeseries);
   let tsResizeTimer = null;

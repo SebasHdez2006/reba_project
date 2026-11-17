@@ -207,9 +207,13 @@ Encola un ciclo de bomba **manual** para el ESP32. Body `{"seconds": 10}` (1-300
 
 Igual que `/api/pump-events` + `pending_cmd` (la orden encolada vigente — `null` si expiró o ya fue confirmada).
 
+### `POST /api/capture/run`
+
+Encola una **foto remota** para el ESP32 — el botón "Tomar foto ahora" del dashboard (equivalente al `CAPTURE` serie). El comando viaja como `capture_cmd=<unix_ts>` en el próximo poll de config (≤60 s), expira a los 10 min y se borra con el `POST /api/device/ack`. La foto llega por `POST /upload` con detección ONNX y broadcast WS.
+
 ### `POST /api/device/ack`
 
-Confirmación del ESP32 tras ejecutar `pump_cmd`. Body `{"cmd_id": <unix_ts>}`. Si coincide con el pendiente, borra el override → `{"ok": true, "cleared": true}`.
+Confirmación del ESP32 tras ejecutar `pump_cmd` o `capture_cmd`. Body `{"cmd_id": <unix_ts>}`. Si coincide con el pendiente, borra el override → `{"ok": true, "cleared": true}`.
 
 ### `GET /api/device/config`
 

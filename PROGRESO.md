@@ -1426,3 +1426,26 @@ capturar → enviar → detectar.
 Serial: `AP 'REBA-Setup'` activo desde boot (`portal=1`), `Camara OK`,
 sin línea de stream, `REBA listo`. Bin nuevo en `firmware/fotos_nc.bin`
 (servido por `/firmware.bin` para futuras OTAs).
+
+---
+
+## 16-nov (~18:30) — Botón "Tomar foto ahora" (capture_cmd remoto)
+
+Foto remota de un solo uso desde el dashboard, por el mismo canal que
+`pump_cmd` (sin reabrir un HTTP server en la placa):
+
+- `POST /api/capture/run` encola `capture_cmd=<unix_ts>` en
+  `device_config`; se sirve en el poll de config del ESP32 (≤60 s) con
+  TTL 10 min; dedup RTC `lastCaptureCmdId`; ejecución = `ingresoDetectado()`
+  (flash + foto + cola + upload + contador bomba); ack por
+  `/api/device/ack` borra el override (ahora acepta pump_cmd o capture_cmd).
+- Firmware: clave remota `capture_cmd` en `aplicarClaveRemota`,
+  `procesarCmdFoto()` en `loop()`, whitelisted en SET serie.
+- Dashboard: botón "Tomar foto ahora" en el panel Última captura +
+  `runManualCapture()` en `app.js` (estado encolado/offline igual que bomba).
+- Verificado: POST → poll → `Cmd foto pendiente` → foto 3969 B →
+  `POST /upload` 200 → `Ack foto cmd -> HTTP 200` → detección ONNX
+  guardada (id 26, plástico, 144 ms).
+
+Nota: `server_url rechazada` en serial es no-op normal — la validación
+rechaza un valor idéntico al vigente.

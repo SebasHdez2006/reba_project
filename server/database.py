@@ -507,6 +507,10 @@ class Database:
         # Comando de un solo uso: "<unix_ts>". El firmware vacía su cola de
         # fotos pendientes una sola vez por timestamp nuevo (dedup en RTC).
         "queue_clear",
+        # Comando de un solo uso: "<unix_ts>". Lo crea POST /api/capture/run;
+        # el firmware toma una foto una vez por ts nuevo (dedup en RTC) y
+        # hace ack por POST /api/device/ack. TTL al servirse en config.
+        "capture_cmd",
     )
 
     def get_device_config(self) -> Dict[str, str]:

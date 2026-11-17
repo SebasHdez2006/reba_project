@@ -871,6 +871,22 @@ code {
   color: var(--warn);
 }
 
+/* Botón de foto remota en el panel Última captura */
+.capture-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 10px;
+}
+.capture-go {
+  min-height: 40px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.capture-actions .manual-state {
+  min-height: auto;
+}
+
 /* Registro de eventos (acordeón) */
 .event-log {
   margin-top: 10px;
