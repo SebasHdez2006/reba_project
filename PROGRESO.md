@@ -1526,8 +1526,15 @@ rechaza un valor idéntico al vigente.
 
 ### Sigue pendiente (físico)
 
-- Placa colgada: power-cycle; fuente ≥1 A / 5 V con cable corto.
-- Flashear el firmware nuevo por USB (`arduino-cli upload`) — sin
-  respuesta de la placa no hay OTA posible.
+- Fuente ≥1 A / 5 V con cable corto (alimentación marginal).
+
+### Flasheo USB (COM9) — verificado
+
+- Al abrir el serial (reset) la placa arrancó con `boots=1`, cámara OK
+  y WiFi REBA-AP (192.168.137.45): estaba **colgada, no en bootloop** —
+  el caso que ahora cubre el task watchdog.
+- `arduino-cli upload --input-dir build_firmware` (hashes verificados;
+  NVS conservada). Boot nuevo: `reset=poweron`, primer poll a los 60 s
+  → dashboard `online=true` y telemetría con `"reset":"poweron"`.
 - HC-SR04 sin eco: revisar TRIG/ECHO y divisor 1k+2k; mientras, "Tomar
   foto ahora".
