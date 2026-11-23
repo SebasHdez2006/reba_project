@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     model_path: str = Field(default="models/best.onnx")
     inference_confidence: float = Field(default=0.45, ge=0.0, le=1.0)
     inference_iou: float = Field(default=0.45, ge=0.0, le=1.0)
+    # Clasificador híbrido (YOLOv8-cls, 1 objeto por foto): decide la clase;
+    # el detector solo aporta la caja. Vacío o archivo ausente = solo detector.
+    cls_model_path: str = Field(default="models/cls_esp32.onnx")
+    # Probabilidad mínima del top-1 para aceptar la clase (si no, sin detección).
+    cls_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
 
     # --- Clases YOLO (orden = class_id) ---
     class_names: str = Field(default="plastico,unicel,metal")
@@ -79,6 +84,15 @@ class Settings(BaseSettings):
     @property
     def model_path_abs(self) -> Path:
         path = Path(self.model_path)
+        if not path.is_absolute():
+            path = PROJECT_ROOT / path
+        return path
+
+    @property
+    def cls_model_path_abs(self) -> Path | None:
+        if not self.cls_model_path.strip():
+            return None
+        path = Path(self.cls_model_path)
         if not path.is_absolute():
             path = PROJECT_ROOT / path
         return path

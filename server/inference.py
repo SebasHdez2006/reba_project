@@ -27,6 +27,9 @@ from server.config import Settings
 
 logger = logging.getLogger("REBA.inference")
 
+# Clase "sin objeto REBA" del clasificador (no se cuenta ni se persiste).
+CLS_BACKGROUND = "fondo"
+
 
 @dataclass
 class Detection:
@@ -77,7 +80,12 @@ class InferenceEngine:
         self.input_name: Optional[str] = None
         self.input_shape: Optional[tuple] = None
         self.backend = "none"
+        self.cls_session = None
+        self.cls_names: List[str] = []
+        self.cls_input: Optional[str] = None
+        self.cls_size = 224
         self._init_onnx()
+        self._init_classifier()
 
     def _init_onnx(self) -> None:
         model_path: Path = self.settings.model_path_abs
@@ -126,13 +134,15 @@ class InferenceEngine:
             self.backend = "none"
 
     def predict(self, frame_bgr: np.ndarray) -> InferenceResult:
-        """Ejecuta inferencia sobre un frame BGR (idealmente 640×640)."""
+        """Ejecuta inferencia sobre la foto BGR original (se letterboxea aquí)."""
         import time
 
         t0 = time.perf_counter()
-        if self.session is not None:
+        if self.session is not None or self.cls_session is not None:
             try:
-                dets = self._predict_onnx(frame_bgr)
+                dets = self._predict_onnx(frame_bgr) if self.session is not None else []
+                if self.cls_session is not None:
+                    dets = self._hybrid(frame_bgr, dets)
                 ms = (time.perf_counter() - t0) * 1000.0
                 return InferenceResult(detections=dets, source="onnx", inference_ms=ms)
             except Exception as exc:
@@ -149,6 +159,66 @@ class InferenceEngine:
             inference_ms=ms,
             error="No ONNX model available",
         )
+
+    # ------------------------------------------------------- Clasificador
+
+    def _init_classifier(self) -> None:
+        """Carga el YOLOv8-cls ONNX (opcional). Nombres desde los metadatos."""
+        path = self.settings.cls_model_path_abs
+        if path is None or not path.is_file():
+            if path is not None:
+                logger.warning("Classifier ONNX not found at %s (solo detector)", path)
+            return
+        try:
+            import ast
+
+            import onnxruntime as ort
+
+            sess = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+            names = ast.literal_eval(sess.get_modelmeta().custom_metadata_map["names"])
+            cls_names = [names[i] for i in sorted(names)]
+            unknown = [n for n in cls_names if n != CLS_BACKGROUND and n not in self.class_names]
+            if unknown:
+                logger.error("Clasificador con clases %s fuera de CLASS_NAMES — desactivado", unknown)
+                return
+            self.cls_names = cls_names
+            self.cls_input = sess.get_inputs()[0].name
+            self.cls_size = int(sess.get_inputs()[0].shape[2])
+            self.cls_session = sess
+            logger.info("Classifier ONNX loaded: %s classes=%s", path.name, cls_names)
+        except Exception as exc:
+            logger.error("Failed to load classifier ONNX: %s", exc)
+
+    def classify(self, frame_bgr: np.ndarray) -> tuple[str, float, np.ndarray]:
+        """Top-1 del clasificador. Preproceso = classify_transforms de Ultralytics
+        (lado corto -> imgsz, recorte central, RGB /255)."""
+        assert self.cls_session is not None
+        size = self.cls_size
+        h, w = frame_bgr.shape[:2]
+        s = size / min(h, w)
+        nw, nh = max(size, round(w * s)), max(size, round(h * s))
+        img = cv2.resize(frame_bgr, (nw, nh), interpolation=cv2.INTER_AREA if s < 1 else cv2.INTER_LINEAR)
+        x0, y0 = (nw - size) // 2, (nh - size) // 2
+        img = img[y0:y0 + size, x0:x0 + size, ::-1].astype(np.float32) / 255.0
+        blob = np.ascontiguousarray(img.transpose(2, 0, 1)[None])
+        probs = self.cls_session.run(None, {self.cls_input: blob})[0][0]
+        top = int(np.argmax(probs))
+        return self.cls_names[top], float(probs[top]), probs
+
+    def _hybrid(self, frame_bgr: np.ndarray, dets: List[Detection]) -> List[Detection]:
+        """La ESP32 fotografía UN objeto (disparo del HC-SR04): el clasificador
+        decide la clase de la foto y el detector solo aporta la caja (la de
+        esa clase con más confianza, si no la de mayor confianza, si no el
+        cuadro completo). `fondo` o baja confianza -> sin detección."""
+        name, prob, _ = self.classify(frame_bgr)
+        if name == CLS_BACKGROUND or prob < self.settings.cls_confidence:
+            return []
+        h, w = frame_bgr.shape[:2]
+        same = [d for d in dets if d.class_name == name]
+        box = max(same or dets, key=lambda d: d.confidence, default=None)
+        x1, y1, x2, y2 = (box.x1, box.y1, box.x2, box.y2) if box else (0.0, 0.0, float(w), float(h))
+        return [Detection(class_id=list(self.class_names).index(name), class_name=name,
+                          confidence=prob, x1=x1, y1=y1, x2=x2, y2=y2)]
 
     # ------------------------------------------------------------------ ONNX
 
@@ -290,5 +360,12 @@ class InferenceEngine:
             "model_exists": self.settings.model_path_abs.is_file(),
             "class_names": list(self.class_names),
             "input_shape": list(self.input_shape) if self.input_shape else None,
+            "classifier": {
+                "loaded": self.cls_session is not None,
+                "model_path": str(self.settings.cls_model_path_abs or ""),
+                "class_names": self.cls_names,
+                "imgsz": self.cls_size,
+                "confidence": self.settings.cls_confidence,
+            },
         }
 

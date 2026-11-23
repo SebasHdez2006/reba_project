@@ -1538,3 +1538,45 @@ rechaza un valor idéntico al vigente.
   → dashboard `online=true` y telemetría con `"reset":"poweron"`.
 - HC-SR04 sin eco: revisar TRIG/ECHO y divisor 1k+2k; mientras, "Tomar
   foto ahora".
+
+---
+
+## 23-nov (tarde) — Clasificador híbrido ESP32 (meta ≥85 % por foto, agua y tierra)
+
+### Diagnóstico
+- Las 4 fotos reales de la ESP32 (320x240, JPEG q15, objeto a <23 cm):
+  la botella salió como `metal` y el resorte no se detectó. El detector v5 se entrenó
+  con escenas grandes de objetos pequeños, que es otro dominio.
+- Error del server: `_normalize()` estiraba 4:3 a 640x640 antes del letterbox.
+  **Arreglado**: `engine.predict(frame)` recibe la foto original.
+- Línea base (precisión por foto, `eval_esp32_cls.py --mode detector`):
+  | set | estirado (server viejo) | letterbox |
+  |---|---|---|
+  | test_agua (688 fotos) | 0.420 | 0.485 |
+  | test_tierra (486) | 0.494 | 0.504 |
+
+### Implementado
+- `ai_pipeline/build_esp32_cls_dataset.py` genera `datasets/REBA_cls_esp32/`
+  (unos 14 min). Cada caja de FloatWaste, TACO y EcoSort pasa a un recorte 4:3 de cerca → 320x240 →
+  degradación OV2640. Clases: plastico/unicel/metal/fondo.
+  train 11,789 · val 999 · test_agua 876 (REBA_real_val; se excluyen sus
+  vídeos del train) · test_tierra 602 (TACO val+test, EcoSort val) · `*_limpio`
+  = mismos recortes sin degradar.
+- `ai_pipeline/train_esp32_cls.py` entrena YOLOv8n-cls con imgsz 160, freeze=4
+  y cache ram (unos 3.5 min/época en CPU) y exporta a `models/cls_esp32.onnx`.
+- `ai_pipeline/eval_esp32_cls.py` mide la precisión por foto con el mismo motor del server.
+  `datasets/REBA_cls_esp32_real/` = las 4 fotos reales etiquetadas a mano.
+- Server: `CLS_MODEL_PATH` (default `models/cls_esp32.onnx`) y `CLS_CONFIDENCE`
+  (default 0.5). Funcionamiento híbrido: el clasificador decide la clase y el detector aporta la caja
+  (si no hay caja, se usa el cuadro completo). Si gana `fondo` o la confianza es menor que el umbral, no hay detección.
+  `/api/health` → `classifier`.
+- Entrenado `runs/classify/REBA_cls_v1`: 12 épocas en 0.71 h, **val top-1 0.895**.
+
+### PENDIENTE al retomar
+1. `python ai_pipeline/eval_esp32_cls.py --mode hybrid --splits test_agua test_tierra test_agua_limpio test_tierra_limpio --out reports/esp32_cls/hybrid_v1.json`
+   y `--data datasets --splits REBA_cls_esp32_real`.
+2. Si algún set queda <0.85, probar `--cls-conf`, TTA con flip, yolo11s-cls o imgsz 224.
+3. Ajustar `CLS_CONFIDENCE` en `.env` y `.env.example` y documentarlo en `reports/experimentos.md`.
+4. **OJO**: al reiniciar la PC, el watchdog relanza uvicorn con el código nuevo y
+   carga `models/cls_esp32.onnx` automáticamente (todavía sin validar en tests).
+   Para volver al detector solo: `CLS_MODEL_PATH=` (vacío) en `.env`.

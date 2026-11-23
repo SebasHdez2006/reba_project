@@ -25,7 +25,6 @@ import logging
 import time
 import zipfile
 from contextlib import asynccontextmanager
-from dataclasses import replace
 from typing import Any, Dict, List, Set
 
 import cv2
@@ -145,22 +144,6 @@ def pump_progress() -> Dict[str, Any]:
 # Procesamiento de la foto recibida
 # ---------------------------------------------------------------------------
 
-def _scale_detections(detections, source_shape, target_shape):
-    """Ajusta las cajas del frame normalizado a la resolución de la foto JPEG."""
-    scale_x = target_shape[1] / source_shape[1]
-    scale_y = target_shape[0] / source_shape[0]
-    return [
-        replace(
-            detection,
-            x1=detection.x1 * scale_x,
-            y1=detection.y1 * scale_y,
-            x2=detection.x2 * scale_x,
-            y2=detection.y2 * scale_y,
-        )
-        for detection in detections
-    ]
-
-
 def _draw_boxes(frame: np.ndarray, detections) -> np.ndarray:
     """Dibuja cajas y etiquetas sobre una copia del frame."""
     out = frame.copy()
@@ -188,11 +171,6 @@ def _draw_boxes(frame: np.ndarray, detections) -> np.ndarray:
     return out
 
 
-def _normalize(frame_bgr: np.ndarray, size: tuple[int, int] = (640, 640)) -> np.ndarray:
-    """Redimensiona al tamaño de entrada del modelo."""
-    return cv2.resize(frame_bgr, size, interpolation=cv2.INTER_LINEAR)
-
-
 async def process_upload(body: bytes, evento: str | None) -> Dict[str, Any]:
     """
     Decodifica el JPEG del ESP32, corre ONNX, persiste y emite al dashboard.
@@ -206,11 +184,10 @@ async def process_upload(body: bytes, evento: str | None) -> Dict[str, Any]:
     if frame is None:
         raise HTTPException(400, "Body no es un JPEG decodificable")
 
-    model_frame = _normalize(frame)
-    result = engine.predict(model_frame)
-    photo_detections = _scale_detections(
-        result.detections, model_frame.shape, frame.shape
-    )
+    # Foto original: el motor letterboxea (detector) y recorta al centro
+    # (clasificador) sin deformar el 4:3 de la ESP32.
+    result = engine.predict(frame)
+    photo_detections = result.detections
 
     annotated = _draw_boxes(frame, photo_detections)
     ok, buf = cv2.imencode(
