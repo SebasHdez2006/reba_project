@@ -85,8 +85,20 @@ DEVICE_ONLINE_WINDOW_S = 150.0   # >2 polls perdidos = offline
 SERVER_START_TS = _time.time()  # uptime del proceso (métricas /api/perf)
 
 
+# El firmware manda "User-Agent: REBA-ESP32" en todo request (httpSimple).
+# Solo esos cuentan como heartbeat: un curl, el navegador o un bot de
+# Internet pegándole a /api/device/config no deben marcar "online".
+DEVICE_USER_AGENT = "REBA-ESP32"
+
+
+def _is_device(request: Request) -> bool:
+    return request.headers.get("user-agent", "").startswith(DEVICE_USER_AGENT)
+
+
 def _touch_device(request: Request) -> None:
     """Registra que el ESP32 contactó al servidor (heartbeat)."""
+    if not _is_device(request):
+        return
     device_state["last_seen"] = _time.time()
     try:
         device_state["ip"] = request.client.host if request.client else None
@@ -473,11 +485,24 @@ async def device_config(request: Request):
     """
     _touch_device(request)
     cfg = db.get_device_config()
+    if not _is_device(request):
+        # Terceros (curl, bots): sin credenciales WiFi y sin consumir la
+        # orden WiFi de un solo uso destinada a la placa.
+        cfg.pop("wifi_ssid", None)
+        cfg.pop("wifi_pass", None)
     for key in ("pump_cmd", "capture_cmd"):
         cmd = cfg.get(key)
         if cmd is not None and not _pump_cmd_fresh(cmd):
             db.delete_device_config(key)      # expirado: no entregarlo
             cfg.pop(key, None)
+    # WiFi = orden de un solo uso: si quedara persistente, una ESP32 en otra
+    # red (hotspot del celular en campo) recibiría REBA-AP en cada poll,
+    # saltaría a una red inexistente, revertiría a los 90 s y repetiría
+    # el ciclo sin fin (offline intermitente).
+    if "wifi_ssid" in cfg and "wifi_pass" in cfg:
+        db.delete_device_config("wifi_ssid")
+        db.delete_device_config("wifi_pass")
+        logger.info("wifi_ssid=%s entregado al ESP32 (un solo uso)", cfg["wifi_ssid"])
     return "\n".join(f"{k}={v}" for k, v in sorted(cfg.items())) + "\n"
 
 
@@ -663,17 +688,15 @@ device_telemetry: Dict[str, Any] = {}
 
 
 @app.post("/api/device/status")
-async def device_status_report(payload: Dict[str, Any]):
+async def device_status_report(payload: Dict[str, Any], request: Request):
     """Recibe telemetría del ESP32 (distancia, relé, cola, heap, RSSI…)."""
-    _touch_device_from_payload(payload)
+    if not _is_device(request):
+        raise HTTPException(403, "Solo el dispositivo reporta telemetría")
+    _touch_device(request)
     device_telemetry.clear()
     device_telemetry.update(payload)
     device_telemetry["_ts"] = _time.time()
     return {"ok": True}
-
-
-def _touch_device_from_payload(payload: Dict[str, Any]) -> None:
-    device_state["last_seen"] = _time.time()
 
 
 @app.get("/api/device/status")

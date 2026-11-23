@@ -1449,3 +1449,85 @@ Foto remota de un solo uso desde el dashboard, por el mismo canal que
 
 Nota: `server_url rechazada` en serial es no-op normal — la validación
 rechaza un valor idéntico al vigente.
+
+---
+
+## 23-nov — ESP32 inestable en campo: causas reales y arreglos (pre-demo)
+
+### Diagnóstico
+
+1. **Servidor caído, no el túnel**: `logs/cloudflared.log` muestra
+   peticiones llegando por `rebaserver.tech` (22-nov 19h → 23-nov 04h,
+   23-nov 15h) con `dial tcp [::1]:5000 ... actively refused` →
+   uvicorn no corría, Cloudflare devolvía **502**. Las salidas
+   `no more connections active and exiting` fueron por
+   `signal terminated` (apagado/suspensión de la PC), no por caídas del túnel.
+   cloudflared tenía autostart; uvicorn no.
+2. **Bucle WiFi**: `device_config` tenía `wifi_ssid=REBA-AP` persistente.
+   Con la ESP32 en el hotspot del celular, cada poll exitoso por el
+   túnel la mandaba a REBA-AP (inexistente en campo) → 90 s offline →
+   revert → repetir. Offline intermitente sin fin.
+
+### Arreglos
+
+- `server/main.py`: `wifi_ssid`/`wifi_pass` ahora son **de un solo uso**
+  (se borran al entregarse en `/api/device/config`). Override actual
+  eliminado (era `REBA-AP` / `reba2026`).
+- `tools/run_server.bat` + `tools/server_hidden.vbs`: watchdog de uvicorn
+  (relanza a los 5 s, log `logs/uvicorn.log`). En Startup como
+  `reba-server.vbs`; `campo.bat` lo usa si :5000 no está escuchando.
+- `tools/run_cloudflared.bat`: bucle de relanzamiento + `--retries 30`.
+- Ingress cloudflared → `http://127.0.0.1:5000` (evita intento por `::1`).
+- Verificado: kill de uvicorn → vuelve solo; `http://rebaserver.tech`
+  → 200 con UA `REBA-ESP32`; WiFi one-shot probado en instancia aislada.
+
+### Arreglos de firmware (requieren flasheo USB u OTA) — 23-nov tarde
+
+- **Reconexión WiFi autónoma**: `consultarConfigRemota()` llama
+  `asegurarWiFi()` en vez de salir si no hay WiFi, y `loop()` reintenta
+  la conexión cada 30 s aunque la cola esté vacía. Antes: cola vacía +
+  WiFi caído = offline para siempre (causa de los apagones largos,
+  p.ej. 90 min el 16-nov).
+- **Task watchdog 60 s** (`esp_task_wdt`): alimentado en `loop()`,
+  `httpSimple`, conexión WiFi, los 3 bucles de la descarga OTA y la
+  bomba automática (el `delay()` de hasta 300 s ahora es troceado).
+  Firmware colgado → reinicio solo.
+- **Auto-recuperación sin servidor**: 10 min sin un GET de config
+  exitoso → fuerza reconexión WiFi (enlace "zombie"); 30 min → reinicio
+  (salvo bomba manual activa). Cubre NVS con `server_url` muerta + túnel
+  inaccesible. Ojo: con la laptop apagada la placa se reinicia cada
+  30 min (inofensivo; la cola en RAM se pierde igual).
+- **Motivo de reset** (`reset=brownout|task_wdt|panic|poweron|...`) en
+  el serial de arranque y en la telemetría (`/api/device/status`
+  → `telemetry.reset`) para confirmar el brownout sin USB.
+- `SRV_BASE_DEFAULT` → `http://rebaserver.tech` (era Portwarp, muerto);
+  solo aplica con NVS vacía.
+- Compilado: `firmware/fotos_nc.bin` (1,144,224 B, 58 %; bootloader y
+  partitions idénticos a los commiteados). OTA: usar URL nueva para
+  saltar el dedup `ota_last`, p.ej. `ota_url=http://rebaserver.tech/firmware.bin?v=wdt`.
+
+### Arreglos de servidor
+
+- Heartbeat (`last_seen`) solo cuenta requests con `User-Agent: REBA-ESP32`
+  (lo manda el firmware desde siempre). curl/bots ya no marcan "online".
+- `/api/device/config` a terceros: sin `wifi_ssid`/`wifi_pass` y sin
+  consumir la orden WiFi de un solo uso. `POST /api/device/status` sin el
+  UA del firmware → 403.
+- Verificado con TestClient sobre DB temporal + server reiniciado
+  (watchdog lo relanzó): curl → config sin WiFi, status → 403,
+  túnel `https://rebaserver.tech/api/health` → 200.
+
+### Operativo
+
+- `powercfg -change -standby-timeout-dc 0` y `-hibernate-timeout-dc 0`
+  aplicados (AC y DC = nunca).
+- Hotspot: `HKLM\...\icssvc\Settings\PeerlessTimeoutEnabled = 0` ya
+  estaba → REBA-AP no se apaga por falta de clientes.
+
+### Sigue pendiente (físico)
+
+- Placa colgada: power-cycle; fuente ≥1 A / 5 V con cable corto.
+- Flashear el firmware nuevo por USB (`arduino-cli upload`) — sin
+  respuesta de la placa no hay OTA posible.
+- HC-SR04 sin eco: revisar TRIG/ECHO y divisor 1k+2k; mientras, "Tomar
+  foto ahora".

@@ -7,7 +7,7 @@ credentials-file: C:\Users\sebas\.cloudflared\8b5b1785-5afc-42f8-a075-a3a607b615
 
 ingress:
   - hostname: rebaserver.tech
-    service: http://localhost:5000
+    service: http://127.0.0.1:5000
     originRequest:
       # La ESP32 hace GET /api/device/config y POST /upload — timeouts holgados
       # para el upload de fotos.

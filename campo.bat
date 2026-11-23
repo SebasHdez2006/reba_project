@@ -18,7 +18,13 @@ cd /d "%~dp0"
 if not exist logs mkdir logs
 
 echo === Servidor REBA ===
-start "REBA-Server" cmd /k ".venv-reba\Scripts\python.exe -m uvicorn server.main:app --host 0.0.0.0 --port 5000 --proxy-headers --forwarded-allow-ips=*"
+netstat -ano | findstr /R /C:":5000 .*LISTENING" >nul
+if errorlevel 1 (
+    wscript "%~dp0tools\server_hidden.vbs"
+    echo   (watchdog lanzado: tools\run_server.bat, log logs\uvicorn.log)
+) else (
+    echo   (ya estaba corriendo en :5000)
+)
 
 echo === Tunel Cloudflare (rebaserver.tech) ===
 tasklist /FI "IMAGENAME eq cloudflared.exe" 2>nul | findstr /I "cloudflared.exe" >nul

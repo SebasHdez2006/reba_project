@@ -50,6 +50,7 @@
 #include <WiFiManager.h>
 #include <Preferences.h>
 #include <Update.h>
+#include "esp_task_wdt.h"
 // NOTA: HTTPClient.h está PROHIBIDO en este firmware — enlaza
 // WiFiClientSecure/mbedTLS cuyo init estático provoca FB-OVF permanente
 // en el driver de cámara (verificado en banco: con HTTPClient la cámara
@@ -64,7 +65,7 @@
 // portal y fallback si NVS queda vacio; en produccion la config remota
 // puede cambiarla (ojo: si el ESP32 no alcanza el servidor no puede
 // descargar la nueva URL — ver docs).
-static const char* SRV_BASE_DEFAULT = "http://93togsum.free.tryportwarp.cc:16404";
+static const char* SRV_BASE_DEFAULT = "http://rebaserver.tech";
 
 // ---------------- Pines ----------------
 #define PIN_RELE   13
@@ -108,6 +109,32 @@ const int            FALLAS_CAMARA_REINIT = 5;    // fallos de captura seguidos 
 const int            FOTO_MAX_INTENTOS  = 25;     // ~6 min de reintentos -> descartar (anti poison)
 const size_t         HTTP_RESP_MAX      = 4096;   // tope body config remota (anti heap)
 const size_t         COLA_HEAP_RESERVA  = 24576;  // RAM libre mínima para encolar foto
+
+// ---------------- Auto-recuperación ----------------
+// Task watchdog: si loop() deja de alimentarlo WDT_TIMEOUT_MS (firmware
+// colgado), el chip se reinicia solo. Se alimenta en loop() y dentro de
+// todo lo que bloquea varios segundos (HTTP, OTA, bomba, conexión WiFi).
+const uint32_t       WDT_TIMEOUT_MS           = 60000;
+// Sin un GET /api/device/config exitoso: primero se fuerza reconexión
+// WiFi (enlace "zombie": conectado pero sin tráfico) y, si sigue, reinicio.
+const unsigned long  SIN_CONFIG_RECONECTAR_MS = 600000;   // 10 min
+const unsigned long  SIN_CONFIG_REINICIO_MS   = 1800000;  // 30 min
+
+static inline void wdtFeed() { esp_task_wdt_reset(); }
+
+static const char* motivoReset() {
+  switch (esp_reset_reason()) {
+    case ESP_RST_POWERON:  return "poweron";
+    case ESP_RST_SW:       return "software";
+    case ESP_RST_PANIC:    return "panic";
+    case ESP_RST_INT_WDT:  return "int_wdt";
+    case ESP_RST_TASK_WDT: return "task_wdt";
+    case ESP_RST_WDT:      return "wdt";
+    case ESP_RST_BROWNOUT: return "brownout";
+    case ESP_RST_EXT:      return "ext";
+    default:               return "otro";
+  }
+}
 
 // ---------------- Pines de la cámara (AI-Thinker) ----------------
 #define PWDN_GPIO_NUM     32
@@ -563,7 +590,10 @@ void conmutarSrv() {
 }
 
 void consultarConfigRemota() {
-  if (WiFi.status() != WL_CONNECTED) return;
+  // asegurarWiFi() (y no solo WiFi.status()): si el WiFi cayó, este poll
+  // también reintenta la conexión. Antes salía temprano y la reconexión
+  // solo ocurría al enviar fotos u OTA — cola vacía = offline para siempre.
+  if (!asegurarWiFi()) return;
   if (srvBase.length() == 0) return;
 
   // Sonda de recuperación: si estamos en la URL alternativa, probar la
@@ -576,6 +606,7 @@ void consultarConfigRemota() {
     int pc = httpSimple("GET", srvPri + "/api/device/config",
                         nullptr, nullptr, 0, &pbody, 8000);
     if (pc == 200) {
+      ultimoConfigOk = millis();
       srvActiva = 0; srvBase = srvPri; srvFallos = 0; srvProximoProbe = 0;
       guardarClave("srv_act", "0");
       Serial.println(">> URL principal recuperada: volviendo a ella");
@@ -825,6 +856,7 @@ bool asegurarWiFi() {
   WiFi.begin(wifiSsid.c_str(), wifiPass.c_str());
   unsigned long inicio = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - inicio < 10000) {
+    wdtFeed();
     delay(500);
     Serial.print(".");
   }
@@ -917,9 +949,14 @@ int httpSimple(const String& method, const String& url,
   uint16_t port;
   if (!parseHttpUrl(url, host, port, path)) return -1;
 
+  // Watchdog: DNS+connect y la lectura (deadline <= timeoutMs) quedan
+  // cada uno por debajo de WDT_TIMEOUT_MS; varias llamadas seguidas
+  // (probe + config + status) ya no se suman.
+  wdtFeed();
   WiFiClient c;
   c.setConnectionTimeout(6000);
   if (c.connect(host.c_str(), port) != 1) { c.stop(); return -1; }
+  wdtFeed();
 
   c.printf("%s %s HTTP/1.1\r\n", method.c_str(), path.c_str());
   c.printf("Host: %s\r\n", host.c_str());
@@ -1056,6 +1093,7 @@ void reportarEstado() {
     + ",\"pump_photos_max\":" + String(pumpPhotos)
     + ",\"pump_manual\":" + String(bombaManualActiva ? 1 : 0)
     + ",\"rele_pin\":" + String(digitalRead(PIN_RELE))
+    + ",\"reset\":\"" + motivoReset() + "\""
     + "}";
   String url = srvBase + "/api/device/status";
   const char* hdrs = "Content-Type: application/json\r\n";
@@ -1116,6 +1154,7 @@ bool otaDescargarYFlashear(const String& url, unsigned long timeoutMs) {
   // Status line
   int status = -1;
   while (millis() < deadline) {
+    wdtFeed();
     if (c.available() > 0) {
       line = c.readStringUntil('\n'); line.trim();
       if (line.length() > 0) {
@@ -1135,6 +1174,7 @@ bool otaDescargarYFlashear(const String& url, unsigned long timeoutMs) {
   // Headers: capturar Content-Length si viene (0 = desconocido/chunked)
   size_t contentLen = 0;
   while (millis() < deadline) {
+    wdtFeed();
     if (c.available() > 0) {
       line = c.readStringUntil('\n'); line.trim();
       if (line.length() == 0) break;
@@ -1158,6 +1198,7 @@ bool otaDescargarYFlashear(const String& url, unsigned long timeoutMs) {
   unsigned long ultimoDato = millis();
   bool ok = true;
   while (c.connected() && millis() < deadline) {
+    wdtFeed();
     int avail = c.available();
     if (avail > 0) {
       int leido = c.read(buf, sizeof(buf));
@@ -1273,7 +1314,8 @@ bool tomarFoto() {
 void correrBomba() {
   Serial.printf("Bomba ENCENDIDA %lu s\n", pumpSeconds);
   bombaEncender();
-  delay(pumpSeconds * 1000UL);
+  // Espera troceada: un delay() de hasta 300 s dispararía el watchdog.
+  for (unsigned long t0 = millis(); millis() - t0 < pumpSeconds * 1000UL; delay(100)) wdtFeed();
   bombaApagar();
   bombaManualActiva = false;   // el ciclo automático también apaga la manual
   Serial.println("Bomba APAGADA");
@@ -1305,7 +1347,14 @@ void ingresoDetectado() {
 void setup() {
   Serial.begin(115200);
   bootCount++;
-  Serial.printf("heap_setup=%u boots=%lu\n", (unsigned)ESP.getFreeHeap(), bootCount);
+  Serial.printf("heap_setup=%u boots=%lu reset=%s\n", (unsigned)ESP.getFreeHeap(), bootCount,
+                motivoReset());
+  // Task watchdog (el core 3.x ya lo inicializa: reconfigurar timeout y
+  // suscribir loopTask). bit0 = idle task CPU0, igual que el default.
+  esp_task_wdt_config_t wdtCfg = {
+    .timeout_ms = WDT_TIMEOUT_MS, .idle_core_mask = 1, .trigger_panic = true };
+  if (esp_task_wdt_reconfigure(&wdtCfg) != ESP_OK) esp_task_wdt_init(&wdtCfg);
+  esp_task_wdt_add(NULL);
   if (bootCount > 8) {
     Serial.println("AVISO: posibles resets repetidos (brownout/watchdog)");
   }
@@ -1325,6 +1374,7 @@ void setup() {
   // driver de cámara necesita ~250KB contiguos — si NVS inicializa antes,
   // cam_dma_config falla en placas con heap justo.
   iniciarCamara();
+  wdtFeed();
   ultimoTestCamara = millis();        // primer health check en 15 min
 
   cargarConfig();
@@ -1507,6 +1557,7 @@ void procesarCmdFoto() {
 }
 
 void loop() {
+  wdtFeed();
   unsigned long ahora = millis();
 
   revisarPortal();
@@ -1573,6 +1624,28 @@ void loop() {
   if (ahora - ultimoPollConfig >= POLL_CONFIG_MS) {
     ultimoPollConfig = ahora;
     consultarConfigRemota();
+  }
+
+  // WiFi caído: reintentar aunque la cola esté vacía (asegurarWiFi se
+  // auto-limita a un intento cada REINTENTO_WIFI_MS).
+  if (WiFi.status() != WL_CONNECTED && wifiSsid.length() > 0) asegurarWiFi();
+
+  // Auto-recuperación sin servidor. millis() fresco (no `ahora`): el poll
+  // de arriba pudo actualizar ultimoConfigOk después de tomar `ahora`.
+  static bool reconexionForzada = false;
+  unsigned long sinConfig = millis() - ultimoConfigOk;
+  if (sinConfig < SIN_CONFIG_RECONECTAR_MS) {
+    reconexionForzada = false;
+  } else if (!reconexionForzada && WiFi.status() == WL_CONNECTED) {
+    reconexionForzada = true;
+    Serial.println("10 min sin respuesta del servidor: forzando reconexion WiFi");
+    WiFi.disconnect();                     // solo STA: REBA-Setup sigue arriba
+    ultimoIntentoWiFi = 0;
+  }
+  if (sinConfig >= SIN_CONFIG_REINICIO_MS && !bombaManualActiva) {
+    Serial.println("30 min sin respuesta del servidor: reiniciando");
+    delay(200);
+    ESP.restart();
   }
 
   if (ahora - ultimaLectura < PERIODO_SENSOR_MS) return;

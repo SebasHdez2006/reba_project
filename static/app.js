@@ -1478,6 +1478,27 @@
   // "Ping · hace X" se actualiza aunque el ESP32 no contacte seguido
   setInterval(updatePingNote, 20000);
 
+  // Cuenta regresiva al próximo poll del ESP32 (heartbeat cada ~60 s):
+  // muestra hh:mm:ss.cs en los elementos .poll-cd del dashboard.
+  function updatePollCountdown() {
+    const els = document.querySelectorAll(".poll-cd");
+    if (!els.length) return;
+    let label;
+    if (state.deviceOnline && state.deviceLastSeen) {
+      const remMs = Math.max(0, (state.deviceLastSeen + 60) * 1000 - Date.now());
+      const cs = Math.floor((remMs % 1000) / 10);
+      const s = Math.floor(remMs / 1000) % 60;
+      const m = Math.floor(remMs / 60000) % 60;
+      const h = Math.floor(remMs / 3600000);
+      label = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}.${String(cs).padStart(2, "0")}`;
+    } else {
+      label = "sin señal";
+    }
+    els.forEach((el) => { el.textContent = label; });
+  }
+  setInterval(updatePollCountdown, 100);
+  updatePollCountdown();
+
   // Métricas de rendimiento + circuito: RTT cada 5 s, REST cada 15 s
   setInterval(() => { measureNetLatency(); updateRealtimeBits(); }, 5000);
   setInterval(() => { loadPerf(); loadCircuit(); }, 15000);
