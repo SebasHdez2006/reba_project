@@ -175,7 +175,7 @@ curl -X POST http://localhost:5000/upload -H "Content-Type: image/jpeg" -H "X-Ev
 
 ### `GET /api/health`
 
-Estado del motor ONNX, contadores (`uploads_received`, `photos_since_pump`) y **`device`**: `{online, last_seen, ip}` — heartbeat del ESP32 (<150 s = online; se actualiza en cada poll de config y cada upload).
+Estado del motor ONNX, contadores (`uploads_received`, `photos_since_pump`) y **`device`**: `{online, last_seen, ip, polls_total, polls_last_hour, last_poll_ts}` — heartbeat del ESP32 (<150 s = online; se actualiza en cada poll de config y cada upload). Los campos `polls_*` cuentan los `GET /api/device/config` recibidos del dispositivo (ventana deslizante de 1 h ≈ 60 polls/h esperados con `POLL_CONFIG_MS=60 s`).
 
 ### `GET /api/config`
 
@@ -211,17 +211,23 @@ Igual que `/api/pump-events` + `pending_cmd` (la orden encolada vigente — `nul
 
 Encola una **foto remota** para el ESP32 — el botón "Tomar foto ahora" del dashboard (equivalente al `CAPTURE` serie). El comando viaja como `capture_cmd=<unix_ts>` en el próximo poll de config (≤60 s), expira a los 10 min y se borra con el `POST /api/device/ack`. La foto llega por `POST /upload` con detección ONNX y broadcast WS.
 
+### `POST /api/device/reconnect`
+
+Encola una **solicitud de reconexión** para el ESP32 — el botón "Reconectar ESP32" del dashboard. La orden viaja como `reconnect_cmd=<unix_ts>` en el próximo poll de config (≤60 s), expira a los 10 min y se borra con el `POST /api/device/ack`. Al recibirla, el firmware hace `WiFi.disconnect()` + un poll de config inmediato (acelera el failover `server_url`↔`server_url_alt` y cura enlaces WiFi "zombie").
+
+**Limitación de la arquitectura push**: el servidor no puede iniciar la conexión — si el ESP32 está realmente offline (no alcanza el servidor), la orden no puede entregarse y expira; el dispositivo debe volver a pollar por sus propios reintentos (`REINTENTO_WIFI_MS`, failover, reinicio a los 30 min sin config).
+
 ### `POST /api/device/ack`
 
-Confirmación del ESP32 tras ejecutar `pump_cmd` o `capture_cmd`. Body `{"cmd_id": <unix_ts>}`. Si coincide con el pendiente, borra el override → `{"ok": true, "cleared": true}`.
+Confirmación del ESP32 tras ejecutar `pump_cmd`, `capture_cmd` o `reconnect_cmd`. Body `{"cmd_id": <unix_ts>}`. Si coincide con el pendiente, borra el override → `{"ok": true, "cleared": true}`.
 
 ### `GET /api/device/config`
 
-Texto plano `clave=valor` que el ESP32 descarga cada 60 s (heartbeat incluido). Solo overrides guardados; `pump_cmd` se sirve únicamente si tiene <10 min.
+Texto plano `clave=valor` que el ESP32 descarga cada 60 s (heartbeat incluido). Solo overrides guardados; `pump_cmd`, `capture_cmd` y `reconnect_cmd` se sirven únicamente si tienen <10 min. Cada poll del dispositivo (`User-Agent: REBA-ESP32`) incrementa el contador de polls (`device.polls_total`/`polls_last_hour`).
 
 ### `GET/POST /api/admin/device-config`
 
-GET: overrides actuales + claves permitidas. POST: body JSON `{clave: valor}` — valor vacío/null borra el override. Claves: `wifi_ssid`, `wifi_pass`, `server_url`, `pump_photos`, `pump_seconds`, `dist_min_cm`, `dist_max_cm`, `pump_cmd`. El firmware re-valida todo al aplicarlo.
+GET: overrides actuales + claves permitidas. POST: body JSON `{clave: valor}` — valor vacío/null borra el override. Claves: `wifi_ssid`, `wifi_pass`, `server_url`, `server_url_alt`, `pump_photos`, `pump_seconds`, `dist_min_cm`, `dist_max_cm`, `pump_cmd`, `ota_url`, `queue_clear`, `capture_cmd`, `reconnect_cmd`. El firmware re-valida todo al aplicarlo.
 
 ### Vista en vivo
 

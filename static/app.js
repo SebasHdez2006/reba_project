@@ -1100,6 +1100,8 @@
   if (btnResetAll) btnResetAll.addEventListener("click", () => resetServerData("all", btnResetAll));
   const btnQueueClear = $("btnQueueClear");
   if (btnQueueClear) btnQueueClear.addEventListener("click", () => queueClearEsp(btnQueueClear));
+  const btnReconnect = $("btnReconnect");
+  if (btnReconnect) btnReconnect.addEventListener("click", requestReconnect);
 
   // ---------------------------------------------------------------------------
   // Rendimiento en tiempo real + estado del circuito + reset de datos
@@ -1149,6 +1151,7 @@
           ? fmtAgo(perf.device.heartbeat_age_s * 1000)
           : "sin contacto"
       );
+      setText("mPollsH", String(perf.device?.polls_last_hour ?? "—"));
       setText("mUploadsH", String(perf.uploads_last_hour ?? "—"));
       setText("mUptime", fmtUptime(perf.server?.uptime_s));
       setText("mWsClients", String(perf.server?.ws_clients ?? "—"));
@@ -1186,6 +1189,12 @@
       setText(
         "cDevIp",
         `${dev.ip || "—"} · ${dev.last_seen ? fmtAgo((Date.now() / 1000 - dev.last_seen) * 1000) : "—"}`
+      );
+      setText(
+        "cPolls",
+        dev.polls_total != null
+          ? `${dev.polls_total} total · ${dev.polls_last_hour ?? 0}/h`
+          : "—"
       );
 
       const t = (id, v) => setText(id, hasTel ? v : "sin datos");
@@ -1254,6 +1263,52 @@
       alert("No se pudo borrar: " + err.message);
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = label; }
+    }
+  }
+
+  // Reconexión manual del ESP32: la orden viaja en su próximo poll de
+  // config; el firmware fuerza WiFi.disconnect + poll inmediato. Si la
+  // placa no alcanza el servidor la orden no puede entregarse (arquitectura
+  // push: el servidor no inicia la conexión).
+  async function requestReconnect() {
+    const btn = $("btnReconnect");
+    const stateEl = $("reconnectState");
+    if (btn) btn.disabled = true;
+    const btnLabel = btn ? btn.textContent : "";
+    if (stateEl) {
+      stateEl.textContent = "Encolando…";
+      stateEl.classList.remove("is-queued");
+    }
+    try {
+      const res = await fetch("/api/device/reconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      const devOffline = data.device && data.device.online === false;
+      if (stateEl) {
+        stateEl.textContent = devOffline
+          ? "ESP32 sin señal: la orden espera en cola (~10 min). Si no está alcanzando el servidor, esta orden no puede entregarse — debe volver a pollar por sus reintentos automáticos."
+          : "Orden en cola · el ESP32 fuerza WiFi.disconnect + poll inmediato en su próximo poll (≤60 s).";
+        stateEl.classList.add("is-queued");
+      }
+      if (btn) {
+        btn.textContent = "En cola ✓";
+        setTimeout(() => {
+          if (btn) btn.textContent = btnLabel || "Reconectar ESP32";
+        }, 3500);
+      }
+      loadCircuit();
+    } catch (err) {
+      console.warn("device/reconnect failed", err);
+      if (stateEl) {
+        stateEl.textContent = `Error: ${err.message}`;
+        stateEl.classList.remove("is-queued");
+      }
+    } finally {
+      if (btn) btn.disabled = false;
     }
   }
 

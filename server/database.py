@@ -511,6 +511,11 @@ class Database:
         # el firmware toma una foto una vez por ts nuevo (dedup en RTC) y
         # hace ack por POST /api/device/ack. TTL al servirse en config.
         "capture_cmd",
+        # Comando de un solo uso: "<unix_ts>". Lo crea POST /api/device/reconnect
+        # (botón "Reconectar ESP32" del dashboard); el firmware fuerza
+        # WiFi.disconnect + poll de config inmediato una vez por ts nuevo
+        # (dedup en RTC) y hace ack por POST /api/device/ack. TTL al servirse.
+        "reconnect_cmd",
     )
 
     def get_device_config(self) -> Dict[str, str]:

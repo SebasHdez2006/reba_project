@@ -1946,6 +1946,9 @@ button.primary:hover {
   flex-wrap: wrap;
   margin-top: 14px;
 }
+.circuit-state {
+  margin-top: 10px;
+}
 
 /* ===== Botones de peligro (reset / borrado) ===== */
 .btn.danger {

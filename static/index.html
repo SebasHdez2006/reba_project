@@ -17,7 +17,7 @@
         if (t) document.documentElement.dataset.theme = t;
       } catch (e) { /* storage bloqueado: tema oscuro por defecto */ }
     </script>
-    <link rel="stylesheet" href="/styles.css?v=20261116-2" />
+    <link rel="stylesheet" href="/styles.css?v=20261124-1" />
   </head>
   <body>
     <div class="app">
@@ -218,6 +218,10 @@
                 <div class="metric">
                   <span class="metric-k">Heartbeat ESP32</span>
                   <strong id="mHeartbeat">—</strong>
+                </div>
+                <div class="metric">
+                  <span class="metric-k">Polls última hora</span>
+                  <strong id="mPollsH">—</strong><span class="metric-u">/h</span>
                 </div>
                 <div class="metric">
                   <span class="metric-k">Uploads última hora</span>
@@ -422,6 +426,7 @@
               <div class="circuit-grid">
                 <div class="circuit-row"><span>ESP32-CAM</span><strong id="cDevState">—</strong></div>
                 <div class="circuit-row"><span>IP · último contacto</span><strong id="cDevIp">—</strong></div>
+                <div class="circuit-row"><span>Polls recibidos</span><strong id="cPolls">—</strong></div>
                 <div class="circuit-row"><span>Sensor HC-SR04</span><strong id="cDist">—</strong></div>
                 <div class="circuit-row"><span>Relé GPIO13</span><strong id="cRelay">—</strong></div>
                 <div class="circuit-row"><span>Cola de fotos</span><strong id="cQueue">—</strong></div>
@@ -432,11 +437,16 @@
                 <div class="circuit-row"><span>Fotos hacia ciclo</span><strong id="cPumpProg">—</strong></div>
               </div>
               <div class="circuit-actions">
+                <button type="button" id="btnReconnect" class="btn"
+                        title="Ordena al ESP32 forzar reconexión WiFi y re-poll en su próximo poll (≤60 s). Si está offline de verdad, la orden no puede entregarse.">Reconectar ESP32</button>
                 <button type="button" id="btnQueueClear" class="btn ghost danger"
                         title="El ESP32 descarta las fotos tomadas aún no subidas en su próximo poll">Vaciar cola ESP32</button>
                 <button type="button" id="btnResetAll" class="btn ghost danger"
                         title="Borra capturas, detecciones, contadores y eventos de bomba">Borrar todos los datos</button>
               </div>
+              <p id="reconnectState" class="manual-state circuit-state">
+                La orden llega al ESP32 en su próximo poll (≤60 s).
+              </p>
               <p id="circuitNote" class="footer-note">
                 La telemetría del dispositivo llega con cada poll (~60 s).
                 Si el firmware es anterior a esta versión, las filas del
@@ -476,6 +486,6 @@
       </div>
     </div>
 
-    <script src="/app.js?v=20261116-2" defer></script>
+    <script src="/app.js?v=20261124-1" defer></script>
   </body>
 </html>

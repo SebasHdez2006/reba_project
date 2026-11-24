@@ -202,6 +202,17 @@ RTC_DATA_ATTR unsigned long lastCaptureCmdId = 0;
 unsigned long      cmdFotoId        = 0;
 bool               cmdFotoPendiente = false;
 
+// --- Reconexión forzada (comando servidor -> ESP32 via /api/device/config) ---
+// El server encola "reconnect_cmd=<unix_ts>" (botón "Reconectar ESP32" del
+// dashboard, POST /api/device/reconnect); el firmware hace WiFi.disconnect
+// y fuerza un poll de config inmediato en el próximo loop() — una sola vez
+// por ts (dedup lastReconnectCmdId en RTC) y ack por POST /api/device/ack.
+// Sirve cuando el enlace está "zombie" (WiFi asociado pero sin tráfico) o
+// para acelerar el failover srvPri<->srvAlt tras corregir una URL.
+RTC_DATA_ATTR unsigned long lastReconnectCmdId = 0;
+unsigned long      cmdReconnectId        = 0;
+bool               cmdReconnectPendiente = false;
+
 // --- OTA (auto-actualización por HTTP plano) ---
 // otaUrlPendiente: URL .bin esperando ser flasheada (serie `OTA` o clave
 // remota ota_url). otaReintentoEn: backoff RTC tras un intento fallido.
@@ -552,6 +563,20 @@ bool aplicarClaveRemota(const String& clave, const String& valor) {
     Serial.printf("Cmd foto pendiente: id=%lu\n", cmdFotoId);
     return true;
   }
+  else if (clave == "reconnect_cmd") {
+    // "<unix_ts>": reconexión forzada de un solo uso (botón del dashboard).
+    // Se marca pendiente; la ejecución (WiFi.disconnect + poll inmediato)
+    // y el ack ocurren en loop() vía procesarCmdReconnect() — igual que
+    // capture_cmd. OJO: si la placa no alcanza el servidor nunca recibe
+    // la orden — la auto-recuperación del firmware es la que la cubre.
+    if (!esEntero(valor)) return false;
+    unsigned long id = valor.toInt();
+    if (id == 0 || id <= lastReconnectCmdId) return true;  // ya ejecutado: no-op
+    cmdReconnectId = id;
+    cmdReconnectPendiente = true;
+    Serial.printf("Cmd reconexion pendiente: id=%lu\n", cmdReconnectId);
+    return true;
+  }
   return false;   // clave desconocida
 }
 
@@ -879,6 +904,18 @@ bool asegurarWiFi() {
     iniciarPortal();          // red cambió: reabrir portal de configuración
   }
   return false;
+}
+
+// Fuerza la reconexión WiFi y un poll de config inmediato en el próximo
+// loop(). La usa el comando remoto reconnect_cmd y el serie RECONNECT.
+// No bloquea: loop() sigue vivo (sensor, cola, bomba, OTA).
+void forzarReconexion() {
+  Serial.println("Reconexión solicitada: WiFi.disconnect + poll inmediato");
+  WiFi.disconnect();                     // solo STA: REBA-Setup sigue arriba
+  ultimoIntentoWiFi = 0;                 // reintento ya, no en REINTENTO_WIFI_MS
+  // millis()-POLL_CONFIG_MS es wrap-safe: aun con uptime < 60 s la resta
+  // modular hace que `ahora - ultimoPollConfig >= POLL_CONFIG_MS` dispare.
+  ultimoPollConfig = millis() - POLL_CONFIG_MS;
 }
 
 // ============================================================
@@ -1422,6 +1459,7 @@ void ejecutarComandoSerial(String cmd) {
     Serial.println(F("  SET wifi_ssid=... wifi_pass=... server_url=..."));
     Serial.println(F("  SET pump_photos=N pump_seconds=N dist_min_cm=F dist_max_cm=F"));
     Serial.println(F("  CAPTURE   (foto manual: flash + cola + upload + contador bomba)"));
+    Serial.println(F("  RECONNECT (fuerza WiFi.disconnect + poll de config inmediato)"));
     Serial.println(F("  STATUS    (diagnostico: heap, camara, wifi, cola, sensor)"));
     Serial.println(F("  OTA       (actualizacion de firmware: {server_url}/firmware.bin)"));
     Serial.println(F("  OTA http://IP:5000/otro.bin   (URL explicita)"));
@@ -1459,7 +1497,8 @@ void ejecutarComandoSerial(String cmd) {
     static const char* permitidas[] = {
       "wifi_ssid", "wifi_pass", "server_url",
       "pump_photos", "pump_seconds", "dist_min_cm", "dist_max_cm",
-      "ota_url", "queue_clear", "server_url_alt", "capture_cmd"
+      "ota_url", "queue_clear", "server_url_alt", "capture_cmd",
+      "reconnect_cmd"
     };
     bool ok = false;
     for (const char* k : permitidas) if (clave == k) { ok = true; break; }
@@ -1472,6 +1511,9 @@ void ejecutarComandoSerial(String cmd) {
   else if (op == "CAPTURE") {
     Serial.println("CAPTURE manual por USB...");
     ingresoDetectado();
+  }
+  else if (op == "RECONNECT") {
+    forzarReconexion();
   }
   else if (op == "OTA") {
     // Manual: fuerza la actualizacion (ignora dedup ota_last).
@@ -1556,6 +1598,29 @@ void procesarCmdFoto() {
   }
 }
 
+// Ejecuta el comando de reconexión pendiente (botón "Reconectar ESP32"
+// del dashboard o SET reconnect_cmd). El ack va ANTES de cortar el WiFi:
+// si el enlace está vivo el server borra la orden; si no, el TTL del
+// server la expira y el dedup RTC evita re-ejecución si resucita.
+void procesarCmdReconnect() {
+  if (!cmdReconnectPendiente) return;
+  cmdReconnectPendiente = false;
+  if (cmdReconnectId <= lastReconnectCmdId) return;    // dedup: ya se ejecutó
+  lastReconnectCmdId = cmdReconnectId;                 // RTC: sobrevive resets
+  Serial.printf("Reconexión remota (cmd %lu)\n", cmdReconnectId);
+
+  if (WiFi.status() == WL_CONNECTED && srvBase.length() > 0) {
+    String url = srvBase + "/api/device/ack";
+    String body = "{\"cmd_id\":" + String(cmdReconnectId) + "}";
+    const char* hdrs = "Content-Type: application/json\r\n";
+    int codigo = httpSimple("POST", url, hdrs,
+                            (const uint8_t*)body.c_str(), body.length(),
+                            nullptr, 8000);
+    Serial.printf("Ack reconexion cmd %lu -> HTTP %d\n", cmdReconnectId, codigo);
+  }
+  forzarReconexion();
+}
+
 void loop() {
   wdtFeed();
   unsigned long ahora = millis();
@@ -1564,6 +1629,7 @@ void loop() {
   procesarSerial();
   procesarCmdBomba();
   procesarCmdFoto();
+  procesarCmdReconnect();
   aplicarOtaPendiente();
 
   // Vaciado de cola de fotos pedido por el server (queue_clear).

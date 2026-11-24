@@ -478,6 +478,7 @@ const state = {
   pumpEndsAt: 0,
   pumpManual: false,
   lastPumpCmdId: 0,
+  lastReconnectCmdId: 0,
   sendBusy: false,
   autoTimer: null,
   lastPoll: null,               // {ok, info, ts}
@@ -890,6 +891,18 @@ function aplicarConfigRemota(cfg) {
   if ('wifi_ssid' in cfg || 'wifi_pass' in cfg || 'server_url' in cfg) {
     log('Config: claves de red recibidas (no aplicables en el simulador web)');
   }
+  if ('reconnect_cmd' in cfg) {
+    // "<unix_ts>" — reconexión forzada de un solo uso (botón del dashboard).
+    // El firmware hace WiFi.disconnect + poll inmediato; el simulador no
+    // tiene WiFi real: equivale a ejecutar pollConfig() ya + ack.
+    const id = parseInt(cfg.reconnect_cmd, 10);
+    if (!isNaN(id) && id > 0 && id > state.lastReconnectCmdId) {
+      state.lastReconnectCmdId = id;
+      log('Cmd reconexion pendiente: id=' + id + ' — WiFi.disconnect + poll inmediato (simulado)', 'warn');
+      ackReconnectCmd(id);
+      pollConfig();
+    }
+  }
 }
 
 async function ackPumpCmd(cmdId) {
@@ -902,6 +915,19 @@ async function ackPumpCmd(cmdId) {
     log('Ack bomba cmd ' + cmdId + ' -> HTTP ' + resp.status, resp.ok ? 'ok' : 'warn');
   } catch (e) {
     log('Ack bomba cmd ' + cmdId + ' -> sin respuesta (el TTL del server lo expirará)', 'warn');
+  }
+}
+
+async function ackReconnectCmd(cmdId) {
+  try {
+    const resp = await fetchT(state.serverUrl + '/api/device/ack', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'skip_zrok_interstitial': 'true' },
+      body: JSON.stringify({ cmd_id: cmdId }),
+    }, 10000);
+    log('Ack reconexion cmd ' + cmdId + ' -> HTTP ' + resp.status, resp.ok ? 'ok' : 'warn');
+  } catch (e) {
+    log('Ack reconexion cmd ' + cmdId + ' -> sin respuesta (el TTL del server lo expirará)', 'warn');
   }
 }
 

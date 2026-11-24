@@ -51,6 +51,7 @@ En Arduino IDE: abrir la carpeta `fotos_nc` (el `.ino` debe llevar el nombre de 
 | `dist_min_cm` / `dist_max_cm` | 0-500, min<max | 0 / 23 | Rango ultrasónico de disparo |
 | `pump_cmd` | `<unix_ts>:<s>` | — | **Solo servidor→ESP32**: comando de bomba manual de un solo uso (ver abajo) |
 | `capture_cmd` | `<unix_ts>` | — | **Solo servidor→ESP32**: foto remota de un solo uso (botón "Tomar foto ahora" → `POST /api/capture/run`); dedup RTC + ack |
+| `reconnect_cmd` | `<unix_ts>` | — | **Solo servidor→ESP32**: reconexión forzada de un solo uso (botón "Reconectar ESP32" → `POST /api/device/reconnect`); dedup RTC + ack |
 | `ota_url` | `http://…` ≤128 | — | **Solo servidor→ESP32**: URL de un `.bin` para auto-actualización OTA (ver abajo). Dedup por NVS `ota_last` |
 
 Validación estricta en `aplicarClaveRemota()`: numéricos con `esEntero`/`esFloat` (rechaza `"3abc"`, `"abc"`, fuera de rango), `server_url` solo `http://` con host, longitudes WiFi. El comando serie `SET` reporta `aplicado`/`rechazada` real.
@@ -90,14 +91,30 @@ También funciona por serie: `SET pump_cmd=<ts>:<s>` (uso típico: pruebas de ba
 
 ---
 
+## Reconexión forzada (`reconnect_cmd`)
+
+El dashboard puede pedirle al ESP32 que reconecte sin esperar al ciclo normal:
+
+1. `POST /api/device/reconnect` → server guarda `reconnect_cmd=<unix_ts>` en `device_config` (válido 10 min; expirado no se sirve).
+2. El ESP32 lo recibe en su poll de config → `aplicarClaveRemota` lo deja **pendiente**.
+3. `loop()` ejecuta `procesarCmdReconnect()`: ack por `POST /api/device/ack` (antes de cortar) y luego `forzarReconexion()` → `WiFi.disconnect()` + `ultimoIntentoWiFi=0` + `ultimoPollConfig` vencido → el próximo `loop()` hace `consultarConfigRemota()` ya (que internamente llama `asegurarWiFi()` y reconecta).
+4. Dedup con `lastReconnectCmdId` (`RTC_DATA_ATTR`) → nunca ejecuta el mismo `cmd_id` dos veces.
+
+Sirve para enlaces WiFi "zombie" (asociado pero sin tráfico) y para acelerar el failover de URL. **Si la placa no alcanza el servidor nunca recibe la orden** — la auto-recuperación (`SIN_CONFIG_RECONECTAR_MS`/`SIN_CONFIG_REINICIO_MS`) es la que cubre ese caso.
+
+También por serie: `RECONNECT` (efecto inmediato) o `SET reconnect_cmd=<ts>`.
+
+---
+
 ## Diagnóstico por serial
 
 ```text
 HELP     → lista de comandos
 GET      → wifi_ssid, wifi_pass, server_url, pump_*, dist_*, ota_last
 SET k=v  → aplica clave (mismas validaciones que la remota; acepta ota_url)
-CAPTURE  → foto manual (flash + cola + upload + contador bomba)
-STATUS   → uptime, boots, heap, cámara, WiFi, cola, bomba, distancia
+CAPTURE   → foto manual (flash + cola + upload + contador bomba)
+RECONNECT → fuerza WiFi.disconnect + poll de config inmediato
+STATUS    → uptime, boots, heap, cámara, WiFi, cola, bomba, distancia
 OTA      → auto-actualización: descarga {server_url}/firmware.bin y reflashea
 OTA http://IP:5000/x.bin → idem con URL explícita
 REBOOT   → reinicio inmediato

@@ -107,12 +107,19 @@ app OTA). Ciclo principal en `loop()`:
   dedup RTC `lastCaptureCmdId` + ack. Mismo TTL de ~10 min.
 - **Vaciado de cola**: `queue_clear=<unix_ts>` descarta las fotos
   pendientes una sola vez por timestamp (dedup RTC `lastQueueClear`).
+- **Reconexión forzada**: `reconnect_cmd=<unix_ts>` (botón "Reconectar
+  ESP32" → `POST /api/device/reconnect`) hace `WiFi.disconnect()` +
+  poll de config inmediato; dedup RTC `lastReconnectCmdId` + ack.
+  Si la placa no alcanza el servidor la orden no puede entregarse —
+  la auto-recuperación del firmware cubre ese caso.
 - **Config remota**: `GET /api/device/config` cada 60 s — aplica
   `wifi_*`, `server_url`, `server_url_alt`, `pump_*`, `dist_*`,
-  `ota_url`, `queue_clear`, `pump_cmd`, `capture_cmd` sin reflashear.
-  Tras cada poll exitoso reporta telemetría por `POST
-  /api/device/status` (uptime, boots, heap, RSSI, cámara, distancia,
-  cola, progreso de bomba, pin del relé).
+  `ota_url`, `queue_clear`, `pump_cmd`, `capture_cmd`, `reconnect_cmd`
+  sin reflashear. El servidor cuenta los polls del dispositivo
+  (`device.polls_total`/`polls_last_hour` en `/api/device/status`,
+  `/api/perf`, `/api/stats`). Tras cada poll exitoso reporta telemetría
+  por `POST /api/device/status` (uptime, boots, heap, RSSI, cámara,
+  distancia, cola, progreso de bomba, pin del relé).
 - **Failover de URL**: 3 polls fallidos seguidos → conmuta
   `server_url`↔`server_url_alt` (persiste en NVS `srv_act`); con la
   alternativa activa re-sondea la principal cada 5 min y vuelve si
@@ -129,9 +136,9 @@ app OTA). Ciclo principal en `loop()`:
 - **Respaldo de WiFi**: si las credenciales nuevas no conectan en 90 s,
   revierte a las anteriores.
 - **Serie (115200)**: `HELP`, `GET`, `SET clave=valor` (mismas claves
-  remotas, validación estricta), `CAPTURE` (foto manual), `STATUS`
-  (diagnóstico), `OTA [url]`, `REBOOT`. Ojo: abrir el puerto resetea
-  la placa (glitch DTR/RTS).
+  remotas, validación estricta), `CAPTURE` (foto manual), `RECONNECT`
+  (WiFi.disconnect + poll inmediato), `STATUS` (diagnóstico), `OTA [url]`,
+  `REBOOT`. Ojo: abrir el puerto resetea la placa (glitch DTR/RTS).
 
 Valores por defecto y constantes: cabecera del `.ino`; configuración
 efectiva en vivo: `GET /api/admin/device-config`. El `SRV_BASE_DEFAULT`
@@ -154,7 +161,7 @@ Detalle completo: `docs/firmware.md`; herramienta de banco
 
 Endpoints principales:
 
-- **Device/ESP32**: `POST /upload` (foto→detección→DB), `GET /api/device/config` (pull de config `clave=valor`; sirve `pump_cmd`/`capture_cmd` solo si tienen <10 min — TTL anti "comando fantasma"), `POST /api/device/ack` (el ESP32 confirma `pump_cmd` o `capture_cmd` ejecutado → borra el override), `POST/GET /api/device/status` (telemetría del circuito), `GET /firmware.bin` (binario OTA), `/firmware/*` (binarios de flasheo USB: bootloader, partitions, `fotos_nc.bin`).
+- **Device/ESP32**: `POST /upload` (foto→detección→DB), `GET /api/device/config` (pull de config `clave=valor`; sirve `pump_cmd`/`capture_cmd`/`reconnect_cmd` solo si tienen <10 min — TTL anti "comando fantasma"; cada poll cuenta en `device.polls_*`), `POST /api/device/ack` (el ESP32 confirma `pump_cmd`/`capture_cmd`/`reconnect_cmd` ejecutado → borra el override), `POST /api/device/reconnect` (botón "Reconectar ESP32" → `reconnect_cmd`), `POST/GET /api/device/status` (telemetría del circuito), `GET /firmware.bin` (binario OTA), `/firmware/*` (binarios de flasheo USB: bootloader, partitions, `fotos_nc.bin`).
 - **Dashboard/datos**: `GET /api/captures*` (álbum + imágenes anotadas u originales `?orig=1`), `GET /api/detections/*`, `GET /api/pump/events` (+ alias `/api/pump-events`), `GET /api/stats`, `GET /api/stats/timeseries`, `GET /api/perf`, `GET /api/export/yolo` (ZIP dataset), `POST /api/pump/run` (bomba manual), `POST /api/capture/run` (foto remota), `DELETE /api/captures` (reset álbum/datos), `WS /ws`.
 - **Admin**: `GET/POST /api/admin/device-config` (empuja config al ESP32; whitelist `DEVICE_CONFIG_KEYS`), `GET /api/config`, `GET /api/pump-status`.
 - **Health**: `GET /api/health` (`backend: onnx|none`, clases, modelo, `device.online` — heartbeat <150 s).
@@ -180,14 +187,17 @@ píldora inferior en móvil:
   miniaturas, botón **"Tomar foto ahora"** → `POST /api/capture/run`),
   *Bomba* (progreso `fotos/N`, control manual con chips de duración +
   "Activar ahora", registro de eventos), *Rendimiento* (RTT, latencia
-  ONNX avg/p95, heartbeat, uploads/h, uptime, clientes WS — `/api/perf`).
+  ONNX avg/p95, heartbeat, polls/h, uploads/h, uptime, clientes WS —
+  `/api/perf`).
 - **Analítica**: *Materiales acumulados* (KPIs + donut por clase),
   *Actividad* (barras por día/clase, selector 7/14/30 días), *Galería*
   (filtro por clase, paginación, lightbox con detecciones, **Exportar
   YOLO**, reset de datos).
 - **Dispositivo**: *Config remota* del ESP32 (WiFi, URLs prim/sec,
   bomba, distancias, vaciar cola, OTA) y *Estado del circuito*
-  (telemetría real: sensor, relé, cola, cámara, heap, RSSI).
+  (telemetría real: sensor, relé, cola, cámara, heap, RSSI, polls
+  recibidos) con acciones de comando: **Reconectar ESP32**,
+  vaciar cola, reset de datos.
 
 Datos en vivo por WebSocket `/ws` (`hello`, `capture`, `detections`,
 `pump_event`, `stats`, `pong`). Simulador de ESP32 para pruebas sin

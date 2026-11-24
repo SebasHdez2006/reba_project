@@ -24,6 +24,7 @@ import io
 import logging
 import time
 import zipfile
+from collections import deque
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Set
 
@@ -79,6 +80,9 @@ import time as _time
 device_state: Dict[str, Any] = {
     "last_seen": None,   # epoch seconds
     "ip": None,
+    "polls_total": 0,          # GET /api/device/config recibidos (proceso actual)
+    "last_poll_ts": None,      # epoch del último poll de config
+    "poll_ts": deque(maxlen=1024),  # epochs de polls p/ ventana deslizante (/h)
 }
 DEVICE_ONLINE_WINDOW_S = 150.0   # >2 polls perdidos = offline
 SERVER_START_TS = _time.time()  # uptime del proceso (métricas /api/perf)
@@ -94,25 +98,51 @@ def _is_device(request: Request) -> bool:
     return request.headers.get("user-agent", "").startswith(DEVICE_USER_AGENT)
 
 
-def _touch_device(request: Request) -> None:
-    """Registra que el ESP32 contactó al servidor (heartbeat)."""
+def _touch_device(request: Request) -> bool:
+    """
+    Registra que el ESP32 contactó al servidor (heartbeat).
+
+    Devuelve True si el request vino del dispositivo (User-Agent
+    REBA-ESP32); False para curl, navegador, bots, etc.
+    """
     if not _is_device(request):
-        return
+        return False
     device_state["last_seen"] = _time.time()
     try:
         device_state["ip"] = request.client.host if request.client else None
     except Exception:
         pass
+    return True
+
+
+def _record_poll() -> None:
+    """Cuenta un poll de config del dispositivo (GET /api/device/config)."""
+    now = _time.time()
+    device_state["polls_total"] += 1
+    device_state["last_poll_ts"] = now
+    device_state["poll_ts"].append(now)
 
 
 def device_status() -> Dict[str, Any]:
     """Estado del dispositivo para /api/health y /api/stats."""
     last = device_state.get("last_seen")
     online = last is not None and (_time.time() - last) < DEVICE_ONLINE_WINDOW_S
+    # Ventana deslizante de polls (última hora): con el firmware actual
+    # (POLL_CONFIG_MS=60 s) un dispositivo sano ronda ~60 polls/h.
+    polls_hour = 0
+    poll_ts = device_state.get("poll_ts")
+    if poll_ts:
+        cutoff = _time.time() - 3600
+        while poll_ts and poll_ts[0] < cutoff:
+            poll_ts.popleft()
+        polls_hour = len(poll_ts)
     return {
         "online": online,
         "last_seen": last,
         "ip": device_state.get("ip"),
+        "polls_total": device_state.get("polls_total", 0),
+        "polls_last_hour": polls_hour,
+        "last_poll_ts": device_state.get("last_poll_ts"),
     }
 
 
@@ -458,16 +488,17 @@ async def device_config(request: Request):
     Formato `clave=valor` por línea (sin JSON: el firmware lo parsea simple).
     Solo se devuelven las claves con override guardado — el firmware conserva
     sus valores locales para el resto. Cada poll cuenta como heartbeat del
-    dispositivo (device_state).
+    dispositivo (device_state) y se acumula en el contador de polls.
     """
-    _touch_device(request)
+    if _touch_device(request):
+        _record_poll()
     cfg = db.get_device_config()
     if not _is_device(request):
         # Terceros (curl, bots): sin credenciales WiFi y sin consumir la
         # orden WiFi de un solo uso destinada a la placa.
         cfg.pop("wifi_ssid", None)
         cfg.pop("wifi_pass", None)
-    for key in ("pump_cmd", "capture_cmd"):
+    for key in ("pump_cmd", "capture_cmd", "reconnect_cmd"):
         cmd = cfg.get(key)
         if cmd is not None and not _pump_cmd_fresh(cmd):
             db.delete_device_config(key)      # expirado: no entregarlo
@@ -539,6 +570,10 @@ async def device_ack(payload: Dict[str, Any]):
     if pending_cap == str(cmd_id):
         db.delete_device_config("capture_cmd")
         cleared = True
+    pending_rec = cfg.get("reconnect_cmd", "")
+    if pending_rec == str(cmd_id):
+        db.delete_device_config("reconnect_cmd")
+        cleared = True
     if cleared:
         logger.info("cmd %s confirmado por el dispositivo", cmd_id)
         return {"ok": True, "cleared": True}
@@ -600,6 +635,30 @@ async def capture_run():
     cmd_id = int(time.time())
     db.set_device_config("capture_cmd", str(cmd_id))
     logger.info("capture_cmd encolado: %s", cmd_id)
+    return {"ok": True, "cmd_id": cmd_id, "device": device_status(),
+            "note": "Se entrega en el próximo poll del ESP32 (<=60 s)"}
+
+
+@app.post("/api/device/reconnect")
+async def device_reconnect():
+    """
+    Encola una solicitud de reconexión para el ESP32-CAM.
+
+    Botón "Reconectar ESP32" del dashboard: la orden viaja como
+    `reconnect_cmd="<unix_ts>"` en el próximo GET /api/device/config del
+    dispositivo (<=60 s); el firmware fuerza WiFi.disconnect + un poll de
+    config inmediato al recibirla. Mismo TTL de PUMP_CMD_TTL_S que el
+    resto de comandos de un solo uso y ack por POST /api/device/ack.
+
+    OJO: la arquitectura es "push" — el servidor no puede iniciar la
+    conexión. Si el ESP32 está realmente offline (no alcanza el servidor),
+    esta orden no puede entregarse y expira; el dispositivo debe volver
+    a pollar por sus propios reintentos (firmware: REINTENTO_WIFI_MS,
+    failover srv_alt, reinicio a los 30 min sin config).
+    """
+    cmd_id = int(time.time())
+    db.set_device_config("reconnect_cmd", str(cmd_id))
+    logger.info("reconnect_cmd encolado: %s", cmd_id)
     return {"ok": True, "cmd_id": cmd_id, "device": device_status(),
             "note": "Se entrega en el próximo poll del ESP32 (<=60 s)"}
 
