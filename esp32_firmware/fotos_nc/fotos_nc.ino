@@ -67,6 +67,11 @@
 // descargar la nueva URL — ver docs).
 static const char* SRV_BASE_DEFAULT = "http://rebaserver.tech";
 
+// Versión del firmware: se imprime en el boot y se reporta en la
+// telemetría (GET/STATUS y POST /api/device/status -> "fw") para
+// distinguir builds sin abrir el serial. Subirla en cada cambio del sketch.
+static const char* FW_VERSION = "v3";
+
 // ---------------- Pines ----------------
 #define PIN_RELE   13
 #define PIN_TRIG   14
@@ -186,13 +191,21 @@ unsigned long  ultimoConfigOk    = 0;   // último GET /api/device/config exitos
 // (dedup por lastPumpCmdId en RTC) y se confirma con POST /api/device/ack.
 // La ejecución es NO bloqueante: lazo normal sigue vivo durante la bomba.
 RTC_DATA_ATTR unsigned long lastPumpCmdId = 0;
-RTC_DATA_ATTR unsigned long lastQueueClear = 0;  // dedup del comando queue_clear
+// Dedup de queue_clear: se persiste en NVS ("qclear_last"). Con RTC solo,
+// un power-cycle la reiniciaba a 0 y un queue_clear viejo que el server
+// siguiera sirviendo volvía a vaciar la cola en el primer poll — pérdida
+// silenciosa de fotos pendientes.
+unsigned long      lastQueueClear      = 0;
 unsigned long      queueClearPendiente = 0;      // ts pendiente de vaciar cola (loop)
 bool           cmdBombaPendiente = false;
 unsigned long  cmdBombaId        = 0;
 int            cmdBombaSecs      = 0;
-bool           bombaManualActiva = false;
-unsigned long  bombaManualFin    = 0;   // millis() deadline (wrap-safe)
+// Estado de bomba unificado (ciclo automático por N fotos + manual por
+// comando): el relé se suelta por deadline revisado en loop() — ninguna
+// ejecución bloquea el sensor, la cola ni el WiFi.
+bool           bombaPrendida     = false;
+unsigned long  bombaHasta        = 0;   // millis() deadline (wrap-safe)
+bool           bombaManualActiva = false;  // el ciclo en curso vino de comando
 
 // --- Foto remota (comando servidor -> ESP32 via /api/device/config) ---
 // El server encola "capture_cmd=<unix_ts>" (botón del dashboard); se toma
@@ -261,6 +274,8 @@ void cargarConfig() {
   pumpSeconds = clampInt(prefs.getString("pump_seconds", "10").toInt(), 1, 300, 10);
   distMinCm   = clampFloat(prefs.getString("dist_min_cm", "0").toFloat(), 0.0f, 500.0f, 0.0f);
   distMaxCm   = clampFloat(prefs.getString("dist_max_cm", "23").toFloat(), 1.0f, 500.0f, 23.0f);
+  // Dedup persistente de queue_clear (string, igual que el resto de claves).
+  lastQueueClear = (unsigned long)prefs.getString("qclear_last", "0").toInt();
   prefs.end();
   // Rango coherente: si min >= max (NVS corrupto), restablecer defaults.
   if (distMinCm >= distMaxCm) { distMinCm = 0.0f; distMaxCm = 23.0f; }
@@ -289,6 +304,17 @@ void guardarClave(const String& clave, const String& valor) {
 void onParamsSaved() {
   // El usuario envió el formulario del portal: persistir todo.
   String s = pSrvP->getValue(); s.trim();
+  while (s.endsWith("/")) s.remove(s.length() - 1);
+  // Validar como en aplicarClaveRemota: un typo ("https://", "IP:5000" sin
+  // esquema) no debe pisar una URL buena en NVS — el portal se recupera
+  // solo, pero ahorra un ciclo de corrección.
+  bool srvOk = (s.length() == 0) ||
+               (s.length() > 7 && s.length() <= 96 &&
+                s.startsWith("http://") && s.indexOf(' ') < 0);
+  if (!srvOk) {
+    Serial.println("Portal: server_url inválida (http://..., <=96 chars) — no se guardó");
+    s = "";                                // vacía = no toca "srv" en NVS
+  }
 
   prefs.begin("reba", false);
   prefs.putString("ssid", wmP->getWiFiSSID());
@@ -430,7 +456,8 @@ bool aplicarClaveRemota(const String& clave, const String& valor) {
     // que acepte HTTP plano (Portwarp u otro).
     // Una URL mala dejaria el dispositivo inalcanzable.
     if (v.length() > 7 && v.length() <= 96 && v.startsWith("http://")
-        && v.indexOf(' ') < 0 && v != srvPri) {
+        && v.indexOf(' ') < 0) {
+      if (v == srvPri) return true;        // override idéntico: no-op, no es error
       // Nueva URL principal: se activa de inmediato; si no responde,
       // el failover la cambia por srv_alt tras SRV_FAILOVER_UMBRAL polls.
       srvPri = v;
@@ -453,10 +480,11 @@ bool aplicarClaveRemota(const String& clave, const String& valor) {
     String v = valor;
     while (v.endsWith("/")) v.remove(v.length() - 1);
     if (v.length() <= 7 || v.length() > 96 || v.indexOf(' ') >= 0
-        || !v.startsWith("http://") || v == srvAlt) {
+        || !v.startsWith("http://")) {
       Serial.println("server_url_alt rechazada (debe ser http:// válido, <=96 chars)");
       return false;
     }
+    if (v == srvAlt) return true;          // override idéntico: no-op, no es error
     srvAlt = v;
     guardarClave("srv_alt", v);
     if (srvActiva == 1) srvBase = v;   // actualizar la activa en caliente
@@ -669,6 +697,7 @@ struct Foto {
   uint8_t* datos;
   size_t   tam;
   int      intentos;   // reintentos de envío; al llegar a FOTO_MAX_INTENTOS se descarta
+  char     evento[12]; // etiqueta del X-Evento: "ingreso" | "manual" | "remoto"
 };
 Foto cola[MAX_COLA];
 int  colaInicio = 0;
@@ -921,7 +950,7 @@ void forzarReconexion() {
 // ============================================================
 // Memoria temporal de fotos (cola en PSRAM)
 // ============================================================
-bool colaAgregar(const uint8_t* buf, size_t len) {
+bool colaAgregar(const uint8_t* buf, size_t len, const char* evento) {
   // Guard de heap: reservar COLA_HEAP_RESERVA para WiFi/HTTP/driver — una
   // foto enorme (VGA ~30 KB) no debe dejar el sistema sin memoria.
   if (len == 0 || (size_t)ESP.getFreeHeap() < len + COLA_HEAP_RESERVA) {
@@ -950,8 +979,11 @@ bool colaAgregar(const uint8_t* buf, size_t len) {
   cola[pos].datos = copia;
   cola[pos].tam = len;
   cola[pos].intentos = 0;
+  strncpy(cola[pos].evento, evento, sizeof(cola[pos].evento) - 1);
+  cola[pos].evento[sizeof(cola[pos].evento) - 1] = '\0';
   colaCantidad++;
-  Serial.printf("Foto guardada en memoria (%u bytes). Pendientes: %d\n", (unsigned)len, colaCantidad);
+  Serial.printf("Foto guardada en memoria (%u bytes, %s). Pendientes: %d\n",
+                (unsigned)len, cola[pos].evento, colaCantidad);
   return true;
 }
 
@@ -1057,17 +1089,17 @@ int httpSimple(const String& method, const String& url,
 // Devuelve el código HTTP (200, 404...) o -1 si no hubo respuesta.
 // 2xx = entregada; 4xx = error permanente del cliente (no reintentar);
 // -1/5xx = transitorio (reintentar).
-int enviarJPG(const uint8_t* datos, size_t tam) {
+int enviarJPG(const uint8_t* datos, size_t tam, const char* evento) {
   if (!asegurarWiFi()) return -1;
   if (srvBase.length() == 0) return -1;
 
   String url = srvBase + "/upload";
-  const char* hdrs =
-    "Content-Type: image/jpeg\r\n"
-    "X-Evento: ingreso\r\n";
+  char hdrs[96];
+  snprintf(hdrs, sizeof(hdrs),
+           "Content-Type: image/jpeg\r\nX-Evento: %s\r\n", evento);
   int codigo = httpSimple("POST", url, hdrs, datos, tam, nullptr, 15000);
   if (codigo > 0) {
-    Serial.printf("Foto enviada (%u bytes) -> HTTP %d\n", (unsigned)tam, codigo);
+    Serial.printf("Foto enviada (%u bytes, %s) -> HTTP %d\n", (unsigned)tam, evento, codigo);
   } else {
     Serial.println("Error enviando foto (sin respuesta del servidor)");
   }
@@ -1080,7 +1112,7 @@ void colaEnviar() {
 
   while (colaCantidad > 0) {
     Foto& f = cola[colaInicio];
-    int codigo = enviarJPG(f.datos, f.tam);
+    int codigo = enviarJPG(f.datos, f.tam, f.evento);
     f.intentos++;
 
     // Entregada (2xx) -> borrar. Error 4xx o demasiados reintentos ->
@@ -1128,9 +1160,12 @@ void reportarEstado() {
     + ",\"cola_max\":" + String(MAX_COLA)
     + ",\"pump_photos_n\":" + String(fotosTomadas)
     + ",\"pump_photos_max\":" + String(pumpPhotos)
+    + ",\"pump_on\":" + String(bombaPrendida ? 1 : 0)
     + ",\"pump_manual\":" + String(bombaManualActiva ? 1 : 0)
+    + ",\"srv_act\":" + String(srvActiva)
     + ",\"rele_pin\":" + String(digitalRead(PIN_RELE))
     + ",\"reset\":\"" + motivoReset() + "\""
+    + ",\"fw\":\"" + FW_VERSION + "\""
     + "}";
   String url = srvBase + "/api/device/status";
   const char* hdrs = "Content-Type: application/json\r\n";
@@ -1290,7 +1325,7 @@ void aplicarOtaPendiente() {
 // ============================================================
 // Foto con flash corto
 // ============================================================
-bool tomarFoto() {
+bool tomarFoto(const char* evento) {
   if (!camaraOk) { Serial.println("Camara no disponible aun"); return false; }
   digitalWrite(PIN_FLASH, HIGH);           // flash ON
   delay(FLASH_PREVIO_MS);                  // la cámara ajusta la exposición
@@ -1339,24 +1374,33 @@ bool tomarFoto() {
     return false;
   }
 
-  fallosCamara = 0;                        // captura sana
-  bool ok = colaAgregar(fb->buf, fb->len); // copia a la memoria temporal
-  esp_camera_fb_return(fb);                // libera el buffer de la cámara
+  fallosCamara = 0;                          // captura sana
+  bool ok = colaAgregar(fb->buf, fb->len, evento);  // copia a la memoria temporal
+  esp_camera_fb_return(fb);                  // libera el buffer de la cámara
   return ok;
 }
 
 // ============================================================
 // Bomba
 // ============================================================
-void correrBomba() {
-  Serial.printf("Bomba ENCENDIDA %lu s\n", pumpSeconds);
-  bombaEncender();
-  // Espera troceada: un delay() de hasta 300 s dispararía el watchdog.
-  for (unsigned long t0 = millis(); millis() - t0 < pumpSeconds * 1000UL; delay(100)) wdtFeed();
-  bombaApagar();
-  bombaManualActiva = false;   // el ciclo automático también apaga la manual
-  Serial.println("Bomba APAGADA");
+// Enciende la bomba SIN bloquear: el relé queda activo y loop() lo apaga
+// al vencer bombaHasta (wrap-safe). Si ya hay un ciclo corriendo se
+// extiende el plazo — nunca se acorta: gana el deadline más lejano.
+void bombaArrancar(unsigned long secs, bool manual) {
+  if (secs == 0) secs = 1;
+  unsigned long fin = millis() + secs * 1000UL;
+  if (bombaPrendida && (long)(fin - bombaHasta) < 0) fin = bombaHasta;
+  if (!bombaPrendida) {
+    bombaEncender();
+    bombaPrendida = true;
+    bombaManualActiva = manual;
+  }
+  bombaHasta = fin;
+  Serial.printf("Bomba ENCENDIDA %lu s%s\n", secs, manual ? " (manual)" : "");
+}
 
+void correrBomba() {
+  bombaArrancar(pumpSeconds, false);
   fotosTomadas = 0;
   dentro = 0;
   fuera = 0;
@@ -1366,10 +1410,10 @@ void correrBomba() {
 // ============================================================
 // Cada vez que entra un objeto
 // ============================================================
-void ingresoDetectado() {
+void ingresoDetectado(const char* evento) {
   Serial.println(">> Ingreso de objeto detectado");
 
-  if (tomarFoto()) {
+  if (tomarFoto(evento)) {
     fotosTomadas++;
     Serial.printf("Fotos tomadas: %d de %d\n", fotosTomadas, pumpPhotos);
   }
@@ -1384,8 +1428,8 @@ void ingresoDetectado() {
 void setup() {
   Serial.begin(115200);
   bootCount++;
-  Serial.printf("heap_setup=%u boots=%lu reset=%s\n", (unsigned)ESP.getFreeHeap(), bootCount,
-                motivoReset());
+  Serial.printf("heap_setup=%u boots=%lu reset=%s fw=%s\n", (unsigned)ESP.getFreeHeap(),
+                bootCount, motivoReset(), FW_VERSION);
   // Task watchdog (el core 3.x ya lo inicializa: reconfigurar timeout y
   // suscribir loopTask). bit0 = idle task CPU0, igual que el default.
   esp_task_wdt_config_t wdtCfg = {
@@ -1403,7 +1447,6 @@ void setup() {
   pinMode(PIN_ECHO, INPUT);
   digitalWrite(PIN_TRIG, LOW);
 
-  Serial.begin(115200);
   Serial.setDebugOutput(false);
   delay(500);
 
@@ -1454,11 +1497,12 @@ void ejecutarComandoSerial(String cmd) {
   op.toUpperCase();
 
   if (op == "HELP") {
-    Serial.println(F("Comandos serie:"));
+    Serial.printf("Comandos serie (fw %s):\n", FW_VERSION);
     Serial.println(F("  GET"));
     Serial.println(F("  SET wifi_ssid=... wifi_pass=... server_url=..."));
     Serial.println(F("  SET pump_photos=N pump_seconds=N dist_min_cm=F dist_max_cm=F"));
     Serial.println(F("  CAPTURE   (foto manual: flash + cola + upload + contador bomba)"));
+    Serial.println(F("  PUMP [s]  (bomba manual: s segundos; sin s usa pump_seconds)"));
     Serial.println(F("  RECONNECT (fuerza WiFi.disconnect + poll de config inmediato)"));
     Serial.println(F("  STATUS    (diagnostico: heap, camara, wifi, cola, sensor)"));
     Serial.println(F("  OTA       (actualizacion de firmware: {server_url}/firmware.bin)"));
@@ -1469,24 +1513,30 @@ void ejecutarComandoSerial(String cmd) {
     prefs.begin("reba", true);
     String otaLast = prefs.getString("ota_last", "-");
     prefs.end();
-    Serial.printf("wifi_ssid=%s\nwifi_pass=%s\nserver_url=%s\nserver_url_alt=%s\nsrv_activa=%d\n"
+    Serial.printf("fw=%s\nwifi_ssid=%s\nwifi_pass=%s\nserver_url=%s\nserver_url_alt=%s\n"
+                  "srv_activa=%d\nserver_activo=%s\n"
                   "pump_photos=%d\npump_seconds=%d\ndist_min_cm=%.1f\ndist_max_cm=%.1f\n"
                   "ota_last=%s\n",
+                  FW_VERSION,
                   wifiSsid.c_str(), wifiPass.c_str(), srvPri.c_str(), srvAlt.c_str(), srvActiva,
+                  srvBase.c_str(),
                   pumpPhotos, pumpSeconds, distMinCm, distMaxCm,
                   otaLast.c_str());
   }
   else if (op == "STATUS") {
-    Serial.printf("uptime=%lus boots=%lu heap=%u/%u\n",
+    Serial.printf("fw=%s uptime=%lus boots=%lu heap=%u/%u\n",
+                  FW_VERSION,
                   (unsigned long)(millis() / 1000), bootCount,
                   (unsigned)ESP.getFreeHeap(),
                   (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
-    Serial.printf("camara=%s fallos=%d wifi=%s ip=%s portal=%d\n",
+    Serial.printf("camara=%s fallos=%d wifi=%s rssi=%d ip=%s portal=%d srv=%s\n",
                   camaraOk ? "OK" : "CAIDA", fallosCamara,
                   WiFi.status() == WL_CONNECTED ? "conectada" : "caida",
-                  WiFi.localIP().toString().c_str(), (int)portalActivo);
-    Serial.printf("cola=%d/%d fotos_bomba=%d/%d dist_ultima=%.1fcm rango=[%.1f,%.1f]\n",
+                  (int)WiFi.RSSI(),
+                  WiFi.localIP().toString().c_str(), (int)portalActivo, srvBase.c_str());
+    Serial.printf("cola=%d/%d fotos_bomba=%d/%d bomba=%s dist_ultima=%.1fcm rango=[%.1f,%.1f]\n",
                   colaCantidad, MAX_COLA, fotosTomadas, pumpPhotos,
+                  bombaPrendida ? "ON" : "off",
                   lastDistCm, distMinCm, distMaxCm);
   }
   else if (op == "SET") {
@@ -1510,7 +1560,17 @@ void ejecutarComandoSerial(String cmd) {
   }
   else if (op == "CAPTURE") {
     Serial.println("CAPTURE manual por USB...");
-    ingresoDetectado();
+    ingresoDetectado("manual");
+  }
+  else if (op == "PUMP") {
+    // Bomba manual por USB: PUMP o PUMP 15 (segundos, validado 1-300).
+    unsigned long secs = pumpSeconds;
+    if (resto.length() > 0) {
+      if (!esEntero(resto)) { Serial.println("PUMP: segundos inválidos (1-300)"); return; }
+      secs = (unsigned long)clampInt(resto.toInt(), 1, 300, (int)pumpSeconds);
+    }
+    Serial.printf("PUMP manual: %lu s\n", secs);
+    bombaArrancar(secs, true);
   }
   else if (op == "RECONNECT") {
     forzarReconexion();
@@ -1557,10 +1617,8 @@ void procesarCmdBomba() {
   if (cmdBombaId <= lastPumpCmdId) return;      // dedup: ya se ejecutó
   lastPumpCmdId = cmdBombaId;                   // RTC: sobrevive resets
 
-  bombaManualActiva = true;
-  bombaManualFin = millis() + (unsigned long)cmdBombaSecs * 1000UL;
   Serial.printf("Bomba MANUAL %ds (cmd %lu)\n", cmdBombaSecs, cmdBombaId);
-  bombaEncender();
+  bombaArrancar((unsigned long)cmdBombaSecs, true);
 
   // ACK al servidor: borra el override para que no se re-entregue.
   // Si falla (sin WiFi), el TTL del server lo expira; el dedup RTC evita
@@ -1585,7 +1643,7 @@ void procesarCmdFoto() {
   if (cmdFotoId <= lastCaptureCmdId) return;    // dedup: ya se ejecutó
   lastCaptureCmdId = cmdFotoId;                 // RTC: sobrevive resets
   Serial.printf("Foto remota (cmd %lu)\n", cmdFotoId);
-  ingresoDetectado();
+  ingresoDetectado("remoto");
 
   if (WiFi.status() == WL_CONNECTED && srvBase.length() > 0) {
     String url = srvBase + "/api/device/ack";
@@ -1632,10 +1690,14 @@ void loop() {
   procesarCmdReconnect();
   aplicarOtaPendiente();
 
-  // Vaciado de cola de fotos pedido por el server (queue_clear).
+  // Vaciado de cola de fotos pedido por el server (queue_clear). El dedup
+  // se persiste en NVS antes de vaciar: un power-cycle no debe re-ejecutar
+  // un queue_clear viejo que el server siga sirviendo.
   if (queueClearPendiente != 0) {
-    lastQueueClear = queueClearPendiente;
+    unsigned long qcId = queueClearPendiente;
     queueClearPendiente = 0;
+    lastQueueClear = qcId;
+    guardarClave("qclear_last", String(qcId));
     int n = colaCantidad;
     while (colaCantidad > 0) {
       free(cola[colaInicio].datos);
@@ -1644,13 +1706,26 @@ void loop() {
       colaCantidad--;
     }
     Serial.printf("Cola vaciada por comando remoto (%d fotos descartadas)\n", n);
+    // Ack: el server borra el override para no re-entregarlo. Si falla,
+    // el dedup NVS cubre la re-entrega y el TTL del server la expira.
+    if (WiFi.status() == WL_CONNECTED && srvBase.length() > 0) {
+      String url = srvBase + "/api/device/ack";
+      String body = "{\"cmd_id\":" + String(qcId) + "}";
+      const char* hdrs = "Content-Type: application/json\r\n";
+      int codigo = httpSimple("POST", url, hdrs,
+                              (const uint8_t*)body.c_str(), body.length(),
+                              nullptr, 8000);
+      Serial.printf("Ack queue_clear %lu -> HTTP %d\n", qcId, codigo);
+    }
   }
 
-  // Apagado de la bomba manual al cumplirse el plazo (wrap-safe).
-  if (bombaManualActiva && (long)(ahora - bombaManualFin) >= 0) {
+  // Apagado de la bomba al cumplirse el plazo (wrap-safe) — cubre el ciclo
+  // automático por N fotos y el manual por comando.
+  if (bombaPrendida && (long)(ahora - bombaHasta) >= 0) {
+    bombaPrendida = false;
     bombaManualActiva = false;
     bombaApagar();
-    Serial.println("Bomba manual APAGADA");
+    Serial.println("Bomba APAGADA");
   }
 
   // Sin credenciales guardadas: mantener el AP de configuración disponible
@@ -1708,7 +1783,7 @@ void loop() {
     WiFi.disconnect();                     // solo STA: REBA-Setup sigue arriba
     ultimoIntentoWiFi = 0;
   }
-  if (sinConfig >= SIN_CONFIG_REINICIO_MS && !bombaManualActiva) {
+  if (sinConfig >= SIN_CONFIG_REINICIO_MS && !bombaPrendida) {
     Serial.println("30 min sin respuesta del servidor: reiniciando");
     delay(200);
     ESP.restart();
@@ -1728,7 +1803,7 @@ void loop() {
     if (fuera >= LECTURAS_PARA_REARMAR) armado = true;
   } else if (dentro >= LECTURAS_PARA_CONTAR) {
     armado = false;
-    ingresoDetectado();
+    ingresoDetectado("ingreso");
   }
 
   // Si hay fotos pendientes (falló el envío antes), reintenta en segundo plano

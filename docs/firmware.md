@@ -53,8 +53,9 @@ En Arduino IDE: abrir la carpeta `fotos_nc` (el `.ino` debe llevar el nombre de 
 | `capture_cmd` | `<unix_ts>` | — | **Solo servidor→ESP32**: foto remota de un solo uso (botón "Tomar foto ahora" → `POST /api/capture/run`); dedup RTC + ack |
 | `reconnect_cmd` | `<unix_ts>` | — | **Solo servidor→ESP32**: reconexión forzada de un solo uso (botón "Reconectar ESP32" → `POST /api/device/reconnect`); dedup RTC + ack |
 | `ota_url` | `http://…` ≤128 | — | **Solo servidor→ESP32**: URL de un `.bin` para auto-actualización OTA (ver abajo). Dedup por NVS `ota_last` |
+| `queue_clear` | `<unix_ts>` | — | **Solo servidor→ESP32**: vacía la cola de fotos una vez por ts nuevo. Dedup **persistente en NVS** (`qclear_last`) + ack — un power-cycle no re-ejecuta órdenes viejas |
 
-Validación estricta en `aplicarClaveRemota()`: numéricos con `esEntero`/`esFloat` (rechaza `"3abc"`, `"abc"`, fuera de rango), `server_url` solo `http://` con host, longitudes WiFi. El comando serie `SET` reporta `aplicado`/`rechazada` real.
+Validación estricta en `aplicarClaveRemota()`: numéricos con `esEntero`/`esFloat` (rechaza `"3abc"`, `"abc"`, fuera de rango), `server_url` solo `http://` con host, longitudes WiFi. Un override **idéntico al valor actual es no-op** (devuelve éxito sin re-aplicar ni loguear "rechazada"). El comando serie `SET` reporta `aplicado`/`rechazada` real.
 
 ---
 
@@ -66,7 +67,7 @@ leerCm() cada 60 ms ──► ¿dentro de [dist_min, dist_max]?
    │ 2 lecturas seguidas    │ 3 fuera de rango → rearma
    ▼                        ▼
 ingresoDetectado(): flash 150 ms → tomarFoto() → cola → POST /upload
-   └─► cada pump_photos fotos → correrBomba() (ON pump_seconds, bloqueante)
+   └─► cada pump_photos fotos → bombaArrancar() (ON pump_seconds, NO bloqueante)
 ```
 
 - **Cola en RAM** (`MAX_COLA=6`): si el upload falla queda pendiente y reintenta cada 15 s; se descarta en HTTP 4xx o ≥25 intentos (anti poison-pill). **Un reboot pierde la cola** (evidencia transitoria).
@@ -83,11 +84,11 @@ El dashboard puede encender la bomba a mano sin tocar el firmware:
 
 1. `POST /api/pump/run {"seconds": 10}` → server guarda `pump_cmd=<unix_ts>:<s>` en `device_config` (válido 10 min; expirado no se sirve).
 2. El ESP32 lo recibe en su poll de config → `aplicarClaveRemota` lo valida y lo deja **pendiente**.
-3. `loop()` lo ejecuta **no bloqueante**: `bombaEncender()` + deadline `bombaManualFin`; el sensor, la cola y el WiFi siguen vivos. Al cumplirse el plazo → `bombaApagar()`.
+3. `loop()` lo ejecuta **no bloqueante**: `bombaArrancar(secs, manual)` — relé activo + deadline `bombaHasta`; el sensor, la cola y el WiFi siguen vivos. Al cumplirse el plazo → `bombaApagar()`. El ciclo automático por N fotos usa la misma maquinaria: **ningún ciclo de bomba bloquea el loop**.
 4. Dedup con `lastPumpCmdId` (`RTC_DATA_ATTR`, sobrevive resets) → nunca ejecuta el mismo `cmd_id` dos veces.
 5. Confirma con `POST /api/device/ack {"cmd_id": N}` → el server borra el override (`pending_cmd` queda `None`).
 
-También funciona por serie: `SET pump_cmd=<ts>:<s>` (uso típico: pruebas de banco).
+También funciona por serie: `PUMP [s]` (sin `s` usa `pump_seconds`) o `SET pump_cmd=<ts>:<s>`.
 
 ---
 
@@ -109,12 +110,13 @@ También por serie: `RECONNECT` (efecto inmediato) o `SET reconnect_cmd=<ts>`.
 ## Diagnóstico por serial
 
 ```text
-HELP     → lista de comandos
-GET      → wifi_ssid, wifi_pass, server_url, pump_*, dist_*, ota_last
+HELP     → lista de comandos (incluye versión fw)
+GET      → fw, wifi_ssid, wifi_pass, server_url(_alt), server_activo, pump_*, dist_*, ota_last
 SET k=v  → aplica clave (mismas validaciones que la remota; acepta ota_url)
-CAPTURE   → foto manual (flash + cola + upload + contador bomba)
+CAPTURE   → foto manual (flash + cola + upload + contador bomba; X-Evento "manual")
+PUMP [s] → bomba manual N s (o pump_seconds sin argumento); no bloquea
 RECONNECT → fuerza WiFi.disconnect + poll de config inmediato
-STATUS    → uptime, boots, heap, cámara, WiFi, cola, bomba, distancia
+STATUS    → fw, uptime, boots, heap, cámara, WiFi+RSSI+srv, cola, bomba, distancia
 OTA      → auto-actualización: descarga {server_url}/firmware.bin y reflashea
 OTA http://IP:5000/x.bin → idem con URL explícita
 REBOOT   → reinicio inmediato

@@ -498,7 +498,7 @@ async def device_config(request: Request):
         # orden WiFi de un solo uso destinada a la placa.
         cfg.pop("wifi_ssid", None)
         cfg.pop("wifi_pass", None)
-    for key in ("pump_cmd", "capture_cmd", "reconnect_cmd"):
+    for key in ("pump_cmd", "capture_cmd", "reconnect_cmd", "queue_clear"):
         cmd = cfg.get(key)
         if cmd is not None and not _pump_cmd_fresh(cmd):
             db.delete_device_config(key)      # expirado: no entregarlo
@@ -573,6 +573,10 @@ async def device_ack(payload: Dict[str, Any]):
     pending_rec = cfg.get("reconnect_cmd", "")
     if pending_rec == str(cmd_id):
         db.delete_device_config("reconnect_cmd")
+        cleared = True
+    pending_qc = cfg.get("queue_clear", "")
+    if pending_qc == str(cmd_id):
+        db.delete_device_config("queue_clear")
         cleared = True
     if cleared:
         logger.info("cmd %s confirmado por el dispositivo", cmd_id)
