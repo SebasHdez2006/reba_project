@@ -26,6 +26,7 @@
 
   const state = {
     config: null,
+    latestImg: null,        // <img> del visor principal, creada al primer dato
     stats: {
       counters: {},
       percentages: {},
@@ -170,6 +171,9 @@
     const pill = $("deviceStatus");
     const txt = $("deviceStatusText");
     state.deviceOnline = !!device.online;
+    // Empty state global: sin señal se ocultan las métricas muertas y se
+    // muestra el aviso "esperando conexión" en vez del mar de "—".
+    document.body.classList.toggle("device-offline", !device.online);
     if (!pill || !txt) return;
     state.deviceLastSeen = device.last_seen ?? null;
     updatePingNote();
@@ -178,11 +182,15 @@
       pill.classList.remove("offline");
       txt.textContent = device.ip ? `ESP32 · ${device.ip}` : "ESP32 · en línea";
       pill.title = `ESP32-CAM en línea${device.ip ? ` (${device.ip})` : ""}`;
+      // Al volver la señal se redibuja la bomba con el último dato cacheado
+      // (el poll de stats no vuelve a pedir /api/pump-status).
+      if (state.pump) applyPumpStatus(state.pump);
     } else {
       pill.classList.remove("online");
       pill.classList.add("offline");
       txt.textContent = "ESP32 · sin señal";
       pill.title = "ESP32-CAM sin heartbeat (>150 s)";
+      setText("pumpState", "sin señal");
     }
   }
 
@@ -206,6 +214,8 @@
   }
 
   function applyDetections(payload) {
+    const vmeta = document.querySelector(".video-meta");
+    if (vmeta) vmeta.hidden = false;
     setText("frameCount", String(payload.count ?? payload.detections?.length ?? 0));
     setText(
       "inferMs",
@@ -228,9 +238,15 @@
     const id = String(capture.id);
     const imageUrl = `/api/captures/${encodeURIComponent(id)}/image`;
     const classes = (capture.class_names || []).join(", ") || "Residuo detectado";
-    const latestImage = $("latestCaptureImage");
     const emptyState = $("captureEmpty");
-    if (latestImage) {
+    // La <img> solo existe cuando hay captura real: nada de src vacío ni
+    // etiquetas rotas en el DOM antes de la primera foto.
+    let latestImage = state.latestImg;
+    if (!latestImage) {
+      const frame = document.querySelector(".capture-frame");
+      latestImage = document.createElement("img");
+      latestImage.id = "latestCaptureImage";
+      latestImage.alt = "Última foto clasificada";
       latestImage.onerror = () => {
         latestImage.hidden = true;
         if (emptyState) {
@@ -238,10 +254,14 @@
           emptyState.textContent = "Imagen no disponible para esta captura.";
         }
       };
-      latestImage.src = `${imageUrl}?v=${encodeURIComponent(id)}`;
-      latestImage.hidden = false;
+      if (frame) frame.prepend(latestImage);
+      state.latestImg = latestImage;
     }
+    latestImage.src = `${imageUrl}?v=${encodeURIComponent(id)}`;
+    latestImage.hidden = false;
     if (emptyState) emptyState.hidden = true;
+    const vmeta = document.querySelector(".video-meta");
+    if (vmeta) vmeta.hidden = false;
     setText("latestCaptureClasses", classes);
     setText("latestCaptureTime", formatCaptureTs(capture.ts));
     // Metadatos técnicos de la captura mostrada (no solo de la última inferencia)
@@ -382,14 +402,18 @@
     );
     setText(
       "pumpState",
-      current > 0 ? `${current}/${trigger} fotos` : "esperando fotos"
+      !state.deviceOnline
+        ? "sin señal"
+        : current > 0
+          ? `${current}/${trigger} fotos`
+          : "esperando fotos"
     );
     updatePumpSegments(current, trigger);
 
     const last = pump.last_pump_event;
     setText(
       "lastPumpEvent",
-      last?.ts ? new Date(last.ts).toLocaleString() : "—"
+      last?.ts ? new Date(last.ts).toLocaleString() : "aún no"
     );
   }
 
@@ -430,10 +454,14 @@
     if (alertText) {
       alertText.textContent = `Bomba activada por la ESP32 (~${seconds} s).`;
     }
+    banner.hidden = false;
     banner.classList.add("visible");
     if (state.alertTimer) clearTimeout(state.alertTimer);
     state.alertTimer = setTimeout(
-      () => banner.classList.remove("visible"),
+      () => {
+        banner.classList.remove("visible");
+        banner.hidden = true;
+      },
       Math.max(3000, seconds * 1000)
     );
   }
@@ -601,6 +629,15 @@
       alert("Para cambiar el WiFi llena SSID y contraseña (o deja ambos vacíos).");
       return;
     }
+    // Un rango invertido confunde al sensor de distancia: validar aquí
+    // además del clamp del firmware.
+    const dMin = parseFloat(payload.dist_min_cm ?? $("cfgDistMin")?.value);
+    const dMax = parseFloat(payload.dist_max_cm ?? $("cfgDistMax")?.value);
+    if (!Number.isNaN(dMin) && !Number.isNaN(dMax) && dMin >= dMax) {
+      setDeviceConfigStatus("rango inválido", "offline");
+      alert("La distancia mínima de disparo debe ser menor que la máxima.");
+      return;
+    }
     try {
       const res = await fetch("/api/admin/device-config", {
         method: "POST",
@@ -736,6 +773,7 @@
     const meta = $("lightboxMeta");
     if (!lb || !img) return;
     img.src = `/api/captures/${encodeURIComponent(capture.id)}/image?v=${Date.now()}`;
+    img.hidden = false;
     meta.textContent = `#${capture.id} · ${capture.ts ? new Date(capture.ts).toLocaleString() : ""}`;
     lb.hidden = false;
     try {
@@ -757,6 +795,8 @@
   function closeLightbox() {
     const lb = $("lightbox");
     if (lb) lb.hidden = true;
+    const img = $("lightboxImg");
+    if (img) { img.hidden = true; img.removeAttribute("src"); }
   }
 
   // ---------------------------------------------------------------------------
@@ -1199,9 +1239,11 @@
 
       const t = (id, v) => setText(id, hasTel ? v : "sin datos");
       t("cDist", tel.dist_cm != null ? `${tel.dist_cm} cm` : "—");
+      // rele_pin es el nivel crudo del GPIO (activo en bajo, bomba en NC):
+      // pin HIGH -> bomba encendida; pin LOW -> bomba apagada.
       t("cRelay",
         tel.rele_pin != null
-          ? (tel.pump_manual ? "bomba manual ON" : `GPIO13=${tel.rele_pin}`)
+          ? (tel.pump_manual ? "bomba manual ON" : (tel.rele_pin ? "bomba encendida" : "bomba apagada"))
           : "—");
       t("cQueue",
         tel.cola_n != null ? `${tel.cola_n}/${tel.cola_max ?? "?"} fotos` : "—");
@@ -1241,10 +1283,19 @@
       state.currentCapture = null;
       const gal = $("captureGallery");
       if (gal) gal.replaceChildren();
-      const img = $("latestCaptureImage");
+      if (state.latestImg) {
+        state.latestImg.remove();
+        state.latestImg = null;
+      }
       const emp = $("captureEmpty");
-      if (img) img.hidden = true;
-      if (emp) emp.hidden = false;
+      if (emp) {
+        emp.hidden = false;
+        emp.textContent = "Esperando que la ESP32 envíe la primera foto.";
+      }
+      const badge = $("captureBadge");
+      if (badge) badge.hidden = true;
+      const vmeta = document.querySelector(".video-meta");
+      if (vmeta) vmeta.hidden = true;
       setText("latestCaptureClasses", "Sin capturas");
       setText("latestCaptureTime", "—");
       setText("captureCount", "0 fotos");
@@ -1335,7 +1386,7 @@
 
   // --- Navegación por pestañas (sidebar desktop / bottom-nav móvil) ---
   const VIEW_META = {
-    live: ["En vivo", "Telemetría y capturas en tiempo real"],
+    live: ["En vivo", "Capturas y bomba · el ESP32 reporta cada ~60 s"],
     analytics: ["Analítica", "Materiales, actividad y archivo de capturas"],
     device: ["Dispositivo", "Configuración y salud del ESP32-CAM"],
   };
@@ -1384,7 +1435,7 @@
       btn.setAttribute("aria-label",
         isLight ? "Cambiar a tema oscuro" : "Cambiar a tema claro");
     }
-    setText("themeToggleLabel", isLight ? "Claro" : "Oscuro");
+    setText("themeToggleLabel", isLight ? "Tema · Claro" : "Tema · Oscuro");
     redrawCharts();   // los canvas se repintan con los colores del nuevo tema
   }
 
@@ -1400,9 +1451,8 @@
   applyTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark", false);
 
   // --- Chips de duración de la bomba manual ---
+  // Presets que rellenan el campo; un valor a mano deselecciona el chip.
   const pumpChips = $("pumpChips");
-  const pumpCustomWrap = $("pumpCustomWrap");
-  const pumpOtherBtn = $("pumpOtherBtn");
   const manualInput = $("manualPumpSeconds");
   function setPumpChipSelected(chip) {
     if (!pumpChips) return;
@@ -1410,28 +1460,23 @@
       c.classList.toggle("is-selected", c === chip);
     });
   }
+  function syncPumpChips() {
+    if (!pumpChips || !manualInput) return;
+    const match = [...pumpChips.querySelectorAll(".chip[data-seconds]")]
+      .find((c) => c.dataset.seconds === manualInput.value);
+    setPumpChipSelected(match || null);
+  }
   if (pumpChips) {
     pumpChips.querySelectorAll(".chip[data-seconds]").forEach((chip) => {
       chip.addEventListener("click", () => {
         if (manualInput) manualInput.value = chip.dataset.seconds;
-        if (pumpCustomWrap) pumpCustomWrap.hidden = true;
         setPumpChipSelected(chip);
       });
     });
-    // Chip preseleccionado según el valor inicial del input
-    const preset = [...pumpChips.querySelectorAll(".chip[data-seconds]")]
-      .find((c) => manualInput && c.dataset.seconds === manualInput.value);
-    if (preset) setPumpChipSelected(preset);
   }
-  if (pumpOtherBtn) {
-    pumpOtherBtn.addEventListener("click", () => {
-      if (pumpCustomWrap) pumpCustomWrap.hidden = false;
-      setPumpChipSelected(pumpOtherBtn);
-      if (manualInput) {
-        manualInput.focus();
-        manualInput.select();
-      }
-    });
+  if (manualInput) {
+    manualInput.addEventListener("input", syncPumpChips);
+    syncPumpChips();
   }
 
   // --- Mostrar / ocultar contraseña WiFi ---

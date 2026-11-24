@@ -419,6 +419,9 @@ code {
   animation: pulse 2.2s ease-in-out infinite;
 }
 
+.status-pill:empty {
+  display: none;
+}
 .status-pill.offline {
   border-color: rgba(245, 176, 76, 0.3);
 }
@@ -618,6 +621,9 @@ code {
   margin-top: 11px;
   padding-top: 11px;
   border-top: 1px dashed var(--line);
+}
+.video-meta[hidden] {
+  display: none;
 }
 
 .meta-item {
@@ -823,20 +829,9 @@ code {
   font-weight: 600;
   box-shadow: 0 6px 16px -8px rgba(16, 185, 129, 0.6);
 }
-.chip-other {
-  font-family: var(--font-sans);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.chip-other.is-selected {
-  background: var(--raised);
-  border-color: var(--accent);
-  color: var(--accent-hi);
-}
 
 .pump-custom {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1409,22 +1404,24 @@ code {
   font-size: 13px;
 }
 
-/* Ayuda (?) desplegable */
+/* Ayuda desplegable */
 .help {
   position: relative;
   flex: none;
 }
 .help > summary {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
   border: 1px solid var(--line-strong);
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   cursor: pointer;
   list-style: none;
   user-select: none;
@@ -1786,9 +1783,10 @@ button.primary:hover {
   .view[hidden] {
     display: none;
   }
-  .view-live .panel-capture { grid-column: 1 / span 7; grid-row: 1 / span 2; }
-  .view-live .panel-pump { grid-column: 8 / span 5; grid-row: 1; }
-  .view-live .panel-perf { grid-column: 8 / span 5; grid-row: 2; }
+  .view-live .offline-banner { grid-column: 1 / -1; }
+  .view-live .panel-capture { grid-column: 1 / span 7; grid-row: span 2; }
+  .view-live .panel-pump { grid-column: 8 / span 5; }
+  .view-live .panel-perf { grid-column: 8 / span 5; }
 
   .panel-perf .metric-grid {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -1948,6 +1946,121 @@ button.primary:hover {
 }
 .circuit-state {
   margin-top: 10px;
+}
+
+/* ===== Empty state: dispositivo sin señal ===== */
+.offline-banner {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  border-radius: var(--r-card);
+  border: 1px dashed var(--line-strong);
+  background: var(--surface);
+  text-align: center;
+}
+.offline-banner strong {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.offline-banner p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--faint);
+}
+.offline-empty {
+  display: none;
+  margin: 0 0 12px;
+  padding: 14px;
+  border-radius: var(--r-ctl);
+  border: 1px dashed var(--line-strong);
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: center;
+}
+body.device-offline .offline-banner,
+body.device-offline .offline-empty {
+  display: flex;
+  flex-direction: column;
+}
+body.device-offline .panel-perf .metric-grid,
+body.device-offline .panel-circuit .circuit-grid,
+body.device-offline .panel-circuit #circuitNote {
+  display: none;
+}
+/* Las capturas históricas y la tira de recientes se conservan: son datos
+   reales aunque el dispositivo esté sin señal. */
+
+/* ===== Zona de peligro: acciones destructivas separadas ===== */
+.danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  padding: 13px 15px;
+  border: 1px solid var(--danger-border);
+  border-radius: var(--r-ctl);
+  background: rgba(248, 113, 113, 0.05);
+}
+.danger-copy {
+  min-width: 0;
+}
+.danger-copy strong {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--danger-text);
+}
+.danger-copy p {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* ===== Jerarquía: paneles de diagnóstico, peso secundario ===== */
+.panel-minor {
+  background: var(--surface);
+  box-shadow: none;
+}
+.panel-tag {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+/* ===== Hints bajo etiquetas de formulario ===== */
+.field-hint {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--faint);
+}
+
+/* ===== Fila de duración: presets + valor libre ===== */
+.pump-duration-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.pump-duration-row .chip-row {
+  flex: 1 1 220px;
+}
+.pump-duration-row .pump-custom {
+  flex: none;
+}
+.pump-custom input {
+  width: 76px;
 }
 
 /* ===== Botones de peligro (reset / borrado) ===== */

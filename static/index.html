@@ -17,9 +17,9 @@
         if (t) document.documentElement.dataset.theme = t;
       } catch (e) { /* storage bloqueado: tema oscuro por defecto */ }
     </script>
-    <link rel="stylesheet" href="/styles.css?v=20261124-1" />
+    <link rel="stylesheet" href="/styles.css?v=20261124-2" />
   </head>
-  <body>
+  <body class="device-offline">
     <div class="app">
       <aside class="sidebar">
         <div class="brand">
@@ -50,7 +50,7 @@
           </button>
         </nav>
         <div class="sidebar-foot">
-          <span class="sidebar-note">REBA · panel local<br />ESP32-CAM · YOLOv8 ONNX</span>
+          <span class="sidebar-note">ESP32-CAM · YOLOv8 ONNX</span>
         </div>
       </aside>
 
@@ -63,7 +63,7 @@
             </div>
             <div class="view-heading">
               <h1 class="view-title" id="viewTitle">En vivo</h1>
-              <p class="view-sub" id="viewSub">Telemetría y capturas en tiempo real</p>
+              <p class="view-sub" id="viewSub">Capturas y bomba · el ESP32 reporta cada ~60 s</p>
             </div>
           </div>
           <div class="topbar-right">
@@ -71,12 +71,12 @@
                     aria-checked="false" aria-label="Cambiar a tema claro"
                     title="Cambiar tema claro/oscuro">
               <span class="tt-track" aria-hidden="true"><span class="tt-knob"></span></span>
-              <span class="tt-label" id="themeToggleLabel">Oscuro</span>
+              <span class="tt-label" id="themeToggleLabel">Tema · Oscuro</span>
             </button>
-            <span id="lastPingText" class="ping-note" title="Último contacto del ESP32-CAM">—</span>
+            <span id="lastPingText" class="ping-note" title="Último contacto del ESP32-CAM">Ping · sin contacto</span>
             <div id="deviceStatus" class="status-pill offline" title="Estado del ESP32-CAM (heartbeat)">
               <span class="status-dot" aria-hidden="true"></span>
-              <span id="deviceStatusText">ESP32: —</span>
+              <span id="deviceStatusText">ESP32 · sin señal</span>
             </div>
             <div id="wsStatus" class="status-pill offline" title="Estado del WebSocket">
               <span class="status-dot" aria-hidden="true"></span>
@@ -85,14 +85,21 @@
           </div>
         </header>
 
-        <div id="alertBanner" class="alert" role="alert" aria-live="assertive">
+        <div id="alertBanner" class="alert" role="alert" aria-live="assertive" hidden>
           <strong>ALERTA</strong>
-          <span id="alertText">Bomba activada.</span>
+          <span id="alertText"></span>
         </div>
 
       <main class="views">
         <!-- ======================= EN VIVO ======================= -->
         <section class="view view-live" id="view-live" role="tabpanel" aria-label="En vivo">
+          <div id="offlineBanner" class="offline-banner" role="status">
+            <strong>Esperando conexión del dispositivo</strong>
+            <p>
+              Las métricas aparecerán cuando la ESP32-CAM haga contacto
+              (reporta una vez por minuto).
+            </p>
+          </div>
           <section class="panel panel-capture">
             <div class="panel-header">
               <h2>Última captura</h2>
@@ -100,7 +107,7 @@
             </div>
             <div class="panel-body">
               <div class="capture-frame">
-                <img id="latestCaptureImage" alt="Última foto clasificada" hidden />
+                <!-- la <img> se crea desde app.js solo cuando hay captura real -->
                 <span id="captureBadge" class="capture-badge" hidden>—</span>
                 <p id="captureEmpty" class="capture-empty">
                   Esperando que la ESP32 envíe la primera foto.
@@ -111,10 +118,10 @@
                   <span id="latestCaptureClasses">Sin capturas</span>
                 </span>
                 <span class="meta-item meta-mono">
-                  <span id="latestCaptureTime">—</span>
+                  <span id="latestCaptureTime"></span>
                 </span>
               </div>
-              <div class="video-meta">
+              <div class="video-meta" hidden>
                 <span class="meta-item">
                   <span class="meta-k">DET</span><strong id="frameCount">0</strong>
                 </span>
@@ -126,11 +133,12 @@
                 </span>
               </div>
               <div class="capture-actions">
-                <button type="button" id="manualCaptureBtn" class="primary capture-go">
-                  Tomar foto ahora
+                <button type="button" id="manualCaptureBtn" class="primary capture-go"
+                        title="La orden viaja en el próximo contacto del ESP32 (hasta ~60 s)">
+                  Pedir foto al ESP32
                 </button>
                 <p id="manualCaptureState" class="manual-state">
-                  La orden llega al ESP32 en su próximo poll (<span class="poll-cd">—</span>).
+                  La orden llega al ESP32 en su próximo contacto (<span class="poll-cd"></span>).
                 </p>
               </div>
               <div
@@ -161,28 +169,30 @@
               <p class="footer-note pump-note">
                 La ESP32 enciende la bomba ~<span id="pumpSecondsInline">10</span> s
                 cada <span id="pumpTriggerInline">3</span> fotos tomadas.
-                Último ciclo inferido: <strong id="lastPumpEvent">—</strong>
+                Último ciclo inferido: <strong id="lastPumpEvent">aún no</strong>
               </p>
 
               <div class="pump-manual">
-                <span class="pump-manual-label">Bomba manual</span>
-                <div class="chip-row" id="pumpChips" role="group" aria-label="Duración de la bomba manual">
-                  <button type="button" class="chip" data-seconds="5">5 s</button>
-                  <button type="button" class="chip" data-seconds="10">10 s</button>
-                  <button type="button" class="chip" data-seconds="20">20 s</button>
-                  <button type="button" class="chip" data-seconds="30">30 s</button>
-                  <button type="button" class="chip chip-other" id="pumpOtherBtn">Otro</button>
+                <span class="pump-manual-label">Activar bomba a mano · segundos de encendido</span>
+                <div class="pump-duration-row">
+                  <div class="chip-row" id="pumpChips" role="group" aria-label="Duración de la bomba manual">
+                    <button type="button" class="chip" data-seconds="5">5 s</button>
+                    <button type="button" class="chip" data-seconds="10">10 s</button>
+                    <button type="button" class="chip" data-seconds="20">20 s</button>
+                    <button type="button" class="chip" data-seconds="30">30 s</button>
+                  </div>
+                  <div class="pump-custom" id="pumpCustomWrap">
+                    <input type="number" id="manualPumpSeconds" min="1" max="300"
+                           value="10" inputmode="numeric" aria-label="Segundos de encendido (1-300)" />
+                    <span class="unit">s</span>
+                  </div>
                 </div>
-                <div class="pump-custom" id="pumpCustomWrap" hidden>
-                  <input type="number" id="manualPumpSeconds" min="1" max="300"
-                         value="10" inputmode="numeric" />
-                  <span class="unit">s</span>
-                </div>
-                <button type="button" id="manualPumpBtn" class="primary pump-go">
-                  Activar ahora
+                <button type="button" id="manualPumpBtn" class="primary pump-go"
+                        title="La orden viaja en el próximo contacto del ESP32 (hasta ~60 s)">
+                  Activar bomba
                 </button>
                 <p id="manualPumpState" class="manual-state">
-                  Se entrega al ESP32 en su próximo poll (<span class="poll-cd">—</span>).
+                  La orden llega al ESP32 en su próximo contacto (<span class="poll-cd"></span>).
                 </p>
               </div>
 
@@ -196,12 +206,17 @@
             </div>
           </section>
 
-          <section class="panel panel-perf">
+          <section class="panel panel-perf panel-minor">
             <div class="panel-header">
-              <h2>Rendimiento</h2>
-              <span id="perfUpdated" class="meta-u">—</span>
+              <h2>Diagnóstico</h2>
+              <span class="panel-tag">red · IA · servidor</span>
+              <span id="perfUpdated" class="meta-u"></span>
             </div>
             <div class="panel-body">
+              <p class="offline-empty">
+                Sin conexión con la ESP32 — estas métricas aparecen cuando el
+                dispositivo reporta.
+              </p>
               <div class="metric-grid">
                 <div class="metric">
                   <span class="metric-k">Red · RTT</span>
@@ -305,8 +320,6 @@
                    title="Descarga ZIP con images/ + labels/ en formato YOLO para reentrenar">
                   Exportar YOLO
                 </a>
-                <button type="button" id="btnClearAlbum" class="btn ghost danger"
-                        title="Borra todas las fotos y detecciones del álbum (útil en pruebas)">Vaciar álbum</button>
                 <button type="button" id="galleryMore" class="btn ghost">Cargar más</button>
               </div>
             </div>
@@ -315,6 +328,14 @@
               <p id="galleryEmpty" class="capture-empty" hidden>
                 Sin capturas todavía.
               </p>
+              <div class="danger-zone">
+                <div class="danger-copy">
+                  <strong>Zona de peligro</strong>
+                  <p>Borra todas las fotos y detecciones del álbum. No se puede deshacer.</p>
+                </div>
+                <button type="button" id="btnClearAlbum" class="btn danger"
+                        title="Borra todas las fotos y detecciones del álbum (útil en pruebas)">Vaciar álbum</button>
+              </div>
             </div>
           </section>
         </section>
@@ -324,19 +345,19 @@
           <section class="panel panel-device">
             <div class="panel-header">
               <h2>Dispositivo ESP32-CAM</h2>
-              <span id="deviceConfigState" class="status-pill">—</span>
+              <span id="deviceConfigState" class="status-pill"></span>
               <details class="help">
-                <summary aria-label="Ayuda de configuración del dispositivo">?</summary>
+                <summary>Ayuda</summary>
                 <div class="help-body">
                   <p>
-                    La ESP32 descarga esta configuración cada 60 s
-                    (<code>/api/device/config</code>) y la aplica en caliente.
-                    Si el WiFi nuevo falla, revierte solo a los anteriores.
+                    La ESP32 descarga esta configuración una vez por minuto
+                    y la aplica en caliente. Si el WiFi nuevo falla,
+                    revierte sola a los datos anteriores.
                   </p>
                   <p>
-                    También puedes configurar la ESP32 por su AP
-                    <code>REBA-Setup</code> (se abre solo si no hay WiFi o tras
-                    ~10 min sin conexión).
+                    También puedes configurarla conectándote a su red
+                    <code>REBA-Setup</code>, que se abre solo si no hay WiFi
+                    o tras ~10 min sin conexión.
                   </p>
                 </div>
               </details>
@@ -378,34 +399,42 @@
                 <p class="form-group">Parámetros de operación y sensores</p>
                 <div class="device-form-row">
                   <div class="field">
-                    <label class="field-label" for="cfgPumpPhotos">Fotos para bomba</label>
+                    <label class="field-label" for="cfgPumpPhotos">Fotos por ciclo de bomba</label>
                     <span class="input-affix has-unit">
-                      <input type="number" id="cfgPumpPhotos" min="1" max="20" />
+                      <input type="number" id="cfgPumpPhotos" min="1" max="20"
+                             title="Cada esta cantidad de fotos tomadas, la bomba se enciende sola" />
                       <span class="unit">fotos</span>
                     </span>
+                    <span class="field-hint">Cada N fotos la bomba se enciende sola.</span>
                   </div>
                   <div class="field">
-                    <label class="field-label" for="cfgPumpSeconds">Bomba</label>
+                    <label class="field-label" for="cfgPumpSeconds">Duración de cada encendido</label>
                     <span class="input-affix has-unit">
-                      <input type="number" id="cfgPumpSeconds" min="1" max="120" />
+                      <input type="number" id="cfgPumpSeconds" min="1" max="120"
+                             title="Segundos que la bomba permanece encendida en cada ciclo" />
                       <span class="unit">s</span>
                     </span>
+                    <span class="field-hint">Tiempo encendida en cada ciclo.</span>
                   </div>
                 </div>
                 <div class="device-form-row">
                   <div class="field">
-                    <label class="field-label" for="cfgDistMin">Dist. mín</label>
+                    <label class="field-label" for="cfgDistMin">Distancia mínima de disparo</label>
                     <span class="input-affix has-unit">
-                      <input type="number" id="cfgDistMin" step="0.5" min="0" />
+                      <input type="number" id="cfgDistMin" step="0.5" min="0"
+                             title="Un objeto a menos de esta distancia no dispara la foto" />
                       <span class="unit">cm</span>
                     </span>
+                    <span class="field-hint">Objetos más cerca que esto se ignoran.</span>
                   </div>
                   <div class="field">
-                    <label class="field-label" for="cfgDistMax">Dist. máx</label>
+                    <label class="field-label" for="cfgDistMax">Distancia máxima de disparo</label>
                     <span class="input-affix has-unit">
-                      <input type="number" id="cfgDistMax" step="0.5" min="1" />
+                      <input type="number" id="cfgDistMax" step="0.5" min="1"
+                             title="Un objeto dentro de este rango dispara la foto; debe ser mayor que la mínima" />
                       <span class="unit">cm</span>
                     </span>
+                    <span class="field-hint">Objetos más lejos que esto se ignoran. Debe ser mayor que la mínima.</span>
                   </div>
                 </div>
 
@@ -417,40 +446,50 @@
             </div>
           </section>
 
-          <section class="panel panel-circuit">
+          <section class="panel panel-circuit panel-minor">
             <div class="panel-header">
-              <h2>Estado del circuito</h2>
-              <span id="circuitState" class="status-pill">—</span>
+              <h2>Salud del dispositivo</h2>
+              <span class="panel-tag">telemetría cada ~60 s</span>
+              <span id="circuitState" class="status-pill"></span>
             </div>
             <div class="panel-body">
+              <p class="offline-empty">
+                Sin conexión con la ESP32 — el estado del circuito aparece
+                cuando el dispositivo reporta.
+              </p>
               <div class="circuit-grid">
                 <div class="circuit-row"><span>ESP32-CAM</span><strong id="cDevState">—</strong></div>
                 <div class="circuit-row"><span>IP · último contacto</span><strong id="cDevIp">—</strong></div>
-                <div class="circuit-row"><span>Polls recibidos</span><strong id="cPolls">—</strong></div>
-                <div class="circuit-row"><span>Sensor HC-SR04</span><strong id="cDist">—</strong></div>
-                <div class="circuit-row"><span>Relé GPIO13</span><strong id="cRelay">—</strong></div>
-                <div class="circuit-row"><span>Cola de fotos</span><strong id="cQueue">—</strong></div>
-                <div class="circuit-row"><span>Cámara OV2640</span><strong id="cCam">—</strong></div>
-                <div class="circuit-row"><span>Heap libre</span><strong id="cHeap">—</strong></div>
-                <div class="circuit-row"><span>WiFi RSSI</span><strong id="cRssi">—</strong></div>
+                <div class="circuit-row"><span>Reportes recibidos</span><strong id="cPolls">—</strong></div>
+                <div class="circuit-row"><span>Sensor de distancia</span><strong id="cDist">—</strong></div>
+                <div class="circuit-row"><span>Relé de la bomba</span><strong id="cRelay">—</strong></div>
+                <div class="circuit-row"><span>Fotos pendientes de subir</span><strong id="cQueue">—</strong></div>
+                <div class="circuit-row"><span>Cámara</span><strong id="cCam">—</strong></div>
+                <div class="circuit-row"><span>Memoria libre</span><strong id="cHeap">—</strong></div>
+                <div class="circuit-row"><span>Señal WiFi</span><strong id="cRssi">—</strong></div>
                 <div class="circuit-row"><span>Bomba manual</span><strong id="cPumpManual">—</strong></div>
                 <div class="circuit-row"><span>Fotos hacia ciclo</span><strong id="cPumpProg">—</strong></div>
               </div>
               <div class="circuit-actions">
                 <button type="button" id="btnReconnect" class="btn"
-                        title="Ordena al ESP32 forzar reconexión WiFi y re-poll en su próximo poll (≤60 s). Si está offline de verdad, la orden no puede entregarse.">Reconectar ESP32</button>
-                <button type="button" id="btnQueueClear" class="btn ghost danger"
-                        title="El ESP32 descarta las fotos tomadas aún no subidas en su próximo poll">Vaciar cola ESP32</button>
-                <button type="button" id="btnResetAll" class="btn ghost danger"
-                        title="Borra capturas, detecciones, contadores y eventos de bomba">Borrar todos los datos</button>
+                        title="Ordena al ESP32 forzar reconexión WiFi en su próximo contacto (≤60 s). Si está offline de verdad, la orden no puede entregarse.">Reconectar ESP32</button>
+                <button type="button" id="btnQueueClear" class="btn ghost"
+                        title="El ESP32 descarta las fotos tomadas aún no subidas en su próximo contacto">Vaciar cola de fotos</button>
               </div>
               <p id="reconnectState" class="manual-state circuit-state">
-                La orden llega al ESP32 en su próximo poll (≤60 s).
+                La orden llega al ESP32 en su próximo contacto (≤60 s).
               </p>
+              <div class="danger-zone">
+                <div class="danger-copy">
+                  <strong>Zona de peligro</strong>
+                  <p>Borra capturas, detecciones, contadores y eventos. No se puede deshacer.</p>
+                </div>
+                <button type="button" id="btnResetAll" class="btn danger"
+                        title="Borra capturas, detecciones, contadores y eventos de bomba">Borrar todos los datos</button>
+              </div>
               <p id="circuitNote" class="footer-note">
-                La telemetría del dispositivo llega con cada poll (~60 s).
-                Si el firmware es anterior a esta versión, las filas del
-                sensor/relé/cola muestran "sin datos".
+                La telemetría del dispositivo llega una vez por minuto.
+                Con firmware antiguo, algunas filas muestran "sin datos".
               </p>
             </div>
           </section>
@@ -458,8 +497,8 @@
       </main>
 
       <p class="footer-note">
-        REBA · Dashboard local · Parámetros configurables en
-        <code>.env</code> (servidor) y en el sketch <code>fotos_nc.ino</code>
+        Dashboard local · la configuración del dispositivo está en la
+        sección Dispositivo
       </p>
       </div><!-- /.content -->
 
@@ -480,12 +519,12 @@
         <div class="lightbox-inner">
           <button type="button" id="lightboxClose" class="lightbox-close"
                   aria-label="Cerrar">✕</button>
-          <img id="lightboxImg" alt="Captura ampliada" />
+          <img id="lightboxImg" alt="Captura ampliada" hidden />
           <div id="lightboxMeta" class="lightbox-meta"></div>
         </div>
       </div>
     </div>
 
-    <script src="/app.js?v=20261124-1" defer></script>
+    <script src="/app.js?v=20261124-2" defer></script>
   </body>
 </html>
