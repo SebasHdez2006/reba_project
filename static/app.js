@@ -182,6 +182,9 @@
       pill.classList.remove("offline");
       txt.textContent = device.ip ? `ESP32 · ${device.ip}` : "ESP32 · en línea";
       pill.title = `ESP32-CAM en línea${device.ip ? ` (${device.ip})` : ""}`;
+      // Al volver la señal se redibuja la bomba con el último dato cacheado
+      // (el poll de stats no vuelve a pedir /api/pump-status).
+      if (state.pump) applyPumpStatus(state.pump);
     } else {
       pill.classList.remove("online");
       pill.classList.add("offline");
