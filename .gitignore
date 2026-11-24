@@ -18,6 +18,7 @@ data/
 # Modelos pesados (entrenar y colocar localmente)
 models/**/*.onnx
 models/**/*.pt
+models/_hub/
 !models/.gitkeep
 
 # Pesos base descargables y artefactos de entrenamiento
