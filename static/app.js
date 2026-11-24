@@ -1236,9 +1236,11 @@
 
       const t = (id, v) => setText(id, hasTel ? v : "sin datos");
       t("cDist", tel.dist_cm != null ? `${tel.dist_cm} cm` : "—");
+      // rele_pin es el nivel crudo del GPIO (activo en bajo, bomba en NC):
+      // pin HIGH -> bomba encendida; pin LOW -> bomba apagada.
       t("cRelay",
         tel.rele_pin != null
-          ? (tel.pump_manual ? "bomba manual ON" : (tel.rele_pin ? "activo" : "inactivo"))
+          ? (tel.pump_manual ? "bomba manual ON" : (tel.rele_pin ? "bomba encendida" : "bomba apagada"))
           : "—");
       t("cQueue",
         tel.cola_n != null ? `${tel.cola_n}/${tel.cola_max ?? "?"} fotos` : "—");
