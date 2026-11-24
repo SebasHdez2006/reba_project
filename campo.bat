@@ -38,6 +38,11 @@ if errorlevel 1 (
 echo === Tunel zrok (respaldo) ===
 start "REBA-Tunnel" powershell -NoProfile -ExecutionPolicy Bypass -NoExit -File "%~dp0tools\zrok_tunnel.ps1"
 
+echo === Hotspot REBA-AP + watchdog ===
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\enable_hotspot.ps1" >nul
+powershell -NoProfile -Command "exit [Math]::Min(@(Get-CimInstance Win32_Process | Where-Object {$_.CommandLine -match 'hotspot_watchdog.ps1' -and $_.Name -eq 'powershell.exe'}).Count - 1, 1)"
+if errorlevel 1 (echo   watchdog ya corriendo) else (wscript "%~dp0tools\hotspot_watchdog_hidden.vbs" & echo   watchdog lanzado: reactiva el hotspot si Windows lo apaga)
+
 echo.
 echo Listo.
 echo   Dashboard remoto:  https://rebaserver.tech
