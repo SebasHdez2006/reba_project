@@ -118,27 +118,55 @@ def main() -> None:
     X, y, groups = data["X"], data["y"], data["groups"]
     print(f"train: X={X.shape} splits={splits}")
 
-    # --- head DINO ---
-    sl = T.VARIANTS[args.dino_variant]
+    # --- heads de los miembros basados en features (dino, dinob) ---
     cw = (np.ones(len(classes), np.float32) if args.dino_weights == "natural"
           else T.balanced_weights(y, len(classes)))
+    heads = {}  # stem -> (w_out np, b np, feat_getter(split)->X)
+
+    sl = T.VARIANTS[args.dino_variant]
     w, b = T.fit_lr(X[:, sl], y, cw, args.dino_wd)
     w_out = np.zeros((2 * T.EMBED, len(classes)), np.float32)
     w_out[sl] = w.numpy()
-    Pd = sm(X @ w_out + b.numpy())
+    heads["cls_dino"] = (w_out, b.numpy(),
+                         lambda s: np.load(T.FEAT_DIR / f"{s}.npz")["X"])
     if args.export_dino:
         import torch
         feat = T.make_feat_module(T.load_backbone())
         T.export_onnx(T.make_cls_module(
             feat, torch.from_numpy(w_out), b), T.OUT_ONNX, "probs", classes)
 
+    if any(mf.name == "cls_dinob.onnx" for mf in model_files):
+        import train_esp32_cls_dinob as B
+        bdata = B.load_features(splits)
+        slb = B.VARIANTS[args.dino_variant]
+        wb, bb = T.fit_lr(bdata["X"][:, slb], bdata["y"], cw, args.dino_wd)
+        w_outb = np.zeros((2 * B.EMBED, len(classes)), np.float32)
+        w_outb[slb] = wb.numpy()
+        heads["cls_dinob"] = (w_outb, bb.numpy(),
+                              lambda s: np.load(B.npz_name(s))["X"])
+        if args.export_dino:
+            import torch
+            featb = B.make_feat_module(B.load_backbone())
+            T.export_onnx(T.make_cls_module(
+                featb, torch.from_numpy(w_outb), bb),
+                B.OUT_ONNX, "probs", classes)
+
     # --- probs de cada miembro del ensemble en train ---
     # ORDEN: el de --models (igual que CLS_MODEL_PATH en el server).
     print("probs de miembros en train (v1/onnx)...")
     tr_paths = split_paths(classes, *splits)
-    members = [Pd if mf.name == "cls_dino.onnx"
-               else model_probs(mf, tr_paths, classes, splits)
-               for mf in model_files]
+    Xtr = T.load_features(splits)["X"]  # dino-S (mismo orden que tr_paths)
+    members = []
+    for mf in model_files:
+        stem = mf.stem
+        if stem == "cls_dino":
+            members.append(sm(Xtr @ w_out + b.numpy()))
+        elif stem == "cls_dinob":
+            Xb = heads["cls_dinob"][2]
+            Xtr_b = np.concatenate([Xb(s) for s in splits])
+            members.append(sm(Xtr_b @ w_outb + bb.numpy()))
+        else:
+            members.append(model_probs(mf, tr_paths, classes, splits))
     Xm = np.concatenate(members, 1)
 
     folds = T.group_kfold(groups, 5)
@@ -163,9 +191,17 @@ def main() -> None:
     for s in TEST_SPLITS:
         z = np.load(T.FEAT_DIR / f"{s}.npz")
         Xt, yt = z["X"], z["y"]
-        cols = [sm(Xt @ w_out + b.numpy()) if mf.name == "cls_dino.onnx"
-                else model_probs(mf, split_paths(classes, s), classes, [s])
-                for mf in model_files]
+        cols = []
+        for mf in model_files:
+            stem = mf.stem
+            if stem == "cls_dino":
+                cols.append(sm(Xt @ w_out + b.numpy()))
+            elif stem == "cls_dinob":
+                Xtb = heads["cls_dinob"][2](s)
+                cols.append(sm(Xtb @ w_outb + bb.numpy()))
+            else:
+                cols.append(model_probs(
+                    mf, split_paths(classes, s), classes, [s]))
         pe = sm(np.concatenate(cols, 1) @ wm.numpy() + bm.numpy())
         for conf in (0.3, 0.4, 0.5, 0.6):
             r = metrics(yt, pe, conf)

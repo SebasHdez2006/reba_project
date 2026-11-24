@@ -1617,3 +1617,14 @@ rechaza un valor idéntico al vigente.
   con ensemble + `CLS_CONFIDENCE=0.3`. `.env` = 3 modelos + `cls_meta3.npz`.
   `/upload` verificado en vivo (plastico/unicel/metal ~0.95).
 - Scripts aux: `cache_model_probs.py`, `append_extra_features.py`, `tune_cls_head.py`.
+
+### 24-nov (día) — Ensemble + PCA ViT-B: agua 0.872 / tierra 0.907
+
+- Extraídas features DINOv2 **ViT-B/14 reg4** (1536d) de los 7 splits (~4 h CPU).
+- Meta-LR ahora combina probs de 4 miembros + **PCA-64 de las features B**
+  (`cls_dinob_feat.onnx` de doble salida). Heads DINO con probs OOF.
+- Desplegado: CLS_MODEL_PATH+=cls_dinob_feat.onnx, CLS_META_PATH=cls_meta_feat.npz.
+- Verificado /upload: unicel 0.91, plastico 0.98, metal 0.99 (~1-1.4 s/foto).
+- Descartado: cls_v2 como 5º miembro, flip-TTA, datos Commons ronda 2.
+- Conclusión: ~0.89 es el techo con datos proxy; el 95 % pasa por capturar
+  fotos ESP32 reales para train (CAPTURE serial).

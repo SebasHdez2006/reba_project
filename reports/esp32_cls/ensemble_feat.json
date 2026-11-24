@@ -1,0 +1,79 @@
+{
+  "mode": "cls",
+  "stretch": false,
+  "cls_model": "models/cls_esp32.onnx,models/cls_dino.onnx,models/cls_11s.onnx,models/cls_dinob_feat.onnx",
+  "cls_conf": 0.3,
+  "splits": {
+    "test_agua": {
+      "n_obj": 688,
+      "accuracy": 0.8721,
+      "macro_recall": 0.8316,
+      "per_class_recall": {
+        "plastico": 0.8826,
+        "unicel": 0.7234,
+        "metal": 0.8889
+      },
+      "n_fondo": 188,
+      "fondo_ok": 0.8989,
+      "confusion": {
+        "plastico": {
+          "unicel": 35,
+          "plastico": 534,
+          "fondo": 7,
+          "metal": 29
+        },
+        "unicel": {
+          "unicel": 34,
+          "plastico": 12,
+          "fondo": 1
+        },
+        "metal": {
+          "metal": 32,
+          "plastico": 4
+        },
+        "fondo": {
+          "fondo": 169,
+          "plastico": 15,
+          "unicel": 4
+        }
+      }
+    },
+    "test_tierra": {
+      "n_obj": 486,
+      "accuracy": 0.9074,
+      "macro_recall": 0.8613,
+      "per_class_recall": {
+        "plastico": 0.9136,
+        "unicel": 0.75,
+        "metal": 0.9203
+      },
+      "n_fondo": 116,
+      "fondo_ok": 0.7845,
+      "confusion": {
+        "plastico": {
+          "plastico": 296,
+          "fondo": 12,
+          "metal": 6,
+          "unicel": 10
+        },
+        "unicel": {
+          "unicel": 18,
+          "plastico": 5,
+          "fondo": 1
+        },
+        "metal": {
+          "metal": 127,
+          "plastico": 8,
+          "unicel": 2,
+          "fondo": 1
+        },
+        "fondo": {
+          "metal": 1,
+          "unicel": 9,
+          "plastico": 15,
+          "fondo": 91
+        }
+      }
+    }
+  }
+}

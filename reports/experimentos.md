@@ -145,3 +145,28 @@ mAP50-95 por clase en `outdoor` (referencia de la misión):
   metal 0.94, <1 s).
 - **Pendiente:** validar con fotos reales ESP32 (`REBA_cls_esp32_real`,
   hoy solo 4 imgs — insuficiente para medir; hacen falta capturas de campo).
+
+## EXP-6 — Ensemble 4 miembros + meta con PCA de features ViT-B (24-nov, día)
+
+Tras el EXP-5 (3 miembros, 0.858/0.901) se añadió **DINOv2 ViT-B/14 reg4**
+(features 1536d, ~870 ms/img CPU) y un meta-LR enriquecido: además de las
+probs de los 4 miembros recibe un **PCA-64 de las features del ViT-B**
+(el ONNX `cls_dinob_feat.onnx` expone doble salida probs+feat). Las probs de
+las heads DINO en train se calcularon **out-of-fold** para no sesgar el meta.
+
+| set | acc | macro | unicel | fondo_ok |
+|---|---|---|---|---|
+| test_agua | 0.872 | 0.832 | 0.723 | 0.899 |
+| test_tierra | 0.907 | 0.861 | 0.750 | 0.784 |
+
+Medido por el engine del server (`reports/esp32_cls/ensemble_feat.json`).
+Latencia /upload ~1-1.4 s/foto por el ViT-B.
+
+Notas:
+- cls_v2 (v8n-cls reentrenado con 18.3k imgs, val top1 0.878) como 5º miembro
+  no aporta (agua +0.6, tierra −2.3) → descartado.
+- flip-TTA: ±0.2 pt → descartado (dobla latencia).
+- Datos wm ronda 2 (Commons, +940): ligeramente negativos en el refit → el
+  cuello ya no es cantidad de unicel, es el dominio proxy→real.
+- Techo con proxies ~0.89 medio: CV 0.96 vs test 0.87-0.91 (domain gap).
+  Para 95 % hacen falta fotos ESP32 reales en train, no más proxies.

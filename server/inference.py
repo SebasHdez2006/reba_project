@@ -100,7 +100,10 @@ class InferenceEngine:
         self.cls_input: Optional[str] = None
         self.cls_hw = (224, 224)
         self.cls_models: List[dict] = []
-        self.cls_meta: Optional[tuple] = None  # (W, b) del head ensemble
+        # dict del meta head: {"W", "b"} + opcional {"feat_idx", "mu", "sd",
+        # "P"} cuando el meta también consume un PCA de features del modelo
+        # feat_idx (ONNX de doble salida probs+feat).
+        self.cls_meta: Optional[dict] = None
         self._init_onnx()
         self._init_classifier()
 
@@ -229,8 +232,17 @@ class InferenceEngine:
         meta_path = self.settings.cls_meta_path_abs
         if meta_path is not None and meta_path.is_file() and len(self.cls_models) > 1:
             z = np.load(meta_path)
-            self.cls_meta = (z["W"], z["b"])
-            logger.info("Classifier meta head loaded: %s W=%s", meta_path.name, z["W"].shape)
+            self.cls_meta = {"W": z["W"], "b": z["b"]}
+            if "P" in z.files and "feat_idx" in z.files:
+                self.cls_meta.update({
+                    "feat_idx": int(z["feat_idx"]), "mu": z["mu"],
+                    "sd": z["sd"], "P": z["P"],
+                })
+                logger.info(
+                    "Classifier meta con PCA de features: k=%d modelo#%d",
+                    z["P"].shape[1], int(z["feat_idx"]))
+            logger.info("Classifier meta head loaded: %s W=%s",
+                        meta_path.name, z["W"].shape)
 
     def classify(self, frame_bgr: np.ndarray) -> tuple[str, float, np.ndarray]:
         """Top-1 del clasificador/ensemble sobre la foto completa (ver
@@ -238,12 +250,20 @@ class InferenceEngine:
         canónico; con meta head: softmax(concat @ W + b); sin meta: media."""
         assert self.cls_models
         cols = []
-        for m in self.cls_models:
+        feat_col = None
+        feat_idx = self.cls_meta.get("feat_idx") if self.cls_meta else None
+        for i, m in enumerate(self.cls_models):
             blob = cls_preprocess(frame_bgr, *m["hw"])
-            p = m["session"].run(None, {m["input"]: blob})[0][0]
+            outs = m["session"].run(None, {m["input"]: blob})
+            p = outs[0][0]
             cols.append(p[m["perm"]])
+            if feat_idx is not None and i == feat_idx and len(outs) > 1:
+                f = outs[1][0]
+                feat_col = ((f - self.cls_meta["mu"]) / self.cls_meta["sd"]
+                            ) @ self.cls_meta["P"]
         if self.cls_meta is not None:
-            z = np.concatenate(cols) @ self.cls_meta[0] + self.cls_meta[1]
+            parts = cols + ([feat_col] if feat_col is not None else [])
+            z = np.concatenate(parts) @ self.cls_meta["W"] + self.cls_meta["b"]
             e = np.exp(z - z.max())
             probs = e / e.sum()
         else:
