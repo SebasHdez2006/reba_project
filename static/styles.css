@@ -1988,7 +1988,6 @@ body.device-offline .offline-empty {
 }
 body.device-offline .panel-perf .metric-grid,
 body.device-offline .panel-circuit .circuit-grid,
-body.device-offline .panel-circuit .circuit-state,
 body.device-offline .panel-circuit #circuitNote {
   display: none;
 }
