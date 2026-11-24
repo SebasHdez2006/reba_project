@@ -44,7 +44,12 @@ class Settings(BaseSettings):
     inference_iou: float = Field(default=0.45, ge=0.0, le=1.0)
     # Clasificador híbrido (YOLOv8-cls, 1 objeto por foto): decide la clase;
     # el detector solo aporta la caja. Vacío o archivo ausente = solo detector.
+    # Lista separada por comas = ensemble: se concatenan las probs de cada
+    # modelo (alineadas a sus nombres) y se aplica el head de CLS_META_PATH
+    # (npz con W/b de una regresión logística entrenada por
+    # ai_pipeline/export_cls_ensemble.py). Sin meta = media de probs.
     cls_model_path: str = Field(default="models/cls_esp32.onnx")
+    cls_meta_path: str = Field(default="models/cls_meta.npz")
     # Probabilidad mínima del top-1 para aceptar la clase (si no, sin detección).
     cls_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
 
@@ -89,10 +94,21 @@ class Settings(BaseSettings):
         return path
 
     @property
+    def cls_model_paths_abs(self) -> List[Path]:
+        return [PROJECT_ROOT / p.strip() if not Path(p.strip()).is_absolute()
+                else Path(p.strip())
+                for p in self.cls_model_path.split(",") if p.strip()]
+
+    @property
     def cls_model_path_abs(self) -> Path | None:
-        if not self.cls_model_path.strip():
+        paths = self.cls_model_paths_abs
+        return paths[0] if paths else None
+
+    @property
+    def cls_meta_path_abs(self) -> Path | None:
+        if not self.cls_meta_path.strip():
             return None
-        path = Path(self.cls_model_path)
+        path = Path(self.cls_meta_path)
         if not path.is_absolute():
             path = PROJECT_ROOT / path
         return path

@@ -12,6 +12,7 @@ mayor confianza; sin detección = `fondo`.
 
 Uso:
     python ai_pipeline/eval_esp32_cls.py --mode hybrid
+    python ai_pipeline/eval_esp32_cls.py --mode cls                 # solo clasificador (segundos)
     python ai_pipeline/eval_esp32_cls.py --mode detector            # solo YOLO
     python ai_pipeline/eval_esp32_cls.py --mode detector --stretch  # server viejo (4:3 -> 640x640)
     python ai_pipeline/eval_esp32_cls.py --mode hybrid --cls-model models/otro.onnx --splits test_agua
@@ -66,7 +67,8 @@ def evaluate(engine: InferenceEngine, split_dir: Path, stretch: bool) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", choices=["hybrid", "detector"], default="hybrid")
+    ap.add_argument("--mode", choices=["hybrid", "detector", "cls"], default="hybrid",
+                    help="cls = solo clasificador (mismas clases que hybrid, sin cajas; rápido)")
     ap.add_argument("--cls-model", default="models/cls_esp32.onnx")
     ap.add_argument("--cls-conf", type=float, default=None)
     ap.add_argument("--stretch", action="store_true", help="emula el server previo (4:3 -> 640x640)")
@@ -75,11 +77,13 @@ def main() -> None:
     ap.add_argument("--out", default=None, help="JSON de salida")
     args = ap.parse_args()
 
-    kw = {"cls_model_path": args.cls_model if args.mode == "hybrid" else ""}
+    kw = {"cls_model_path": args.cls_model if args.mode != "detector" else ""}
+    if args.mode == "cls":
+        kw["model_path"] = "models/__sin_detector__.onnx"
     if args.cls_conf is not None:
         kw["cls_confidence"] = args.cls_conf
     engine = InferenceEngine(Settings(**kw))
-    if args.mode == "hybrid" and engine.cls_session is None:
+    if args.mode != "detector" and engine.cls_session is None:
         sys.exit(f"Clasificador no cargado: {args.cls_model}")
 
     report = {"mode": args.mode, "stretch": args.stretch, "cls_model": kw["cls_model_path"],

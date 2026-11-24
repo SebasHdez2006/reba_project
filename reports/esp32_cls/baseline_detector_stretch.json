@@ -1,0 +1,80 @@
+{
+  "mode": "detector",
+  "stretch": true,
+  "cls_model": "",
+  "cls_conf": 0.5,
+  "splits": {
+    "test_agua": {
+      "n_obj": 688,
+      "accuracy": 0.4201,
+      "macro_recall": 0.2224,
+      "per_class_recall": {
+        "plastico": 0.4645,
+        "unicel": 0.0638,
+        "metal": 0.1389
+      },
+      "n_fondo": 188,
+      "fondo_ok": 0.75,
+      "confusion": {
+        "plastico": {
+          "plastico": 281,
+          "metal": 55,
+          "fondo": 256,
+          "unicel": 13
+        },
+        "unicel": {
+          "fondo": 16,
+          "plastico": 22,
+          "unicel": 3,
+          "metal": 6
+        },
+        "metal": {
+          "fondo": 14,
+          "plastico": 17,
+          "metal": 5
+        },
+        "fondo": {
+          "fondo": 141,
+          "unicel": 10,
+          "metal": 10,
+          "plastico": 27
+        }
+      }
+    },
+    "test_tierra": {
+      "n_obj": 486,
+      "accuracy": 0.4938,
+      "macro_recall": 0.3828,
+      "per_class_recall": {
+        "plastico": 0.4383,
+        "unicel": 0.0,
+        "metal": 0.7101
+      },
+      "n_fondo": 116,
+      "fondo_ok": 0.7586,
+      "confusion": {
+        "plastico": {
+          "metal": 30,
+          "plastico": 142,
+          "fondo": 151,
+          "unicel": 1
+        },
+        "unicel": {
+          "plastico": 11,
+          "fondo": 13
+        },
+        "metal": {
+          "metal": 98,
+          "plastico": 24,
+          "fondo": 16
+        },
+        "fondo": {
+          "fondo": 88,
+          "plastico": 22,
+          "metal": 5,
+          "unicel": 1
+        }
+      }
+    }
+  }
+}

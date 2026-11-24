@@ -1,0 +1,79 @@
+{
+  "mode": "hybrid",
+  "stretch": false,
+  "cls_model": "models/cls_esp32.onnx",
+  "cls_conf": 0.5,
+  "splits": {
+    "test_agua": {
+      "n_obj": 688,
+      "accuracy": 0.8038,
+      "macro_recall": 0.7861,
+      "per_class_recall": {
+        "plastico": 0.8099,
+        "unicel": 0.6596,
+        "metal": 0.8889
+      },
+      "n_fondo": 188,
+      "fondo_ok": 0.9096,
+      "confusion": {
+        "plastico": {
+          "unicel": 43,
+          "plastico": 490,
+          "metal": 38,
+          "fondo": 34
+        },
+        "unicel": {
+          "unicel": 31,
+          "plastico": 13,
+          "fondo": 3
+        },
+        "metal": {
+          "metal": 32,
+          "plastico": 4
+        },
+        "fondo": {
+          "fondo": 171,
+          "plastico": 17
+        }
+      }
+    },
+    "test_tierra": {
+      "n_obj": 486,
+      "accuracy": 0.8519,
+      "macro_recall": 0.7595,
+      "per_class_recall": {
+        "plastico": 0.8673,
+        "unicel": 0.5417,
+        "metal": 0.8696
+      },
+      "n_fondo": 116,
+      "fondo_ok": 0.8103,
+      "confusion": {
+        "plastico": {
+          "plastico": 281,
+          "metal": 19,
+          "fondo": 17,
+          "unicel": 7
+        },
+        "unicel": {
+          "unicel": 13,
+          "plastico": 6,
+          "fondo": 4,
+          "metal": 1
+        },
+        "metal": {
+          "metal": 120,
+          "plastico": 16,
+          "unicel": 1,
+          "fondo": 1
+        },
+        "fondo": {
+          "metal": 2,
+          "fondo": 94,
+          "plastico": 18,
+          "unicel": 2
+        }
+      }
+    }
+  }
+}

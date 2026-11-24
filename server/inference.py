@@ -31,6 +31,21 @@ logger = logging.getLogger("REBA.inference")
 CLS_BACKGROUND = "fondo"
 
 
+def cls_preprocess(frame_bgr: np.ndarray, th: int, tw: int) -> np.ndarray:
+    """Foto BGR -> blob (1,3,th,tw) RGB/255 para el clasificador: escala sin
+    deformar hasta cubrir (th, tw) y recorta al centro. Con entrada cuadrada
+    equivale a classify_transforms de Ultralytics. Compartido con el
+    entrenamiento (ai_pipeline/train_esp32_cls_dino.py) para que las features
+    de entrenamiento y las de producción salgan del mismo preproceso."""
+    h, w = frame_bgr.shape[:2]
+    s = max(th / h, tw / w)
+    nw, nh = max(tw, round(w * s)), max(th, round(h * s))
+    img = cv2.resize(frame_bgr, (nw, nh), interpolation=cv2.INTER_AREA if s < 1 else cv2.INTER_LINEAR)
+    x0, y0 = (nw - tw) // 2, (nh - th) // 2
+    img = img[y0:y0 + th, x0:x0 + tw, ::-1].astype(np.float32) / 255.0
+    return np.ascontiguousarray(img.transpose(2, 0, 1)[None])
+
+
 @dataclass
 class Detection:
     class_id: int
@@ -83,7 +98,9 @@ class InferenceEngine:
         self.cls_session = None
         self.cls_names: List[str] = []
         self.cls_input: Optional[str] = None
-        self.cls_size = 224
+        self.cls_hw = (224, 224)
+        self.cls_models: List[dict] = []
+        self.cls_meta: Optional[tuple] = None  # (W, b) del head ensemble
         self._init_onnx()
         self._init_classifier()
 
@@ -163,45 +180,74 @@ class InferenceEngine:
     # ------------------------------------------------------- Clasificador
 
     def _init_classifier(self) -> None:
-        """Carga el YOLOv8-cls ONNX (opcional). Nombres desde los metadatos."""
-        path = self.settings.cls_model_path_abs
-        if path is None or not path.is_file():
-            if path is not None:
-                logger.warning("Classifier ONNX not found at %s (solo detector)", path)
+        """Carga el/los clasificadores ONNX (opcional). Nombres desde los
+        metadatos. Con varios modelos (CLS_MODEL_PATH lista por comas) las
+        probs de cada uno se alinean al orden canónico (sorted) y se
+        concatenan; CLS_META_PATH (npz W/b) las combina, sin meta = media."""
+        import ast
+
+        import onnxruntime as ort
+
+        names_union: set[str] = set()
+        for path in self.settings.cls_model_paths_abs:
+            if not path.is_file():
+                logger.warning("Classifier ONNX not found at %s", path)
+                continue
+            try:
+                sess = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+                names = ast.literal_eval(
+                    sess.get_modelmeta().custom_metadata_map["names"]
+                )
+                cls_names = [names[i] for i in sorted(names)]
+                unknown = [n for n in cls_names
+                           if n != CLS_BACKGROUND and n not in self.class_names]
+                if unknown:
+                    logger.error("Clasificador %s con clases %s fuera de CLASS_NAMES — omitido",
+                                 path.name, unknown)
+                    continue
+                self.cls_models.append({
+                    "path": path,
+                    "session": sess,
+                    "names": cls_names,
+                    "input": sess.get_inputs()[0].name,
+                    "hw": tuple(int(v) for v in sess.get_inputs()[0].shape[2:4]),
+                })
+                names_union.update(cls_names)
+                logger.info("Classifier ONNX loaded: %s classes=%s", path.name, cls_names)
+            except Exception as exc:
+                logger.error("Failed to load classifier %s: %s", path, exc)
+        if not self.cls_models:
             return
-        try:
-            import ast
-
-            import onnxruntime as ort
-
-            sess = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
-            names = ast.literal_eval(sess.get_modelmeta().custom_metadata_map["names"])
-            cls_names = [names[i] for i in sorted(names)]
-            unknown = [n for n in cls_names if n != CLS_BACKGROUND and n not in self.class_names]
-            if unknown:
-                logger.error("Clasificador con clases %s fuera de CLASS_NAMES — desactivado", unknown)
-                return
-            self.cls_names = cls_names
-            self.cls_input = sess.get_inputs()[0].name
-            self.cls_size = int(sess.get_inputs()[0].shape[2])
-            self.cls_session = sess
-            logger.info("Classifier ONNX loaded: %s classes=%s", path.name, cls_names)
-        except Exception as exc:
-            logger.error("Failed to load classifier ONNX: %s", exc)
+        # orden canónico: sorted de la unión (igual que el entrenamiento del meta)
+        self.cls_names = sorted(names_union)
+        for m in self.cls_models:
+            m["perm"] = np.array([m["names"].index(c) for c in self.cls_names])
+        first = self.cls_models[0]
+        self.cls_session = first["session"]
+        self.cls_input = first["input"]
+        self.cls_hw = first["hw"]
+        meta_path = self.settings.cls_meta_path_abs
+        if meta_path is not None and meta_path.is_file() and len(self.cls_models) > 1:
+            z = np.load(meta_path)
+            self.cls_meta = (z["W"], z["b"])
+            logger.info("Classifier meta head loaded: %s W=%s", meta_path.name, z["W"].shape)
 
     def classify(self, frame_bgr: np.ndarray) -> tuple[str, float, np.ndarray]:
-        """Top-1 del clasificador. Preproceso = classify_transforms de Ultralytics
-        (lado corto -> imgsz, recorte central, RGB /255)."""
-        assert self.cls_session is not None
-        size = self.cls_size
-        h, w = frame_bgr.shape[:2]
-        s = size / min(h, w)
-        nw, nh = max(size, round(w * s)), max(size, round(h * s))
-        img = cv2.resize(frame_bgr, (nw, nh), interpolation=cv2.INTER_AREA if s < 1 else cv2.INTER_LINEAR)
-        x0, y0 = (nw - size) // 2, (nh - size) // 2
-        img = img[y0:y0 + size, x0:x0 + size, ::-1].astype(np.float32) / 255.0
-        blob = np.ascontiguousarray(img.transpose(2, 0, 1)[None])
-        probs = self.cls_session.run(None, {self.cls_input: blob})[0][0]
+        """Top-1 del clasificador/ensemble sobre la foto completa (ver
+        cls_preprocess). Cada modelo aporta sus probs realineadas al orden
+        canónico; con meta head: softmax(concat @ W + b); sin meta: media."""
+        assert self.cls_models
+        cols = []
+        for m in self.cls_models:
+            blob = cls_preprocess(frame_bgr, *m["hw"])
+            p = m["session"].run(None, {m["input"]: blob})[0][0]
+            cols.append(p[m["perm"]])
+        if self.cls_meta is not None:
+            z = np.concatenate(cols) @ self.cls_meta[0] + self.cls_meta[1]
+            e = np.exp(z - z.max())
+            probs = e / e.sum()
+        else:
+            probs = np.mean(cols, axis=0)
         top = int(np.argmax(probs))
         return self.cls_names[top], float(probs[top]), probs
 
@@ -364,7 +410,7 @@ class InferenceEngine:
                 "loaded": self.cls_session is not None,
                 "model_path": str(self.settings.cls_model_path_abs or ""),
                 "class_names": self.cls_names,
-                "imgsz": self.cls_size,
+                "imgsz": list(self.cls_hw),
                 "confidence": self.settings.cls_confidence,
             },
         }

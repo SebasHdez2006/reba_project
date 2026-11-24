@@ -1580,3 +1580,37 @@ rechaza un valor idéntico al vigente.
 4. **OJO**: al reiniciar la PC, el watchdog relanza uvicorn con el código nuevo y
    carga `models/cls_esp32.onnx` automáticamente (todavía sin validar en tests).
    Para volver al detector solo: `CLS_MODEL_PATH=` (vacío) en `.env`.
+
+### 23-nov (noche) — Métricas del clasificador v1 y ruta DINOv2 (en curso)
+
+- Clasificador v1 solo (`eval_esp32_cls.py --mode cls`, predict completo):
+  | set | acc | macro | plastico | unicel | metal | fondo_ok |
+  |---|---|---|---|---|---|---|
+  | test_agua (688) | 0.804 | 0.786 | 0.810 | 0.660 | 0.889 | 0.910 |
+  | test_tierra (486) | 0.852 | 0.759 | 0.867 | 0.542 | 0.870 | 0.810 |
+  | test_agua_limpio | 0.821 | 0.830 | 0.822 | 0.723 | 0.944 | 0.942 |
+  | test_tierra_limpio | 0.844 | 0.811 | 0.833 | 0.708 | 0.891 | 0.914 |
+  Confusiones agua: plastico→unicel 43/46, plastico→metal 38/43,
+  unicel→plastico 13. JSON: `reports/esp32_cls/cls_v1.json`.
+  → No alcanza 85 % en agua; unicel es la clase débil en ambos entornos.
+- Decisión: backbone congelado **DINOv2 ViT-S/14 reg** (22M, ~147 ms/img en
+  CPU con torch a 224x294; exportable a ONNX). Pesos ya descargados en
+  `models/_hub/` (torch.hub cache). Script nuevo pendiente:
+  `ai_pipeline/train_esp32_cls_dino.py`.
+- `server/inference.py` refactorizado (sin commitear): `cls_hw=(h,w)` desde
+  shape[2:4] del ONNX, `cls_preprocess()` módulo (cover+center-crop, RGB/255)
+  compartido con el script de features. Compatible con v1 (224x224 → mismo
+  comportamiento que classify_transforms de Ultralytics).
+- NO commitear `models/_hub/` (checkout de código + .pth del hub).
+
+### 24-nov (madrugada) — Ensemble v1+DINOv2 desplegado: 0.860/0.891
+
+- `ai_pipeline/train_esp32_cls_dino.py`: features DINOv2 (224x294, 768d) +
+  head LR por CV agrupada. Solo: 0.655/0.782 — peor que v1 pero complementario.
+- Ensemble meta-LR sobre [p_v1, p_dino] (`export_cls_ensemble.py` -> `models/cls_meta.npz`):
+  **agua 0.860, tierra 0.891** (eval_esp32_cls @ conf 0.3; limpio 0.866/0.901).
+- Datos extra: `augment_esp32_cls_extra.py` (+4,782 recortes FloatWaste),
+  `download_commons_unicel.py` + `commons_to_train_extra.py` (+754 unicel).
+- Server: `CLS_MODEL_PATH` por comas + `CLS_META_PATH`; `.env`/.env.example
+  con ensemble + `CLS_CONFIDENCE=0.3`. `/upload` verificado en vivo.
+- Scripts aux: `cache_model_probs.py`, `append_extra_features.py`, `tune_cls_head.py`.

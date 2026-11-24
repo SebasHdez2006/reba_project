@@ -112,3 +112,33 @@ mAP50-95 por clase en `outdoor` (referencia de la misión):
   `OPTIONAL_TRAIN_SOURCES` de `train_outdoor.py` y reentrenar (v6).
 - **Costo:** ~0 disco; +tiempo de entrenamiento proporcional a las
   copias extra (~500–1,500 imgs → +5–15% iter/época).
+
+## EXP-5 — clasificador híbrido por foto: ensemble v1 + DINOv2 (23-24 nov)
+
+- **Motivación:** el detector YOLO sobre la foto completa 4:3 pierde contexto;
+  un clasificador "1 objeto por foto" (estilo captura ESP32) decide la clase y
+  el detector solo aporta la caja.
+- **Dataset:** `datasets/REBA_cls_esp32/` (~14.8k imgs 320x240 degradadas
+  OV2640, recortes 4:3 de FloatWaste/TACO/EcoSort) + `train_extra/`
+  (+4,782 recortes FloatWaste + 754 de Wikimedia Commons para unicel).
+- **v1** `cls_esp32.onnx` (yolov8n-cls@160): agua 0.804 / tierra 0.852.
+- **DINO** `cls_dino.onnx`: backbone DINOv2 ViT-S/14 reg congelado
+  (224x294, features 768d) + head LR L2 balanceada por CV agrupada:
+  solo llega a 0.655/0.782, pero es complementario (unicel 0.70+, fondo 0.91+).
+- **Ensemble (final):** concat[p_v1, p_dino] -> meta-LR (`cls_meta.npz`).
+  Medido end-to-end con el engine del server, conf 0.3:
+
+  | set | acc | macro | plastico | unicel | metal | fondo_ok |
+  |---|---|---|---|---|---|---|
+  | test_agua (688) | **0.860** | 0.827 | 0.869 | 0.723 | 0.889 | 0.904 |
+  | test_tierra (486) | **0.891** | 0.845 | 0.907 | 0.750 | 0.877 | 0.776 |
+  | agua_limpio | 0.866 | 0.847 | 0.873 | 0.723 | 0.944 | 0.936 |
+  | tierra_limpio | 0.901 | 0.881 | 0.904 | 0.833 | 0.906 | 0.879 |
+
+  JSON: `reports/esp32_cls/ensemble_ens.json`. Objetivo ≥85 % cumplido
+  en ambos entornos. `CLS_CONFIDENCE=0.3` rinde mejor que 0.5 (baja conf
+  -> fondo penalizaba objetos reales).
+- **Server:** `CLS_MODEL_PATH` acepta lista por comas + `CLS_META_PATH`
+  (npz W/b); `/upload` verificado (plastico 0.94, unicel 0.94, ~0.4-0.7 s).
+- **Pendiente:** yolo11s-cls@224 como 3er miembro (`logs/cls_11s224.log`);
+  validar con fotos reales ESP32 (`REBA_cls_esp32_real`, hoy solo 4).
