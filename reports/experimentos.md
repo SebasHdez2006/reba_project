@@ -125,20 +125,23 @@ mAP50-95 por clase en `outdoor` (referencia de la misión):
 - **DINO** `cls_dino.onnx`: backbone DINOv2 ViT-S/14 reg congelado
   (224x294, features 768d) + head LR L2 balanceada por CV agrupada:
   solo llega a 0.655/0.782, pero es complementario (unicel 0.70+, fondo 0.91+).
-- **Ensemble (final):** concat[p_v1, p_dino] -> meta-LR (`cls_meta.npz`).
-  Medido end-to-end con el engine del server, conf 0.3:
+- **Ensemble (final, 3 miembros):** concat[p_v1, p_dino, p_11s] -> meta-LR
+  (`cls_meta3.npz`). yolo11s-cls@224 (`cls_11s.onnx`, val top-1 0.864) aporta
+  un votante CNN independiente. Medido end-to-end con el engine del server,
+  conf 0.3:
 
   | set | acc | macro | plastico | unicel | metal | fondo_ok |
   |---|---|---|---|---|---|---|
-  | test_agua (688) | **0.860** | 0.827 | 0.869 | 0.723 | 0.889 | 0.904 |
-  | test_tierra (486) | **0.891** | 0.845 | 0.907 | 0.750 | 0.877 | 0.776 |
-  | agua_limpio | 0.866 | 0.847 | 0.873 | 0.723 | 0.944 | 0.936 |
-  | tierra_limpio | 0.901 | 0.881 | 0.904 | 0.833 | 0.906 | 0.879 |
+  | test_agua (688) | **0.858** | 0.831 | 0.865 | 0.766 | 0.861 | 0.925 |
+  | test_tierra (486) | **0.901** | 0.814 | 0.926 | 0.625 | 0.891 | 0.819 |
 
-  JSON: `reports/esp32_cls/ensemble_ens.json`. Objetivo ≥85 % cumplido
-  en ambos entornos. `CLS_CONFIDENCE=0.3` rinde mejor que 0.5 (baja conf
-  -> fondo penalizaba objetos reales).
+  El ensemble de 2 (v1+dino) quedó en 0.860/0.891
+  (`ensemble_ens.json`); el de 3 gana tierra y fondo
+  (`ensemble_ens3.json`). Objetivo ≥85 % cumplido en ambos entornos.
+  `CLS_CONFIDENCE=0.3` rinde mejor que 0.5 (baja conf -> fondo penalizaba
+  objetos reales).
 - **Server:** `CLS_MODEL_PATH` acepta lista por comas + `CLS_META_PATH`
-  (npz W/b); `/upload` verificado (plastico 0.94, unicel 0.94, ~0.4-0.7 s).
-- **Pendiente:** yolo11s-cls@224 como 3er miembro (`logs/cls_11s224.log`);
-  validar con fotos reales ESP32 (`REBA_cls_esp32_real`, hoy solo 4).
+  (npz W/b); `/upload` verificado en vivo (plastico 0.96, unicel 0.95,
+  metal 0.94, <1 s).
+- **Pendiente:** validar con fotos reales ESP32 (`REBA_cls_esp32_real`,
+  hoy solo 4 imgs — insuficiente para medir; hacen falta capturas de campo).

@@ -1607,10 +1607,13 @@ rechaza un valor idéntico al vigente.
 
 - `ai_pipeline/train_esp32_cls_dino.py`: features DINOv2 (224x294, 768d) +
   head LR por CV agrupada. Solo: 0.655/0.782 — peor que v1 pero complementario.
-- Ensemble meta-LR sobre [p_v1, p_dino] (`export_cls_ensemble.py` -> `models/cls_meta.npz`):
-  **agua 0.860, tierra 0.891** (eval_esp32_cls @ conf 0.3; limpio 0.866/0.901).
+- Ensemble meta-LR sobre [p_v1, p_dino] -> `models/cls_meta.npz`:
+  agua 0.860, tierra 0.891. Con 3er miembro yolo11s-cls@224
+  (`cls_11s.onnx`) -> `models/cls_meta3.npz` (desplegado):
+  **agua 0.858, tierra 0.901** @ conf 0.3.
 - Datos extra: `augment_esp32_cls_extra.py` (+4,782 recortes FloatWaste),
   `download_commons_unicel.py` + `commons_to_train_extra.py` (+754 unicel).
 - Server: `CLS_MODEL_PATH` por comas + `CLS_META_PATH`; `.env`/.env.example
-  con ensemble + `CLS_CONFIDENCE=0.3`. `/upload` verificado en vivo.
+  con ensemble + `CLS_CONFIDENCE=0.3`. `.env` = 3 modelos + `cls_meta3.npz`.
+  `/upload` verificado en vivo (plastico/unicel/metal ~0.95).
 - Scripts aux: `cache_model_probs.py`, `append_extra_features.py`, `tune_cls_head.py`.
