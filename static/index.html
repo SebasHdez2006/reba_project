@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>REBA — Dashboard</title>
+    <title>REBA — Estado</title>
     <meta
       name="description"
       content="Dashboard local de la plataforma flotante REBA: fotos clasificadas con visión artificial y ciclos de bomba."
@@ -17,7 +17,7 @@
         if (t) document.documentElement.dataset.theme = t;
       } catch (e) { /* storage bloqueado: tema oscuro por defecto */ }
     </script>
-    <link rel="stylesheet" href="/styles.css?v=20261124-2" />
+    <link rel="stylesheet" href="/styles.css?v=20261125-1" />
   </head>
   <body class="device-offline">
     <div class="app">
@@ -30,22 +30,40 @@
           </div>
         </div>
         <nav class="side-nav" aria-label="Secciones del dashboard">
-          <button type="button" class="nav-tab is-active" data-view="live" aria-selected="true">
+          <button type="button" class="nav-tab is-active" data-view="overview" aria-selected="true">
             <span class="nav-text">
-              <span class="nav-label">En vivo</span>
-              <span class="nav-desc">Capturas y bomba</span>
+              <span class="nav-label">Estado</span>
+              <span class="nav-desc">Salud general del sistema</span>
+            </span>
+          </button>
+          <button type="button" class="nav-tab" data-view="operation" aria-selected="false">
+            <span class="nav-text">
+              <span class="nav-label">Operación</span>
+              <span class="nav-desc">Capturas, bomba y órdenes</span>
+            </span>
+          </button>
+          <button type="button" class="nav-tab" data-view="sensors" aria-selected="false">
+            <span class="nav-text">
+              <span class="nav-label">Sensores</span>
+              <span class="nav-desc">Telemetría del ESP32</span>
             </span>
           </button>
           <button type="button" class="nav-tab" data-view="analytics" aria-selected="false">
             <span class="nav-text">
               <span class="nav-label">Analítica</span>
-              <span class="nav-desc">Stats y archivo</span>
+              <span class="nav-desc">Materiales y tendencias</span>
             </span>
           </button>
-          <button type="button" class="nav-tab" data-view="device" aria-selected="false">
+          <button type="button" class="nav-tab" data-view="archive" aria-selected="false">
             <span class="nav-text">
-              <span class="nav-label">Dispositivo</span>
-              <span class="nav-desc">Config y telemetría</span>
+              <span class="nav-label">Archivo</span>
+              <span class="nav-desc">Capturas y exportación</span>
+            </span>
+          </button>
+          <button type="button" class="nav-tab" data-view="admin" aria-selected="false">
+            <span class="nav-text">
+              <span class="nav-label">Administración</span>
+              <span class="nav-desc">Config, diagnóstico y mantenimiento</span>
             </span>
           </button>
         </nav>
@@ -62,8 +80,8 @@
               <span class="brand-mark">REBA</span>
             </div>
             <div class="view-heading">
-              <h1 class="view-title" id="viewTitle">En vivo</h1>
-              <p class="view-sub" id="viewSub">Capturas y bomba · el ESP32 reporta cada ~60 s</p>
+              <h1 class="view-title" id="viewTitle">Estado</h1>
+              <p class="view-sub" id="viewSub">Salud general · conectividad, bomba y órdenes</p>
             </div>
           </div>
           <div class="topbar-right">
@@ -73,7 +91,16 @@
               <span class="tt-track" aria-hidden="true"><span class="tt-knob"></span></span>
               <span class="tt-label" id="themeToggleLabel">Tema · Oscuro</span>
             </button>
+            <span id="topClock" class="top-clock" title="Hora local del dispositivo que ves el dashboard">--:--:--</span>
             <span id="lastPingText" class="ping-note" title="Último contacto del ESP32-CAM">Ping · sin contacto</span>
+            <span id="topPumpPill" class="status-pill pump-count"
+                  title="Fotos acumuladas hacia el próximo ciclo automático de la bomba (se reinicia con orden manual)">
+              <span id="topPumpText">Bomba · 0/3</span>
+            </span>
+            <span id="topTimerPill" class="status-pill pump-timer"
+                  title="Tiempo restante estimado de la bomba encendida">
+              <span id="topTimerText">Bomba · --</span>
+            </span>
             <div id="deviceStatus" class="status-pill offline" title="Estado del ESP32-CAM (heartbeat)">
               <span class="status-dot" aria-hidden="true"></span>
               <span id="deviceStatusText">ESP32 · sin señal</span>
@@ -91,11 +118,65 @@
         </div>
 
       <main class="views">
-        <!-- ======================= EN VIVO ======================= -->
-        <section class="view view-live" id="view-live" role="tabpanel" aria-label="En vivo">
+        <!-- ======================= ESTADO GENERAL ======================= -->
+        <section class="view view-overview" id="view-overview" role="tabpanel" aria-label="Estado general">
+          <section class="panel panel-health">
+            <div class="panel-header">
+              <h2>Estado general</h2>
+              <span id="ovUpdated" class="meta-u"></span>
+            </div>
+            <div class="panel-body">
+              <div class="overview-grid">
+                <div class="ov-card" id="ovCardDev">
+                  <span class="metric-k">Dispositivo</span>
+                  <strong id="ovDevState">—</strong>
+                  <span class="ov-sub" id="ovDevIp">—</span>
+                </div>
+                <div class="ov-card">
+                  <span class="metric-k">Último contacto</span>
+                  <strong id="ovLastSeen">—</strong>
+                  <span class="ov-sub">próximo reporte <span class="poll-cd"></span></span>
+                </div>
+                <div class="ov-card" id="ovCardPump">
+                  <span class="metric-k">Bomba</span>
+                  <strong id="ovPumpState">—</strong>
+                  <span class="ov-sub" id="ovPumpSub">—</span>
+                </div>
+                <div class="ov-card">
+                  <span class="metric-k">Capturas</span>
+                  <strong id="ovCaptures">—</strong>
+                  <span class="ov-sub" id="ovCaptureAge">—</span>
+                </div>
+                <div class="ov-card">
+                  <span class="metric-k">Órdenes al ESP32</span>
+                  <strong id="ovOrders">—</strong>
+                  <span class="ov-sub" id="ovOrdersSub">—</span>
+                </div>
+                <div class="ov-card">
+                  <span class="metric-k">Servidor</span>
+                  <strong id="ovServer">—</strong>
+                  <span class="ov-sub" id="ovServerSub">—</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel panel-attention">
+            <div class="panel-header">
+              <h2>Requiere atención</h2>
+              <span id="attentionCount" class="status-pill">0</span>
+            </div>
+            <div class="panel-body">
+              <ul id="attentionList" class="attention-list"></ul>
+            </div>
+          </section>
+        </section>
+
+        <!-- ======================= OPERACIÓN ======================= -->
+        <section class="view view-operation" id="view-operation" role="tabpanel" aria-label="Operación" hidden>
           <div id="offlineBanner" class="offline-banner" role="status">
-            <strong>Esperando conexión del dispositivo</strong>
-            <p>
+            <strong id="offlineBannerTitle">Esperando conexión del dispositivo</strong>
+            <p id="offlineBannerText">
               Las métricas aparecerán cuando la ESP32-CAM haga contacto
               (reporta una vez por minuto).
             </p>
@@ -171,6 +252,11 @@
                 cada <span id="pumpTriggerInline">3</span> fotos tomadas.
                 Último ciclo inferido: <strong id="lastPumpEvent">aún no</strong>
               </p>
+              <p class="footer-note pump-hw">
+                Hardware: relé <strong id="pumpRelayState">—</strong> ·
+                bomba <strong id="pumpHwState">—</strong>
+                <span class="pump-hw-src">(telemetría, ~60 s)</span>
+              </p>
 
               <div class="pump-manual">
                 <span class="pump-manual-label">Activar bomba a mano · segundos de encendido</span>
@@ -206,55 +292,60 @@
             </div>
           </section>
 
-          <section class="panel panel-perf panel-minor">
+          <section class="panel panel-orders">
             <div class="panel-header">
-              <h2>Diagnóstico</h2>
-              <span class="panel-tag">red · IA · servidor</span>
-              <span id="perfUpdated" class="meta-u"></span>
+              <h2>Órdenes al dispositivo</h2>
+              <span id="ordersPending" class="status-pill">0 pendientes</span>
+              <span id="ordersUpdated" class="meta-u"></span>
             </div>
             <div class="panel-body">
-              <p class="offline-empty">
-                Sin conexión con la ESP32 — estas métricas aparecen cuando el
+              <p class="orders-note">
+                Cada orden viaja en el próximo contacto del ESP32 (≤60 s), se
+                marca <em>entregada</em> cuando la recoge y <em>ejecutada</em>
+                cuando confirma. Expira a los 10 min si el dispositivo no la
+                recibe; se puede cancelar mientras siga en cola.
+              </p>
+              <ul id="ordersList" class="orders-list"></ul>
+            </div>
+          </section>
+        </section>
+
+        <!-- ======================= SENSORES ======================= -->
+        <section class="view view-sensors" id="view-sensors" role="tabpanel" aria-label="Sensores" hidden>
+          <section class="panel panel-telemetry">
+            <div class="panel-header">
+              <h2>Telemetría del dispositivo</h2>
+              <span class="panel-tag">reporta cada ~60 s</span>
+              <span id="circuitState" class="status-pill"></span>
+            </div>
+            <div class="panel-body">
+              <p class="offline-empty" id="telemetryEmpty">
+                Sin conexión con la ESP32 — la telemetría aparece cuando el
                 dispositivo reporta.
               </p>
-              <div class="metric-grid">
-                <div class="metric">
-                  <span class="metric-k">Red · RTT</span>
-                  <strong id="mNetMs">—</strong><span class="metric-u">ms</span>
-                </div>
-                <div class="metric">
-                  <span class="metric-k">IA · promedio</span>
-                  <strong id="mInferAvg">—</strong><span class="metric-u">ms</span>
-                </div>
-                <div class="metric">
-                  <span class="metric-k">IA · p95</span>
-                  <strong id="mInferP95">—</strong><span class="metric-u">ms</span>
-                </div>
-                <div class="metric">
-                  <span class="metric-k">Heartbeat ESP32</span>
-                  <strong id="mHeartbeat">—</strong>
-                </div>
-                <div class="metric">
-                  <span class="metric-k">Polls última hora</span>
-                  <strong id="mPollsH">—</strong><span class="metric-u">/h</span>
-                </div>
-                <div class="metric">
-                  <span class="metric-k">Uploads última hora</span>
-                  <strong id="mUploadsH">—</strong>
-                </div>
-                <div class="metric">
-                  <span class="metric-k">Uptime servidor</span>
-                  <strong id="mUptime">—</strong>
-                </div>
-                <div class="metric">
-                  <span class="metric-k">Clientes WS</span>
-                  <strong id="mWsClients">—</strong>
-                </div>
-                <div class="metric">
-                  <span class="metric-k">Último dato en vivo</span>
-                  <strong id="mWsAge">—</strong>
-                </div>
+              <div class="circuit-grid">
+                <div class="circuit-row"><span>ESP32-CAM</span><strong id="cDevState">—</strong></div>
+                <div class="circuit-row"><span>IP · último contacto</span><strong id="cDevIp">—</strong></div>
+                <div class="circuit-row"><span>Reportes recibidos</span><strong id="cPolls">—</strong></div>
+                <div class="circuit-row"><span>Sensor de distancia</span><strong id="cDist">—</strong></div>
+                <div class="circuit-row"><span>Relé de la bomba</span><strong id="cRelay">—</strong></div>
+                <div class="circuit-row"><span>Bomba (hardware)</span><strong id="cPumpOn">—</strong></div>
+                <div class="circuit-row"><span>Fotos pendientes de subir</span><strong id="cQueue">—</strong></div>
+                <div class="circuit-row"><span>Cámara</span><strong id="cCam">—</strong></div>
+                <div class="circuit-row"><span>Memoria libre</span><strong id="cHeap">—</strong></div>
+                <div class="circuit-row"><span>Señal WiFi</span><strong id="cRssi">—</strong></div>
+                <div class="circuit-row"><span>Bomba manual</span><strong id="cPumpManual">—</strong></div>
+                <div class="circuit-row"><span>Fotos hacia ciclo</span><strong id="cPumpProg">—</strong></div>
+                <div class="circuit-row"><span>Servidor activo</span><strong id="cSrvAct">—</strong></div>
+                <div class="circuit-row"><span>Firmware</span><strong id="cFw">—</strong></div>
+                <div class="circuit-row"><span>Reinicios</span><strong id="cBoots">—</strong></div>
+                <div class="circuit-row"><span>Tiempo activo</span><strong id="cDevUptime">—</strong></div>
+                <div class="circuit-row"><span>Último reinicio</span><strong id="cReset">—</strong></div>
               </div>
+              <p id="circuitNote" class="footer-note">
+                La telemetría del dispositivo llega una vez por minuto.
+                Con firmware antiguo, algunas filas muestran "sin datos".
+              </p>
             </div>
           </section>
         </section>
@@ -310,6 +401,49 @@
             </div>
           </section>
 
+          <section class="panel panel-inference">
+            <div class="panel-header">
+              <h2>Rendimiento de inferencia</h2>
+              <span class="panel-tag">últimas 60 capturas</span>
+              <span id="inferUpdated" class="meta-u"></span>
+            </div>
+            <div class="panel-body">
+              <div class="metric-grid">
+                <div class="metric">
+                  <span class="metric-k">Capturas procesadas</span>
+                  <strong id="mInferCount">—</strong>
+                </div>
+                <div class="metric">
+                  <span class="metric-k">Inferencia · promedio</span>
+                  <strong id="mInferAvg">—</strong><span class="metric-u">ms</span>
+                </div>
+                <div class="metric">
+                  <span class="metric-k">Inferencia · p95</span>
+                  <strong id="mInferP95">—</strong><span class="metric-u">ms</span>
+                </div>
+                <div class="metric">
+                  <span class="metric-k">Inferencia · mín.</span>
+                  <strong id="mInferMin">—</strong><span class="metric-u">ms</span>
+                </div>
+                <div class="metric">
+                  <span class="metric-k">Inferencia · máx.</span>
+                  <strong id="mInferMax">—</strong><span class="metric-u">ms</span>
+                </div>
+                <div class="metric">
+                  <span class="metric-k">Capturas última hora</span>
+                  <strong id="mUploadsH">—</strong>
+                </div>
+                <div class="metric">
+                  <span class="metric-k">Capturas en archivo</span>
+                  <strong id="mCapturesTotal">—</strong>
+                </div>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <!-- ======================= ARCHIVO ======================= -->
+        <section class="view view-archive" id="view-archive" role="tabpanel" aria-label="Archivo" hidden>
           <section class="panel panel-gallery">
             <div class="panel-header">
               <h2>Galería de capturas</h2>
@@ -328,23 +462,15 @@
               <p id="galleryEmpty" class="capture-empty" hidden>
                 Sin capturas todavía.
               </p>
-              <div class="danger-zone">
-                <div class="danger-copy">
-                  <strong>Zona de peligro</strong>
-                  <p>Borra todas las fotos y detecciones del álbum. No se puede deshacer.</p>
-                </div>
-                <button type="button" id="btnClearAlbum" class="btn danger"
-                        title="Borra todas las fotos y detecciones del álbum (útil en pruebas)">Vaciar álbum</button>
-              </div>
             </div>
           </section>
         </section>
 
-        <!-- ======================= DISPOSITIVO ======================= -->
-        <section class="view view-device" id="view-device" role="tabpanel" aria-label="Dispositivo" hidden>
-          <section class="panel panel-device">
+        <!-- ======================= ADMINISTRACIÓN ======================= -->
+        <section class="view view-admin" id="view-admin" role="tabpanel" aria-label="Administración" hidden>
+          <section class="panel panel-config">
             <div class="panel-header">
-              <h2>Dispositivo ESP32-CAM</h2>
+              <h2>Configuración del dispositivo</h2>
               <span id="deviceConfigState" class="status-pill"></span>
               <details class="help">
                 <summary>Ayuda</summary>
@@ -439,46 +565,92 @@
                 </div>
 
                 <div class="device-form-actions">
-                  <button type="submit" class="primary">Guardar y aplicar</button>
+                  <button type="submit" class="primary">Guardar</button>
                   <button type="button" id="deviceConfigReload">Recargar</button>
                 </div>
+                <p id="cfgDelivery" class="field-hint cfg-delivery"></p>
               </form>
             </div>
           </section>
 
-          <section class="panel panel-circuit panel-minor">
+          <section class="panel panel-system">
             <div class="panel-header">
-              <h2>Salud del dispositivo</h2>
-              <span class="panel-tag">telemetría cada ~60 s</span>
-              <span id="circuitState" class="status-pill"></span>
+              <h2>Diagnóstico del servidor</h2>
+              <span class="panel-tag">esta PC · no depende del ESP32</span>
+              <span id="perfUpdated" class="meta-u"></span>
             </div>
             <div class="panel-body">
-              <p class="offline-empty">
-                Sin conexión con la ESP32 — el estado del circuito aparece
-                cuando el dispositivo reporta.
-              </p>
-              <div class="circuit-grid">
-                <div class="circuit-row"><span>ESP32-CAM</span><strong id="cDevState">—</strong></div>
-                <div class="circuit-row"><span>IP · último contacto</span><strong id="cDevIp">—</strong></div>
-                <div class="circuit-row"><span>Reportes recibidos</span><strong id="cPolls">—</strong></div>
-                <div class="circuit-row"><span>Sensor de distancia</span><strong id="cDist">—</strong></div>
-                <div class="circuit-row"><span>Relé de la bomba</span><strong id="cRelay">—</strong></div>
-                <div class="circuit-row"><span>Fotos pendientes de subir</span><strong id="cQueue">—</strong></div>
-                <div class="circuit-row"><span>Cámara</span><strong id="cCam">—</strong></div>
-                <div class="circuit-row"><span>Memoria libre</span><strong id="cHeap">—</strong></div>
-                <div class="circuit-row"><span>Señal WiFi</span><strong id="cRssi">—</strong></div>
-                <div class="circuit-row"><span>Bomba manual</span><strong id="cPumpManual">—</strong></div>
-                <div class="circuit-row"><span>Fotos hacia ciclo</span><strong id="cPumpProg">—</strong></div>
+              <div class="metric-grid">
+                <div class="metric">
+                  <span class="metric-k">Red · latencia</span>
+                  <strong id="mNetMs">—</strong><span class="metric-u">ms</span>
+                </div>
+                <div class="metric">
+                  <span class="metric-k">Último contacto ESP32</span>
+                  <strong id="mHeartbeat">—</strong>
+                </div>
+                <div class="metric">
+                  <span class="metric-k">Consultas config · última hora</span>
+                  <strong id="mPollsH">—</strong><span class="metric-u">/h</span>
+                </div>
+                <div class="metric">
+                  <span class="metric-k">Servidor activo</span>
+                  <strong id="mUptime">—</strong>
+                </div>
+                <div class="metric">
+                  <span class="metric-k">Clientes en vivo</span>
+                  <strong id="mWsClients">—</strong>
+                </div>
+                <div class="metric">
+                  <span class="metric-k">Último dato recibido</span>
+                  <strong id="mWsAge">—</strong>
+                </div>
               </div>
+            </div>
+          </section>
+
+          <section class="panel panel-maintenance">
+            <div class="panel-header">
+              <h2>Mantenimiento</h2>
+              <span class="panel-tag">acciones sobre el dispositivo y los datos</span>
+            </div>
+            <div class="panel-body">
               <div class="circuit-actions">
                 <button type="button" id="btnReconnect" class="btn"
                         title="Ordena al ESP32 forzar reconexión WiFi en su próximo contacto (≤60 s). Si está offline de verdad, la orden no puede entregarse.">Reconectar ESP32</button>
                 <button type="button" id="btnQueueClear" class="btn ghost"
                         title="El ESP32 descarta las fotos tomadas aún no subidas en su próximo contacto">Vaciar cola de fotos</button>
+                <a class="btn ghost" href="/api/export/backup"
+                   title="Descarga un ZIP con todos los datos y las fotos, por si necesitas restaurar antes de borrar">Descargar respaldo</a>
               </div>
               <p id="reconnectState" class="manual-state circuit-state">
                 La orden llega al ESP32 en su próximo contacto (≤60 s).
               </p>
+
+              <div class="ota-block">
+                <p class="form-group">Actualización de firmware (OTA)</p>
+                <div class="ota-row">
+                  <input type="text" id="otaUrlInput"
+                         placeholder="http://servidor:5000/firmware.bin" />
+                  <button type="button" id="btnOta" class="btn">Programar OTA</button>
+                </div>
+                <p class="field-hint">
+                  La ESP32 descarga el .bin en su próximo contacto, lo flashea
+                  y reinicia. Solo acepta <code>http://</code> (HTTP plano) y
+                  cada URL se aplica una sola vez.
+                </p>
+                <p id="otaCurrent" class="field-hint"></p>
+                <p id="otaState" class="manual-state"></p>
+              </div>
+
+              <div class="danger-zone">
+                <div class="danger-copy">
+                  <strong>Zona de peligro</strong>
+                  <p>Borra todas las fotos y detecciones del álbum. No se puede deshacer.</p>
+                </div>
+                <button type="button" id="btnClearAlbum" class="btn danger"
+                        title="Borra todas las fotos y detecciones del álbum (útil en pruebas)">Vaciar álbum</button>
+              </div>
               <div class="danger-zone">
                 <div class="danger-copy">
                   <strong>Zona de peligro</strong>
@@ -487,10 +659,6 @@
                 <button type="button" id="btnResetAll" class="btn danger"
                         title="Borra capturas, detecciones, contadores y eventos de bomba">Borrar todos los datos</button>
               </div>
-              <p id="circuitNote" class="footer-note">
-                La telemetría del dispositivo llega una vez por minuto.
-                Con firmware antiguo, algunas filas muestran "sin datos".
-              </p>
             </div>
           </section>
         </section>
@@ -498,19 +666,28 @@
 
       <p class="footer-note">
         Dashboard local · la configuración del dispositivo está en la
-        sección Dispositivo
+        sección Administración
       </p>
       </div><!-- /.content -->
 
       <nav class="bottom-nav" aria-label="Secciones del dashboard">
-        <button type="button" class="nav-tab is-active" data-view="live" aria-selected="true">
-          <span>En vivo</span>
+        <button type="button" class="nav-tab is-active" data-view="overview" aria-selected="true">
+          <span>Estado</span>
+        </button>
+        <button type="button" class="nav-tab" data-view="operation" aria-selected="false">
+          <span>Operación</span>
+        </button>
+        <button type="button" class="nav-tab" data-view="sensors" aria-selected="false">
+          <span>Sensores</span>
         </button>
         <button type="button" class="nav-tab" data-view="analytics" aria-selected="false">
           <span>Analítica</span>
         </button>
-        <button type="button" class="nav-tab" data-view="device" aria-selected="false">
-          <span>Dispositivo</span>
+        <button type="button" class="nav-tab" data-view="archive" aria-selected="false">
+          <span>Archivo</span>
+        </button>
+        <button type="button" class="nav-tab" data-view="admin" aria-selected="false">
+          <span>Admin</span>
         </button>
       </nav>
 
@@ -523,8 +700,28 @@
           <div id="lightboxMeta" class="lightbox-meta"></div>
         </div>
       </div>
+
+      <!-- Modal de confirmación para acciones destructivas -->
+      <div id="confirmModal" class="modal-backdrop" hidden>
+        <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="cmTitle">
+          <h3 id="cmTitle" class="modal-title"></h3>
+          <p id="cmDesc" class="modal-desc"></p>
+          <ul id="cmScope" class="modal-scope"></ul>
+          <div id="cmTypeWrap" class="modal-type" hidden>
+            <label for="cmTypeInput" class="modal-type-label">
+              Escribe <strong id="cmTypeWord"></strong> para confirmar
+            </label>
+            <input type="text" id="cmTypeInput" autocomplete="off"
+                   spellcheck="false" />
+          </div>
+          <div class="modal-actions">
+            <button type="button" id="cmCancel" class="btn ghost">Cancelar</button>
+            <button type="button" id="cmOk" class="btn danger">Confirmar</button>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <script src="/app.js?v=20261124-2" defer></script>
+    <script src="/app.js?v=20261125-1" defer></script>
   </body>
 </html>

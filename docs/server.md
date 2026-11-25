@@ -219,7 +219,15 @@ Encola una **solicitud de reconexión** para el ESP32 — el botón "Reconectar 
 
 ### `POST /api/device/ack`
 
-Confirmación del ESP32 tras ejecutar `pump_cmd`, `capture_cmd` o `reconnect_cmd`. Body `{"cmd_id": <unix_ts>}`. Si coincide con el pendiente, borra el override → `{"ok": true, "cleared": true}`.
+Confirmación del ESP32 tras ejecutar `pump_cmd`, `capture_cmd` o `reconnect_cmd`. Body `{"cmd_id": <unix_ts>}`. Si coincide con el pendiente, borra el override → `{"ok": true, "cleared": true}` y marca la orden como ejecutada en `device_commands`.
+
+### `GET /api/device/commands?limit=40`
+
+Ciclo de vida de las órdenes al dispositivo (tabla `device_commands`). Cada item: `{id, kind, detail, uid, created_ts, delivered_ts, acked_ts, expires_ts, state}` donde `state` ∈ `queued | delivered | acked | expired | cancelled`. `pending` cuenta las no resueltas dentro del TTL (600 s). El dashboard lo consulta cada 10 s y se refresca por WS (`type:"orders"`).
+
+### `POST /api/device/commands/{id}/cancel`
+
+Cancela una orden **aún no entregada** al ESP32 (borra el override de config solo si sigue conteniendo esa orden). 409 si ya fue entregada/ejecutada/cancelada.
 
 ### `GET /api/device/config`
 
@@ -240,6 +248,10 @@ Serie temporal para la gráfica del dashboard: `{days, series: [{date, detection
 ### `GET /api/export/yolo?min_conf=0&limit=500`
 
 Descarga `reba_dataset_yolo.zip`: `images/*.jpg` (JPEG **original** del ESP32, sin cajas), `labels/*.txt` en formato YOLO (clase cx cy w h normalizado, desde `detections`), `data.yaml` con las 3 clases. `min_conf` filtra detecciones débiles; capturas sin detección quedan como background.
+
+### `GET /api/export/backup`
+
+Descarga `reba_backup.zip`: `manifest.json` (stats + capturas/detecciones/eventos recientes) + todas las fotos del álbum. Respaldo previo a las operaciones destructivas del dashboard.
 
 ### `GET /api/detections/latest`
 

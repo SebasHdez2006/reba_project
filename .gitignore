@@ -42,6 +42,7 @@ Desktop.ini
 .ipynb_checkpoints/
 server.log
 logs/
+tmp_debug/
 
 # Arduino IDE build outputs
 build/

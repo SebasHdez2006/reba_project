@@ -21,11 +21,13 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import logging
 import time
 import zipfile
 from collections import deque
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Set
 
 import cv2
@@ -70,6 +72,7 @@ pump_state: Dict[str, Any] = {
     "uploads_received": 0,
     "last_upload_ts": None,
     "last_pump_event": None,
+    "active_until": None,   # epoch estimado de fin del ciclo de bomba ON
 }
 
 # Último contacto del ESP32-CAM. Se actualiza en cada GET /api/device/config
@@ -160,6 +163,8 @@ async def broadcast(message: Dict[str, Any]) -> None:
 
 def pump_progress() -> Dict[str, Any]:
     """Progreso inferido hacia el próximo ciclo de bomba."""
+    active_until = pump_state.get("active_until")
+    rest = max(0.0, active_until - _time.time()) if active_until else 0.0
     return {
         "photos_since_pump": pump_state["photos_since_pump"],
         "pump_trigger_photos": settings.pump_trigger_photos,
@@ -167,6 +172,8 @@ def pump_progress() -> Dict[str, Any]:
         "uploads_received": pump_state["uploads_received"],
         "last_upload_ts": pump_state["last_upload_ts"],
         "last_pump_event": pump_state["last_pump_event"],
+        "pump_active_until": active_until,
+        "pump_rest_s": rest,
     }
 
 
@@ -247,6 +254,9 @@ async def process_upload(body: bytes, evento: str | None) -> Dict[str, Any]:
     if pump_state["photos_since_pump"] >= settings.pump_trigger_photos:
         pump_cycle_triggered = True
         pump_state["photos_since_pump"] = 0
+        # La ESP32 enciende la bomba al tomar la N-ésima foto; este upload
+        # llega ~1 s después -> estimación del fin del ciclo para la UI.
+        pump_state["active_until"] = _time.time() + settings.pump_run_seconds
         event = db.insert_pump_event(
             settings.pump_trigger_photos,
             detail=(
@@ -466,18 +476,27 @@ def _pump_cmd_fresh(value: str) -> bool:
         return False
 
 
-def _pending_pump_cmd() -> str | None:
+def _pending_cmd(key: str) -> str | None:
     """
-    pump_cmd vigente o None. Limpia perezosamente el override expirado:
-    si el ESP32 nunca vuelve a consultar, la orden vieja no debe seguir
-    reportándose como "en cola" en el dashboard.
+    Valor vigente de una orden de un solo uso o None.
+
+    Limpia perezosamente el override expirado: si el ESP32 nunca vuelve a
+    consultar, la orden vieja no debe seguir reportándose como "en cola".
     """
     cfg = db.get_device_config()
-    cmd = cfg.get("pump_cmd")
+    cmd = cfg.get(key)
     if cmd is not None and not _pump_cmd_fresh(cmd):
-        db.delete_device_config("pump_cmd")
+        db.delete_device_config(key)
         return None
     return cmd
+
+
+def _pending_pump_cmd() -> str | None:
+    return _pending_cmd("pump_cmd")
+
+
+# Claves de órdenes de un solo uso (las registra device_commands).
+COMMAND_CONFIG_KEYS = ("pump_cmd", "capture_cmd", "reconnect_cmd", "queue_clear")
 
 
 @app.get("/api/device/config", response_class=PlainTextResponse)
@@ -490,15 +509,17 @@ async def device_config(request: Request):
     sus valores locales para el resto. Cada poll cuenta como heartbeat del
     dispositivo (device_state) y se acumula en el contador de polls.
     """
-    if _touch_device(request):
+    is_device = _touch_device(request)
+    if is_device:
         _record_poll()
     cfg = db.get_device_config()
-    if not _is_device(request):
-        # Terceros (curl, bots): sin credenciales WiFi y sin consumir la
-        # orden WiFi de un solo uso destinada a la placa.
-        cfg.pop("wifi_ssid", None)
-        cfg.pop("wifi_pass", None)
-    for key in ("pump_cmd", "capture_cmd", "reconnect_cmd", "queue_clear"):
+    if not is_device:
+        # Terceros (curl, bots): sin credenciales WiFi y sin visibilidad de
+        # las órdenes de un solo uso destinadas a la placa (ni consumen la
+        # orden WiFi, que es de un solo uso).
+        for key in ("wifi_ssid", "wifi_pass", *COMMAND_CONFIG_KEYS):
+            cfg.pop(key, None)
+    for key in COMMAND_CONFIG_KEYS:
         cmd = cfg.get(key)
         if cmd is not None and not _pump_cmd_fresh(cmd):
             db.delete_device_config(key)      # expirado: no entregarlo
@@ -511,13 +532,21 @@ async def device_config(request: Request):
         db.delete_device_config("wifi_ssid")
         db.delete_device_config("wifi_pass")
         logger.info("wifi_ssid=%s entregado al ESP32 (un solo uso)", cfg["wifi_ssid"])
+    if is_device:
+        # Las órdenes presentes en esta respuesta quedaron entregadas:
+        # el dashboard las muestra como "entregada" hasta el ACK.
+        for key in COMMAND_CONFIG_KEYS:
+            if key in cfg:
+                db.mark_device_command_delivered(key)
     return "\n".join(f"{k}={v}" for k, v in sorted(cfg.items())) + "\n"
 
 
 @app.get("/api/admin/device-config")
 async def admin_get_device_config():
-    """Overrides actuales (los edita el dashboard)."""
-    return {"items": db.get_device_config(),
+    """Overrides actuales (los edita el dashboard) + marca de tiempo."""
+    meta = db.get_device_config_meta()
+    return {"items": {k: m["value"] for k, m in meta.items()},
+            "updated": {k: m["updated_ts"] for k, m in meta.items()},
             "allowed_keys": list(db.DEVICE_CONFIG_KEYS)}
 
 
@@ -544,6 +573,16 @@ async def admin_set_device_config(payload: Dict[str, Any]):
         else:
             db.set_device_config(key, str(value).strip())
             applied.append(key)
+    # queue_clear también es una orden de un solo uso: registrarla para
+    # que aparezca en el ciclo de vida de órdenes del dashboard.
+    if "queue_clear" in applied:
+        try:
+            db.upsert_device_command(
+                int(str(items["queue_clear"]).strip()),
+                "queue_clear", "queue_clear", "vaciar cola de fotos",
+            )
+        except (TypeError, ValueError):
+            pass
     logger.info("device_config: aplicadas=%s eliminadas=%s", applied, removed)
     return {"ok": True, "applied": applied, "removed": removed}
 
@@ -562,24 +601,42 @@ async def device_ack(payload: Dict[str, Any]):
         raise HTTPException(400, "cmd_id inválido")
     cfg = db.get_device_config()
     cleared = False
+    pump_acked = False
     pending = cfg.get("pump_cmd", "")
     if pending.startswith(f"{cmd_id}:"):
+        # pump_cmd="<unix_ts>:<segundos>": el ACK llega justo tras
+        # bombaArrancar -> el countdown corre desde ahora + seg.
+        try:
+            secs = int(pending.split(":", 1)[1])
+            pump_state["active_until"] = _time.time() + secs
+        except (ValueError, IndexError):
+            pass
         db.delete_device_config("pump_cmd")
+        db.mark_device_command_acked("pump_cmd")
+        pump_acked = True
         cleared = True
     pending_cap = cfg.get("capture_cmd", "")
     if pending_cap == str(cmd_id):
         db.delete_device_config("capture_cmd")
+        db.mark_device_command_acked("capture_cmd")
         cleared = True
     pending_rec = cfg.get("reconnect_cmd", "")
     if pending_rec == str(cmd_id):
         db.delete_device_config("reconnect_cmd")
+        db.mark_device_command_acked("reconnect_cmd")
         cleared = True
     pending_qc = cfg.get("queue_clear", "")
     if pending_qc == str(cmd_id):
         db.delete_device_config("queue_clear")
+        db.mark_device_command_acked("queue_clear")
         cleared = True
     if cleared:
         logger.info("cmd %s confirmado por el dispositivo", cmd_id)
+        # Empujar el nuevo estado al dashboard sin esperar el próximo poll:
+        # la lista de órdenes cambia y, si era la bomba, arranca el countdown.
+        await broadcast({"type": "orders", "payload": {}})
+        if pump_acked:
+            await broadcast({"type": "pump", "payload": pump_progress()})
         return {"ok": True, "cleared": True}
     return {"ok": True, "cleared": False}
 
@@ -605,12 +662,21 @@ async def pump_run(payload: Dict[str, Any]):
         raise HTTPException(400, "seconds inválido")
     if not 1 <= seconds <= 300:
         raise HTTPException(400, "seconds fuera de rango (1-300)")
+    if _pending_pump_cmd() is not None:
+        raise HTTPException(
+            409, "Ya hay una orden de bomba en cola; cancélala o espera a que expire")
 
     cmd_id = int(time.time())
     cmd = f"{cmd_id}:{seconds}"
     db.set_device_config("pump_cmd", cmd)
+    db.upsert_device_command(cmd_id, "pump", "pump_cmd", f"{seconds} s")
+    # La orden manual cuenta como ciclo de bomba realizado: el contador
+    # de fotos para el disparo automático vuelve a cero (el firmware
+    # hace lo propio al ejecutar el comando — evita doble bombeo).
+    pump_state["photos_since_pump"] = 0
     event = db.insert_pump_event(
-        seconds, detail=f"Bomba manual solicitada desde dashboard (cmd {cmd_id})"
+        seconds,
+        detail=f"Bomba manual solicitada desde dashboard (cmd {cmd_id}) · contador reiniciado",
     )
     logger.info("pump_cmd encolado: %s", cmd)
     return {"ok": True, "cmd_id": cmd_id, "seconds": seconds,
@@ -637,7 +703,11 @@ async def capture_run():
     captura (con detección ONNX y broadcast WS).
     """
     cmd_id = int(time.time())
+    if _pending_cmd("capture_cmd") is not None:
+        raise HTTPException(
+            409, "Ya hay una orden de foto en cola; cancélala o espera a que expire")
     db.set_device_config("capture_cmd", str(cmd_id))
+    db.upsert_device_command(cmd_id, "capture", "capture_cmd", "fotografía")
     logger.info("capture_cmd encolado: %s", cmd_id)
     return {"ok": True, "cmd_id": cmd_id, "device": device_status(),
             "note": "Se entrega en el próximo poll del ESP32 (<=60 s)"}
@@ -661,10 +731,101 @@ async def device_reconnect():
     failover srv_alt, reinicio a los 30 min sin config).
     """
     cmd_id = int(time.time())
+    if _pending_cmd("reconnect_cmd") is not None:
+        raise HTTPException(
+            409, "Ya hay una orden de reconexión en cola; cancélala o espera a que expire")
     db.set_device_config("reconnect_cmd", str(cmd_id))
+    db.upsert_device_command(cmd_id, "reconnect", "reconnect_cmd",
+                             "forzar reconexión WiFi")
     logger.info("reconnect_cmd encolado: %s", cmd_id)
     return {"ok": True, "cmd_id": cmd_id, "device": device_status(),
             "note": "Se entrega en el próximo poll del ESP32 (<=60 s)"}
+
+
+# ---------------------------------------------------------------------------
+# Ciclo de vida de las órdenes al dispositivo (dashboard "Órdenes")
+# ---------------------------------------------------------------------------
+
+def _command_state(row: Dict[str, Any], now: float) -> str:
+    """
+    Estado visible de una orden:
+      queued     creada, aún no entregada al ESP32
+      delivered  servida en un poll de config, esperando ACK
+      acked      el dispositivo confirmó su ejecución
+      expired    el TTL pasó sin que el ESP32 la recibiera
+      cancelled  descartada desde el dashboard antes de entregarse
+    """
+    if row.get("cancelled_ts"):
+        return "cancelled"
+    if row.get("acked_ts"):
+        return "acked"
+    if row.get("delivered_ts"):
+        return "delivered"
+    if now - float(row["created_ts"]) > PUMP_CMD_TTL_S:
+        return "expired"
+    return "queued"
+
+
+@app.get("/api/device/commands")
+async def device_commands(limit: int = 40):
+    """
+    Órdenes recientes al ESP32 con su estado de ciclo de vida.
+
+    El dashboard las muestra en Operación → "Órdenes al dispositivo":
+    en cola → entregada → ejecutada (ACK) / expirada / cancelada.
+    """
+    limit = max(1, min(limit, 200))
+    now = time.time()
+    items = []
+    for row in db.get_device_commands(limit):
+        items.append({
+            "id": row["id"],
+            "kind": row["kind"],
+            "detail": row["detail"],
+            "uid": row["uid"],
+            "created_ts": row["created_ts"],
+            "delivered_ts": row["delivered_ts"],
+            "acked_ts": row["acked_ts"],
+            "expires_ts": float(row["created_ts"]) + PUMP_CMD_TTL_S,
+            "state": _command_state(row, now),
+        })
+    return {
+        "items": items,
+        "pending": db.count_pending_device_commands(now - PUMP_CMD_TTL_S),
+        "ttl_s": PUMP_CMD_TTL_S,
+        "device": device_status(),
+    }
+
+
+@app.post("/api/device/commands/{cid}/cancel")
+async def cancel_device_command(cid: int):
+    """
+    Cancela una orden que aún no fue entregada al ESP32.
+
+    Solo procede en estado "queued": una vez entregada, el firmware la
+    ejecuta al recibirla y cancelarla en el servidor no la retiraría.
+    """
+    row = db.get_device_command(cid)
+    if row is None:
+        raise HTTPException(404, "Orden no encontrada")
+    if row["acked_ts"] or row["cancelled_ts"]:
+        raise HTTPException(409, "La orden ya terminó")
+    if row["delivered_ts"]:
+        raise HTTPException(
+            409, "La orden ya fue entregada al dispositivo; no se puede cancelar")
+    # Borrar la clave solo si todavía contiene ESTA orden: pudo ser
+    # reemplazada por una más reciente del mismo tipo.
+    current = db.get_device_config().get(row["config_key"], "")
+    uid = str(row["uid"])
+    still_current = (current.startswith(f"{uid}:")
+                     if row["config_key"] == "pump_cmd" else current == uid)
+    if still_current:
+        db.delete_device_config(row["config_key"])
+    if not db.cancel_device_command(cid):
+        raise HTTPException(409, "La orden ya no es cancelable")
+    logger.info("Orden #%s (%s) cancelada desde el dashboard", cid, row["kind"])
+    await broadcast({"type": "orders", "payload": {}})
+    return {"ok": True, "id": cid}
 
 
 # ---------------------------------------------------------------------------
@@ -687,6 +848,7 @@ async def reset_captures(scope: str = "photos"):
     pump_state["uploads_received"] = 0
     pump_state["last_upload_ts"] = None
     pump_state["last_pump_event"] = None
+    pump_state["active_until"] = None
     stats = db.get_stats()
     stats["device"] = device_status()
     await broadcast({"type": "stats", "payload": stats})
@@ -813,6 +975,50 @@ async def export_yolo(min_conf: float = 0.0, limit: int = 500):
         media_type="application/zip",
         headers={"Content-Disposition":
                  "attachment; filename=reba_dataset_yolo.zip"},
+    )
+
+
+@app.get("/api/export/backup")
+async def export_backup():
+    """
+    Respaldo completo del estado del servidor en un .zip.
+
+    Contenido:
+      - manifest.json: contadores, eventos de bomba, órdenes, config del
+        dispositivo (sin credenciales WiFi) e historial de detecciones.
+      - images/capture_XXXXX.jpg: JPEG de cada captura (original si existe).
+
+    Pensado para descargar antes de una operación destructiva desde la
+    sección Mantenimiento del dashboard.
+    """
+    captures = db.get_captures_for_export(limit=5000, min_confidence=0.0)
+    cfg_safe = {
+        k: v for k, v in db.get_device_config().items()
+        if k not in ("wifi_ssid", "wifi_pass")
+    }
+    manifest = {
+        "app": "REBA",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "captures": len(captures),
+        "counters": db.get_counters(),
+        "pump_events": db.get_pump_events(10000),
+        "device_commands": db.get_device_commands(500),
+        "device_config": cfg_safe,
+        "detections": db.get_detection_history(100000),
+    }
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("manifest.json",
+                   json.dumps(manifest, indent=2, default=str))
+        for cap in captures:
+            z.writestr(f"images/capture_{cap['id']:05d}.jpg", cap["image"])
+    buf.seek(0)
+    logger.info("Backup exportado: %d capturas", len(captures))
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition":
+                 "attachment; filename=reba_backup.zip"},
     )
 
 

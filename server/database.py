@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -92,8 +93,28 @@ class Database:
                 value TEXT NOT NULL
             );
 
+            -- Ciclo de vida de las órdenes de un solo uso hacia el ESP32
+            -- (pump_cmd, capture_cmd, reconnect_cmd, queue_clear).
+            -- device_config sigue siendo el mecanismo de entrega; esta
+            -- tabla registra created/delivered/acked/cancelled para que el
+            -- dashboard pueda mostrar el estado real de cada orden.
+            CREATE TABLE IF NOT EXISTS device_commands (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                uid INTEGER NOT NULL,
+                kind TEXT NOT NULL,
+                config_key TEXT NOT NULL,
+                detail TEXT,
+                created_ts REAL NOT NULL,
+                delivered_ts REAL,
+                acked_ts REAL,
+                cancelled_ts REAL,
+                UNIQUE(kind, uid)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_detections_ts ON detections(ts);
             CREATE INDEX IF NOT EXISTS idx_detections_class ON detections(class_name);
+            CREATE INDEX IF NOT EXISTS idx_device_commands_created
+                ON device_commands(created_ts DESC);
             """
         )
         detection_columns = {
@@ -114,6 +135,16 @@ class Database:
         if "image_orig_jpeg" not in capture_columns:
             self.conn.execute(
                 "ALTER TABLE captures ADD COLUMN image_orig_jpeg BLOB"
+            )
+        # Marca de tiempo de la última escritura de cada override: el
+        # dashboard la usa para distinguir "guardado" de "descargado por
+        # el ESP32" (device.last_poll_ts > updated_ts).
+        config_columns = {
+            row["name"] for row in self.conn.execute("PRAGMA table_info(device_config)")
+        }
+        if "updated_ts" not in config_columns:
+            self.conn.execute(
+                "ALTER TABLE device_config ADD COLUMN updated_ts REAL"
             )
         self.conn.commit()
 
@@ -526,19 +557,146 @@ class Database:
         allowed = set(self.DEVICE_CONFIG_KEYS)
         return {r["key"]: r["value"] for r in rows if r["key"] in allowed}
 
+    def get_device_config_meta(self) -> Dict[str, Dict[str, Any]]:
+        """Overrides con su marca de tiempo (para el panel admin)."""
+        rows = self.conn.execute(
+            "SELECT key, value, updated_ts FROM device_config"
+        ).fetchall()
+        allowed = set(self.DEVICE_CONFIG_KEYS)
+        return {
+            r["key"]: {"value": r["value"], "updated_ts": r["updated_ts"]}
+            for r in rows
+            if r["key"] in allowed
+        }
+
     def set_device_config(self, key: str, value: str) -> None:
         if key not in self.DEVICE_CONFIG_KEYS:
             raise ValueError(f"Clave no permitida: {key}")
         self.conn.execute(
-            "INSERT INTO device_config(key, value) VALUES (?, ?) "
-            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (key, value),
+            "INSERT INTO device_config(key, value, updated_ts) VALUES (?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value, "
+            "updated_ts = excluded.updated_ts",
+            (key, value, time.time()),
         )
         self.conn.commit()
 
     def delete_device_config(self, key: str) -> None:
         self.conn.execute("DELETE FROM device_config WHERE key = ?", (key,))
         self.conn.commit()
+
+    # ------------------------------------------------------ device commands
+
+    def upsert_device_command(
+        self,
+        uid: int,
+        kind: str,
+        config_key: str,
+        detail: Optional[str] = None,
+    ) -> None:
+        """
+        Registra una orden de un solo uso hacia el ESP32.
+
+        Si se encola otra orden del mismo tipo antes de que la anterior se
+        entregue, la vieja queda cancelada: device_config ya no la sirve
+        (la clave fue sobreescrita), así que nunca llegará al dispositivo.
+        Las órdenes ya entregadas no se tocan: su ACK puede seguir llegando.
+        """
+        now = time.time()
+        with self.conn:
+            self.conn.execute(
+                """
+                INSERT INTO device_commands
+                    (uid, kind, config_key, detail, created_ts)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(kind, uid) DO UPDATE SET
+                    config_key = excluded.config_key,
+                    detail = excluded.detail,
+                    created_ts = excluded.created_ts,
+                    delivered_ts = NULL,
+                    acked_ts = NULL,
+                    cancelled_ts = NULL
+                """,
+                (int(uid), kind, config_key, detail, now),
+            )
+            self.conn.execute(
+                """
+                UPDATE device_commands SET cancelled_ts = ?
+                WHERE kind = ? AND uid != ? AND delivered_ts IS NULL
+                  AND acked_ts IS NULL AND cancelled_ts IS NULL
+                """,
+                (now, kind, int(uid)),
+            )
+
+    def mark_device_command_delivered(self, config_key: str) -> None:
+        """La orden se sirvió al ESP32 en su poll de /api/device/config."""
+        self.conn.execute(
+            """
+            UPDATE device_commands SET delivered_ts = ?
+            WHERE config_key = ? AND delivered_ts IS NULL
+              AND acked_ts IS NULL AND cancelled_ts IS NULL
+            """,
+            (time.time(), config_key),
+        )
+        self.conn.commit()
+
+    def mark_device_command_acked(self, config_key: str) -> None:
+        """El ESP32 confirmó la ejecución (POST /api/device/ack)."""
+        row = self.conn.execute(
+            """
+            SELECT id FROM device_commands
+            WHERE config_key = ? AND acked_ts IS NULL AND cancelled_ts IS NULL
+            ORDER BY id DESC LIMIT 1
+            """,
+            (config_key,),
+        ).fetchone()
+        if row:
+            self.conn.execute(
+                "UPDATE device_commands SET acked_ts = ? WHERE id = ?",
+                (time.time(), row["id"]),
+            )
+            self.conn.commit()
+
+    def get_device_command(self, row_id: int) -> Optional[Dict[str, Any]]:
+        row = self.conn.execute(
+            "SELECT * FROM device_commands WHERE id = ?", (int(row_id),)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def cancel_device_command(self, row_id: int) -> bool:
+        """
+        Cancela una orden que aún no fue entregada al ESP32.
+
+        Devuelve False si la fila no existe o ya no es cancelable
+        (entregada, ejecutada o cancelada previamente).
+        """
+        cur = self.conn.execute(
+            """
+            UPDATE device_commands SET cancelled_ts = ?
+            WHERE id = ? AND delivered_ts IS NULL
+              AND acked_ts IS NULL AND cancelled_ts IS NULL
+            """,
+            (time.time(), int(row_id)),
+        )
+        self.conn.commit()
+        return cur.rowcount > 0
+
+    def get_device_commands(self, limit: int = 50) -> List[Dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT * FROM device_commands ORDER BY id DESC LIMIT ?",
+            (int(limit),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def count_pending_device_commands(self, since_ts: float) -> int:
+        """Órdenes creadas desde `since_ts` sin ack ni cancelación."""
+        row = self.conn.execute(
+            """
+            SELECT COUNT(*) AS n FROM device_commands
+            WHERE created_ts >= ? AND acked_ts IS NULL AND cancelled_ts IS NULL
+            """,
+            (since_ts,),
+        ).fetchone()
+        return int(row["n"])
 
     def export_json_snapshot(self) -> str:
         return json.dumps(

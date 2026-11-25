@@ -8,15 +8,33 @@ Interfaz servida por FastAPI desde `static/` — abrir por HTTP en **http://loca
 
 ## Módulos
 
-La app está organizada en **3 vistas** con navegación por **sidebar** en escritorio (`≥1024px`) y una **píldora flotante inferior** en móvil (`<1024px`). Cada vista tiene su propio grid de 12 columnas:
+La app está organizada en **6 vistas** con navegación por **sidebar** en escritorio (`≥1024px`) y una **píldora flotante inferior** en móvil (`<1024px`). Cada vista tiene su propio grid de 12 columnas:
 
 | Vista | Módulos |
 |-------|---------|
-| **En vivo** | **Última captura** (7/12 × 2 filas): foto 4:3 con badge de clase + confianza, metadatos en mono (fecha, detecciones, inferencia ms, motor), tira de 8 miniaturas recientes (tocable → actualiza la principal) y botón **"Tomar foto ahora"** (`POST /api/capture/run` — el ESP32 la toma en su próximo poll ≤60 s). **Bomba** (5/12): progreso `fotos/N` + barra segmentada + chips de duración manual (5/10/20/30 s u "Otro") + "Activar ahora" + acordeón "Registro de eventos". **Rendimiento** (5/12, bajo Bomba): RTT de red, latencia ONNX (avg/p95), heartbeat, polls/h del ESP32, uploads/h, uptime del servidor, clientes WS |
-| **Analítica** | **Materiales acumulados** (5/12): KPIs + donut por clase con leyenda interactiva. **Actividad** (7/12): barras apiladas por día/clase, 7/14/30 días, tooltips. **Galería** (12/12): filtro por clase + Exportar YOLO + paginación + lightbox |
-| **Dispositivo** | **Config remota** del ESP32-CAM (5/12): Red y servidor / Parámetros y sensores, unidades en los inputs, mostrar/ocultar contraseña, ayuda desplegable y feedback "Guardado ✓". **Estado del circuito** (7/12): sensor HC-SR04, relé GPIO13, cola de fotos, cámara, heap, RSSI, **polls recibidos** (total + /h) + acciones: **"Reconectar ESP32"** (`POST /api/device/reconnect` — orden encolada que el firmware ejecuta en su próximo poll: `WiFi.disconnect` + poll inmediato; si está offline de verdad no puede entregarse), vaciar cola, reset de datos |
+| **01 · Estado** | **Salud del sistema**: estado del dispositivo (nunca conectado / desconectado / datos desactualizados / en línea), último contacto, fotos en archivo, objetos detectados, ciclos de bomba. **Panel de atención**: lista priorizada de anomalías (sin señal, cola de fotos, telemetría incompleta, etc.) |
+| **02 · Operación** | **Última captura**: foto 4:3 con badge de clase + confianza, metadatos en mono, tira de 8 miniaturas recientes y botón **"Tomar foto ahora"** (`POST /api/capture/run`). **Bomba**: estado del relé inequívoco (detenida / activa hasta / manual), progreso `fotos/N` + barra segmentada + chips de duración (5/10/20/30 s u "Otro") + "Activar ahora" con bloqueo anti-doble-toque. **Órdenes al dispositivo**: ciclo de vida de cada orden (ver abajo) |
+| **03 · Sensores** | **Telemetría del ESP32**: distancia HC-SR04, RSSI, relé GPIO13, heap, cámara, cola de fotos, uptime/boots, versión de firmware, servidor activo (`srv_act`), fotos por ciclo y descanso de bomba — con antigüedad del dato |
+| **04 · Analítica** | **Materiales acumulados**: KPIs + donut por clase con leyenda interactiva. **Actividad**: barras apiladas por día/clase, 7/14/30 días, tooltips. **Rendimiento de inferencia**: promedio/p95/mín/máx de ms ONNX sobre las últimas 60 capturas |
+| **05 · Archivo** | **Galería**: filtro por clase + Exportar YOLO (ZIP con imágenes + labels + `data.yaml`) + paginación + lightbox con detecciones |
+| **06 · Administración** | **Config remota** del ESP32-CAM: Red y servidor / Parámetros y sensores, con estado de entrega de la config (guardada → entregada → aplicada) y fecha de última actualización. **Diagnóstico del servidor**: latencia de red, último contacto, polls/h, uptime, clientes WS. **Mantenimiento**: Reconectar ESP32, vaciar cola de fotos, descarga de respaldo ZIP (`GET /api/export/backup`), programación OTA, y zona de peligro con confirmación modal |
 
 El **topbar sticky** muestra el título/subtítulo de la vista activa, el **toggle de tema claro/oscuro** (switch tipo píldora; persiste en `localStorage` y respeta `prefers-color-scheme`), pill del dispositivo (online/offline por heartbeat), pill WebSocket y último ping relativo. El botón **Exportar YOLO** descarga un ZIP con imágenes + labels YOLO + `data.yaml` para reentrenar.
+
+### Ciclo de vida de las órdenes
+
+Toda orden hacia el ESP32 (`pump_cmd`, `capture_cmd`, `reconnect_cmd`, `queue_clear`) se registra en la tabla `device_commands` y la UI la muestra con su estado real:
+
+`en cola` → `entregada` (servida en un poll de `/api/device/config`) → `ejecutada` (ACK del dispositivo) — o `expirada` (TTL 10 min sin entrega) / `cancelada` (desde el dashboard, solo si aún no fue entregada).
+
+- El endpoint `GET /api/device/commands` alimenta el panel; se refresca cada 10 s y por WebSocket (`type: "orders"`).
+- `POST /api/device/commands/{id}/cancel` descarta órdenes aún no entregadas.
+- Órdenes repetidas del mismo tipo devuelven **409** (no se encolan duplicados); una orden nueva del mismo tipo cancela la anterior no entregada.
+- La telemetría del ESP32 (`pump_on`, `pump_rest_s`, `rele_pin`) corrige el countdown de la bomba entre polls.
+
+### Confirmaciones destructivas
+
+"Vaciar álbum", "Borrar todos los datos" y "Vaciar cola del ESP32" ya no usan `confirm()` nativo: abren un **modal contextual** que lista el alcance exacto de lo que se pierde. "Borrar todos los datos" exige **escribir la frase `BORRAR TODO`** para habilitar el botón. Antes de borrar conviene usar **Descargar respaldo** (`/api/export/backup` → ZIP con snapshot JSON + todas las fotos).
 
 ---
 
@@ -34,9 +52,9 @@ El **topbar sticky** muestra el título/subtítulo de la vista activa, el **togg
 
 Archivos:
 
-- `static/index.html` — estructura: sidebar, topbar con toggle de tema, 3 vistas (`view-live`, `view-analytics`, `view-device`), bottom-nav móvil y lightbox
+- `static/index.html` — estructura: sidebar, topbar con toggle de tema, **6 vistas** (`view-overview`, `view-operation`, `view-sensors`, `view-analytics`, `view-archive`, `view-admin`), bottom-nav móvil, lightbox y modal de confirmación
 - `static/styles.css` — design system con **tokens por tema** (`:root` oscuro + `[data-theme="light"]`): superficies, líneas, textos, acentos y colores de gráficos todos son variables; Space Grotesk + JetBrains Mono auto-hospedadas en `static/fonts/`, responsive móvil-first
-- `static/app.js` — WS, canvas donut/gráfica de actividad con tooltips (colores leídos de las variables CSS al repintar), galería, lightbox, bomba manual (chips + barra segmentada), config remota, toggle de tema
+- `static/app.js` — WS, canvas donut/gráfica de actividad con tooltips (colores leídos de las variables CSS al repintar), galería, lightbox, bomba manual (chips + barra segmentada + bloqueo anti-doble), panel de órdenes, estado general con panel de atención, telemetría extendida, config remota con estado de entrega, OTA, modal de confirmación destructiva, toggle de tema
 
 **Tema claro/oscuro:** el switch del topbar conmuta `data-theme` en `<html>` y lo guarda en `localStorage` (`reba-theme`); un mini-script en `<head>` aplica el tema guardado antes de pintar (sin flash). Los canvas se repintan leyendo `--chart-*` del tema activo.
 
@@ -49,7 +67,8 @@ Archivos:
 - El ciclo **automático** es autónomo en la ESP32: cada `pump_photos` fotos corre `pump_seconds`.
 - El servidor **infiere** el progreso contando uploads recibidos; si la cola del ESP32 retiene fotos sin Wi-Fi, el conteo mostrado se atrasa.
 - La **bomba manual** encola `pump_cmd=<unix_ts>:<s>` que el ESP32 recoge en su poll de config (≤60 s), ejecuta no-bloqueante y confirma por `/api/device/ack`. El comando expira a los 10 min — si el dispositivo estuvo offline, no hay bomba fantasma.
-- `pending_cmd` muestra la orden encolada sin confirmar; `pump_events` mezcla ciclos inferidos y manuales.
+- El estado del relé se deriva de la telemetría real (`pump_on`, `pump_rest_s`, `rele_pin`), no solo del comando encolado.
+- `pump_events` mezcla ciclos inferidos y manuales; el panel **Órdenes al dispositivo** muestra el ciclo de vida completo de cada orden.
 
 ---
 

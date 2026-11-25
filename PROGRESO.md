@@ -1628,3 +1628,110 @@ rechaza un valor idéntico al vigente.
 - Descartado: cls_v2 como 5º miembro, flip-TTA, datos Commons ronda 2.
 - Conclusión: ~0.89 es el techo con datos proxy; el 95 % pasa por capturar
   fotos ESP32 reales para train (CAPTURE serial).
+
+### 24-nov (tarde) — ESP32 en el agua: caída por brownout + contador de bomba persistente
+
+#### Incidencia y diagnóstico
+
+- **Síntoma**: ESP32 en el dispositivo flotante con energía pero sin
+  contacto con el server (~15:14 → ~15:41). Server, túnel
+  `rebaserver.tech` y hotspot REBA-AP todos sanos — la falla era la placa.
+- **Causa raíz confirmada**: telemetría `"reset":"brownout"` — la fuente
+  5 V del dispositivo es insuficiente/marginal (pendiente ya anotado:
+  "Fuente ≥1 A / 5 V con cable corto"). La placa se cae por bajada de
+  tensión, no por WiFi ni firmware.
+- **Auto-recuperación funcionó**: sin config >10 min → reconexión WiFi
+  forzada; la placa volvió sola ~15:41 y drenó la cola (6 fotos
+  `evento=ingreso` = triggers reales del HC-SR04). Primer poll de config
+  ~15:44 + telemetría + ACKs. **HC-SR04 con eco por primera vez en
+  campo** (`dist_cm` 147→25.4 — objetos reales pasando por el haz).
+- Ojo: `POST /upload` desde `127.0.0.1` NO es la placa — es cloudflared
+  proxied o pruebas locales; el heartbeat exige `UA: REBA-ESP32`.
+
+#### Feature: contador de fotos para bomba siempre visible + reset en orden manual
+
+- **Topbar permanente** (`static/`): píldora `Bomba · N/3` junto a los
+  pills de estado — visible en las 3 vistas, se ilumina (`.counting`)
+  mientras haya ciclo en curso y se atenúa con `device-offline`.
+  Se actualiza en `applyPumpStatus()` (WS + polls) y se resetea al
+  instante en `runManualPump()`.
+- **Server** (`main.py` `POST /api/pump/run`): `photos_since_pump = 0`
+  al encolar la orden — el contador inferido del dashboard vuelve a
+  cero (detalle del pump_event: "contador reiniciado").
+- **Firmware v4** (`fotos_nc.ino` `procesarCmdBomba`): al ejecutar
+  `pump_cmd` manual resetea `fotosTomadas`/`dentro`/`fuera`/`armado`
+  igual que `correrBomba()` — sin esto, 2 fotos + manual + 1 foto =
+  doble bombeo. `FW_VERSION` → `v4`.
+- **OTA desplegado en caliente**: `ota_url=.../firmware.bin?v=4` →
+  ESP32 descargó, flasheó slot inactivo y volvió con `fw=v4`
+  (verificado en telemetría ~16:04). Binario: `firmware/fotos_nc.bin`
+  1,147,280 B (58 %), compilado con arduino-cli del Arduino IDE
+  (`C:\Program Files\Arduino IDE\...\arduino-cli.exe`,
+  PartitionScheme=min_spiffs).
+- **Pendiente de verificación física**: disparar una orden manual real
+  (dashboard o `POST /api/pump/run`) y confirmar contador 0/3 + bomba.
+
+#### Nota operativa
+
+- Al matar uvicorn, el watchdog puede lanzar **dos** instancias si dos
+  `run_server.bat` coexisten (visto 15:55: dos pares python, uno perdió
+  el bind y murió solo). Verificar `netstat :5000` tras reinicios.
+
+#### Feature: reloj en vivo + cronómetro de bomba en topbar (24-nov noche)
+
+- **Reloj** (`index.html`/`app.js`): `#topClock` en la topbar, hora local
+  del navegador (`es-SV`, 24 h), `setInterval` 1 s. Clase propia
+  `.top-clock` (mono + tabular-nums) para NO heredar el `display:none`
+  de `.ping-note` en pantallas ≤420 px.
+- **Cronómetro bomba**: píldora `#topTimerPill`/`#topTimerText`
+  (`Bomba · Ns` / `Bomba · --`), cuenta regresiva cada 500 ms desde
+  `pump.pump_active_until` (epoch server). Se enciende (`.counting`)
+  solo mientras `restS > 0`.
+- **Server** (`main.py`): `pump_state["active_until"]` nuevo; lo setea el
+  ciclo auto-inferido (`now + pump_run_seconds`) y lo limpia `device_ack`
+  (pump_cmd confirmado) y `reset_captures`. `pump_progress()` lo expone
+  como `pump_active_until`.
+- **Firmware v5** (`fotos_nc.ino` `reportarEstado`): nuevo campo
+  `pump_rest_s` = segundos restantes de bomba encendida (ground truth
+  cada ~60 s). `FW_VERSION` → `v5`.
+- **Dashboard** (`app.js` `loadCircuit`): si `tel.pump_on && tel.pump_rest_s`
+  re-sincroniza `pump_active_until = now + pump_rest_s` — corrige la
+  estimación del server con el dato real de la placa.
+- **OTA v5 ENCOLADO, NO aplicado**: `ota_url=.../firmware.bin?v=5` quedó
+  en device-config (16:15). El ESP32 se **apagó ~16:14:49** (upload #91
+  fue su último contacto) ANTES de recibir la clave → al encender,
+  descargará y flasheará v5 solo en su próximo poll (≤60 s). Sin flasheo
+  parcial: el bin quedó en `firmware/fotos_nc.bin` (1,147,257 B).
+- **Pendiente**: encender ESP32 → verificar `fw:v5` + `pump_rest_s` en
+  telemetría, y probar countdown real durante un `pump_cmd` o ciclo auto.
+
+### 25-nov (mañana) — Sesión GPU Colab: mejorar modelo cls + detector
+
+- **Contexto:** 5 h para mejorar el modelo de visión. ESP32 en escritorio
+  (sin fotos reales en agua hoy) — el cuello proxy→real documentado en
+  EXP-6 sigue abierto; se trabaja el lado "capacidad + datos" con GPU
+  remota (Colab T4 del usuario).
+- **OTAs:** el ESP32 volvió al hotspot y aplicó el `ota_url?v=5`
+  encolado ayer → telemetría confirma `fw:"v5"` + campo `pump_rest_s`.
+  IP nueva 192.168.137.98.
+- **Pack cls** `tmp_debug/reba_cls_pack.zip` (~460 MB): cls_esp32_full
+  train+val + REBA_cls_esp32 {train, train_extra, test_agua, test_tierra,
+  +_limpio} para cachear probs de miembros nuevos en Colab.
+- **Notebook cls** `ai_pipeline/REBA_colab_cls.ipynb`: entrena
+  yolo11m-cls@224 (`cls_11m`), yolov8n-cls@160 reentrenado (`cls_v3`) y
+  ConvNeXtV2-Tiny timm @224 (`cls_cnx`, diversidad arquitectónica);
+  evalúa en los 4 test sets con el MISMO preproceso del server
+  (scale-cover + /255) y exporta ONNX probs-softmax + metadata `names`
+  (idéntica convención a los actuales). Cachea probs por split para el
+  refit local del meta-head.
+- **Pack det** `tmp_debug/reba_det_pack_final.zip`: 4,579 imgs train
+  (synthetic+boosts+taco+ecosort+floatwaste+copypaste) + real_val (415).
+- **Notebook det** `ai_pipeline/REBA_colab_det.ipynb`: reentrena
+  yolov8s @640 ×80 ép con val en REBA_real_val (agua real, no sintético).
+- **Integración al volver:** probs cacheadas → refit meta vía
+  export_cls_ensemble.py / export_dinob_feat_meta.py con los miembros
+  nuevos → eval end-to-end → actualizar CLS_MODEL_PATH si mejora.
+- **Dataset candidato nuevo** (aún no integrado): Banjarmasin floating
+  waste (Mendeley j26w4m645z) — 1,577 imgs río turbio pero 1 sola clase
+  "floating waste"; marginal para 3 clases. GC3 (Roboflow, terrestre)
+  descargado a `datasets/_raw/gc3/` — dominio dudoso, sin integrar.

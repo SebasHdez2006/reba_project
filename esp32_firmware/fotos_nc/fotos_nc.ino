@@ -70,7 +70,7 @@ static const char* SRV_BASE_DEFAULT = "http://rebaserver.tech";
 // Versión del firmware: se imprime en el boot y se reporta en la
 // telemetría (GET/STATUS y POST /api/device/status -> "fw") para
 // distinguir builds sin abrir el serial. Subirla en cada cambio del sketch.
-static const char* FW_VERSION = "v3";
+static const char* FW_VERSION = "v5";
 
 // ---------------- Pines ----------------
 #define PIN_RELE   13
@@ -1150,6 +1150,9 @@ void colaEnviar() {
 // muestra en la sección "Circuito". Sin TLS: mismo httpSimple plano.
 void reportarEstado() {
   if (WiFi.status() != WL_CONNECTED || srvBase.length() == 0) return;
+  // Segundos restantes del ciclo de bomba (deadline wrap-safe -> clamp).
+  long pumpRest = bombaPrendida ? (long)(bombaHasta - millis()) : 0;
+  if (pumpRest < 0) pumpRest = 0;
   String body = "{\"uptime_s\":" + String((unsigned long)(millis() / 1000))
     + ",\"boots\":" + String(bootCount)
     + ",\"heap\":" + String((unsigned)ESP.getFreeHeap())
@@ -1162,6 +1165,7 @@ void reportarEstado() {
     + ",\"pump_photos_max\":" + String(pumpPhotos)
     + ",\"pump_on\":" + String(bombaPrendida ? 1 : 0)
     + ",\"pump_manual\":" + String(bombaManualActiva ? 1 : 0)
+    + ",\"pump_rest_s\":" + String(pumpRest / 1000)
     + ",\"srv_act\":" + String(srvActiva)
     + ",\"rele_pin\":" + String(digitalRead(PIN_RELE))
     + ",\"reset\":\"" + motivoReset() + "\""
@@ -1619,6 +1623,13 @@ void procesarCmdBomba() {
 
   Serial.printf("Bomba MANUAL %ds (cmd %lu)\n", cmdBombaSecs, cmdBombaId);
   bombaArrancar((unsigned long)cmdBombaSecs, true);
+  // La orden manual cuenta como ciclo de bomba: el contador de fotos
+  // vuelve a cero igual que en correrBomba() — evita que el ciclo
+  // automático dispare justo después del manual (doble bombeo).
+  fotosTomadas = 0;
+  dentro = 0;
+  fuera = 0;
+  armado = false;                          // el objeto debe alejarse antes de otro conteo
 
   // ACK al servidor: borra el override para que no se re-entregue.
   // Si falla (sin WiFi), el TTL del server lo expira; el dedup RTC evita

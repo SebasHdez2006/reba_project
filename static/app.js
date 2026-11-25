@@ -48,6 +48,16 @@
     tsData: null,             // {series, classNames} cacheado para repintar al cambiar tema
     pumpSegCount: 0,          // segmentos renderizados en la barra de progreso
     lastWsMsg: null,          // epoch ms del último mensaje WS recibido
+    wsOnline: false,          // último estado del WebSocket
+    deviceIp: null,           // IP del ESP32 en su último contacto
+    deviceLastPoll: null,     // epoch s del último GET /api/device/config
+    orders: { items: [], pending: 0 },  // órdenes al dispositivo (ciclo de vida)
+    perf: null,               // último /api/perf cacheado
+    netMs: null,              // RTT medido al servidor
+    cfgMeta: {},              // {key: updated_ts} de overrides del dispositivo
+    cfgSavedAt: 0,            // ms epoch del último guardado de config
+    cfgPayload: null,         // payload enviado en el último guardado
+    busy: { pump: false, capture: false, reconnect: false },
   };
 
   // ---------------------------------------------------------------------------
@@ -78,6 +88,7 @@
   function setWsStatus(online, label) {
     const pill = $("wsStatus");
     const text = $("wsStatusText");
+    state.wsOnline = online;
     if (!pill || !text) return;
     pill.classList.toggle("online", online);
     pill.classList.toggle("offline", !online);
@@ -138,6 +149,17 @@
         applyPumpStatus(msg.payload || {});
         showPumpAlert(msg.payload || {});
         break;
+      case "pump":
+        // ACK de una orden de bomba: el servidor ya fijó pump_active_until.
+        applyPumpStatus(msg.payload || {});
+        loadCommands();
+        break;
+      case "orders":
+        loadCommands();
+        break;
+      case "stats":
+        applyStats(msg.payload || {});
+        break;
       default:
         break;
     }
@@ -171,6 +193,8 @@
     const pill = $("deviceStatus");
     const txt = $("deviceStatusText");
     state.deviceOnline = !!device.online;
+    state.deviceIp = device.ip || null;
+    state.deviceLastPoll = device.last_poll_ts ?? null;
     // Empty state global: sin señal se ocultan las métricas muertas y se
     // muestra el aviso "esperando conexión" en vez del mar de "—".
     document.body.classList.toggle("device-offline", !device.online);
@@ -192,6 +216,8 @@
       pill.title = "ESP32-CAM sin heartbeat (>150 s)";
       setText("pumpState", "sin señal");
     }
+    updateEmptyStates();
+    refreshOverview();
   }
 
   // "Ping · hace 2 min" — última vez que el ESP32 contactó al servidor
@@ -394,6 +420,13 @@
     const current = pump.photos_since_pump ?? 0;
     setText("pumpProgress", `${current} / ${trigger}`);
     setText("uploadsReceived", String(pump.uploads_received ?? 0));
+    // Contador permanente de la topbar: siempre visible en las 3 vistas.
+    const topPill = $("topPumpPill");
+    if (topPill) {
+      setText("topPumpText", `Bomba · ${current}/${trigger}`);
+      topPill.classList.toggle("counting", current > 0);
+    }
+    updateTopTimer();
     setText(
       "pumpDuration",
       pump.pump_run_seconds != null
@@ -415,6 +448,7 @@
       "lastPumpEvent",
       last?.ts ? new Date(last.ts).toLocaleString() : "aún no"
     );
+    refreshOverview();
   }
 
   // Barra segmentada: un segmento por foto hacia el ciclo; el siguiente
@@ -595,21 +629,37 @@
     el.className = `status-pill ${mode || "offline"}`;
   }
 
-  async function loadDeviceConfig() {
+  async function loadDeviceConfig(silent = false) {
     try {
       const res = await fetch("/api/admin/device-config");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const items = data.items || {};
+      state.cfgMeta = data.updated || {};
       for (const [key, inputId] of Object.entries(CFG_FIELDS)) {
         const input = $(inputId);
         if (input) input.value = items[key] ?? "";
       }
       setDeviceConfigStatus("Cargado", "online");
+      updateCfgDelivery();
+      updateOtaCurrent();
     } catch (err) {
-      console.warn("Device config unavailable", err);
+      if (!silent) console.warn("Device config unavailable", err);
       setDeviceConfigStatus("sin conexión", "offline");
     }
+  }
+
+  // Solo refresca la metadata (updated_ts) sin tocar el formulario:
+  // permite detectar "descargada por el ESP32" tras un guardado.
+  async function refreshCfgMeta() {
+    try {
+      const res = await fetch("/api/admin/device-config");
+      if (!res.ok) return;
+      const data = await res.json();
+      state.cfgMeta = data.updated || {};
+      updateCfgDelivery();
+      updateOtaCurrent();
+    } catch (_) { /* silencioso */ }
   }
 
   async function saveDeviceConfig(ev) {
@@ -646,12 +696,17 @@
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      // Marcamos el guardado para la línea de entrega: "guardado en el
+      // servidor" → "descargada por el ESP32" cuando su poll sea posterior.
+      state.cfgSavedAt = Date.now();
+      state.cfgPayload = payload;
       setDeviceConfigStatus(
         data.applied.length || data.removed.length
           ? "Guardado ✓"
           : "Sin cambios",
         "online"
       );
+      refreshCfgMeta();
     } catch (err) {
       console.warn("Save device config failed", err);
       setDeviceConfigStatus("error al guardar", "offline");
@@ -814,8 +869,8 @@
       }
       return;
     }
-    if (btn) btn.disabled = true;
-    const btnLabel = btn ? btn.textContent : "";
+    state.busy.pump = true;
+    syncCommandButtons();
     if (stateEl) {
       stateEl.textContent = "Encolando…";
       stateEl.classList.remove("is-queued");
@@ -827,6 +882,14 @@
         body: JSON.stringify({ seconds: secs }),
       });
       const data = await res.json();
+      if (res.status === 409) {
+        if (stateEl) {
+          stateEl.textContent = `⚠ ${data.detail || "Ya hay una orden de bomba en cola."}`;
+          stateEl.classList.remove("is-queued");
+        }
+        loadCommands();
+        return;
+      }
       if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
       const devOffline = data.device && data.device.online === false;
       if (stateEl) {
@@ -838,24 +901,34 @@
       if (btn) {
         btn.textContent = "En cola ✓";
         setTimeout(() => {
-          if (btn) btn.textContent = btnLabel || "Activar ahora";
+          if (btn) btn.textContent = "Activar bomba";
         }, 3500);
       }
+      // La orden manual reinicia el contador de fotos (server + firmware):
+      // reflejarlo ya en el panel y en la topbar sin esperar al próximo poll.
+      if (state.pump) {
+        state.pump = { ...state.pump, photos_since_pump: 0 };
+        applyPumpStatus(state.pump);
+      }
       loadPumpEvents();
+      loadCommands();
     } catch (err) {
       console.warn("pump/run failed", err);
       if (stateEl) {
         stateEl.textContent = `Error: ${err.message}`;
         stateEl.classList.remove("is-queued");
       }
+    } finally {
+      state.busy.pump = false;
+      syncCommandButtons();
     }
   }
 
   async function runManualCapture() {
     const btn = $("manualCaptureBtn");
     const stateEl = $("manualCaptureState");
-    if (btn) btn.disabled = true;
-    const btnLabel = btn ? btn.textContent : "";
+    state.busy.capture = true;
+    syncCommandButtons();
     if (stateEl) {
       stateEl.textContent = "Encolando…";
       stateEl.classList.remove("is-queued");
@@ -867,6 +940,14 @@
         body: "{}",
       });
       const data = await res.json();
+      if (res.status === 409) {
+        if (stateEl) {
+          stateEl.textContent = `⚠ ${data.detail || "Ya hay una orden de foto en cola."}`;
+          stateEl.classList.remove("is-queued");
+        }
+        loadCommands();
+        return;
+      }
       if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
       const devOffline = data.device && data.device.online === false;
       if (stateEl) {
@@ -878,9 +959,10 @@
       if (btn) {
         btn.textContent = "En cola ✓";
         setTimeout(() => {
-          if (btn) btn.textContent = btnLabel || "Tomar foto ahora";
+          if (btn) btn.textContent = "Pedir foto al ESP32";
         }, 3500);
       }
+      loadCommands();
     } catch (err) {
       console.warn("capture/run failed", err);
       if (stateEl) {
@@ -888,7 +970,8 @@
         stateEl.classList.remove("is-queued");
       }
     } finally {
-      if (btn) btn.disabled = false;
+      state.busy.capture = false;
+      syncCommandButtons();
     }
   }
 
@@ -1131,7 +1214,17 @@
   if (lbClose) lbClose.addEventListener("click", closeLightbox);
   const lb = $("lightbox");
   if (lb) lb.addEventListener("click", (e) => { if (e.target === lb) closeLightbox(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeLightbox(); });
+  wireConfirmModal();
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if ($("confirmModal") && !$("confirmModal").hidden) {
+      closeConfirmModal(false);
+    } else {
+      closeLightbox();
+    }
+  });
+  const btnOta = $("btnOta");
+  if (btnOta) btnOta.addEventListener("click", programOta);
 
   // --- Botones de reset / comandos al dispositivo ---
   const btnClearAlbum = $("btnClearAlbum");
@@ -1171,9 +1264,12 @@
     const t0 = performance.now();
     try {
       await fetch(`/api/health?_=${Date.now()}`, { cache: "no-store" });
-      el.textContent = String(Math.round(performance.now() - t0));
+      const ms = Math.round(performance.now() - t0);
+      state.netMs = ms;
+      el.textContent = String(ms);
       el.classList.remove("warn");
     } catch {
+      state.netMs = null;
       el.textContent = "—";
       el.classList.add("warn");
     }
@@ -1182,9 +1278,17 @@
   async function loadPerf() {
     try {
       const perf = await fetch("/api/perf").then((r) => r.json());
+      state.perf = perf;
       const inf = perf.inference || {};
+      setText("mInferCount", inf.count ? String(inf.count) : "—");
       setText("mInferAvg", inf.count ? String(inf.avg) : "—");
       setText("mInferP95", inf.count ? String(inf.p95) : "—");
+      setText("mInferMin", inf.count ? String(inf.min) : "—");
+      setText("mInferMax", inf.count ? String(inf.max) : "—");
+      setText("mUploadsH", String(perf.uploads_last_hour ?? "—"));
+      setText("mCapturesTotal", String(perf.server?.captures_total ?? "—"));
+      const upd = $("inferUpdated");
+      if (upd) upd.textContent = `actualizado ${new Date().toLocaleTimeString()}`;
       setText(
         "mHeartbeat",
         perf.device?.heartbeat_age_s != null
@@ -1192,12 +1296,12 @@
           : "sin contacto"
       );
       setText("mPollsH", String(perf.device?.polls_last_hour ?? "—"));
-      setText("mUploadsH", String(perf.uploads_last_hour ?? "—"));
       setText("mUptime", fmtUptime(perf.server?.uptime_s));
       setText("mWsClients", String(perf.server?.ws_clients ?? "—"));
-      const upd = $("perfUpdated");
-      if (upd) upd.textContent = `actualizado ${new Date().toLocaleTimeString()}`;
+      const updSys = $("perfUpdated");
+      if (updSys) updSys.textContent = `actualizado ${new Date().toLocaleTimeString()}`;
       state.telemetry = perf.telemetry || null;
+      refreshOverview();
     } catch (_) { /* reintenta en el próximo ciclo */ }
   }
 
@@ -1208,6 +1312,8 @@
       el.textContent = state.lastWsMsg ? fmtAgo(Date.now() - state.lastWsMsg) : "—";
       el.classList.toggle("warn", !state.lastWsMsg || Date.now() - state.lastWsMsg > 90000);
     }
+    updateCfgDelivery();
+    refreshOverview();
   }
 
   async function loadCircuit() {
@@ -1220,15 +1326,31 @@
       const dev = devRes.device || {};
       const tel = devRes.telemetry || state.telemetry || {};
       const hasTel = Object.keys(tel).length > 0;
+      state.telemetry = tel;
 
-      setText("cDevState", dev.online ? "EN LÍNEA" : "sin señal");
+      // pump-status ya viene en esta misma respuesta: refrescar la bomba
+      // aquí evita esperar al broadcast WS para ver el countdown del ACK.
+      applyPumpStatus(pumpRes);
+
+      // Corrección del countdown de la topbar con la telemetría real del
+      // ESP32 (pump_rest_s, cada ~60 s): el deadline estimado por el server
+      // puede derivar unos segundos; el dato de la placa es el verdadero.
+      // Va DESPUÉS de applyPumpStatus para no ser sobrescrito.
+      if (tel.pump_on && tel.pump_rest_s != null && state.pump) {
+        state.pump = { ...state.pump, pump_active_until: Date.now() / 1000 + tel.pump_rest_s };
+        updateTopTimer();
+      }
+
+      const neverSeen = !dev.last_seen;
+      setText("cDevState",
+        neverSeen ? "nunca conectado" : (dev.online ? "EN LÍNEA" : "sin señal"));
       if (pill) {
-        pill.textContent = dev.online ? "en línea" : "offline";
+        pill.textContent = neverSeen ? "nunca" : (dev.online ? "en línea" : "offline");
         pill.className = `status-pill ${dev.online ? "online" : "offline"}`;
       }
       setText(
         "cDevIp",
-        `${dev.ip || "—"} · ${dev.last_seen ? fmtAgo((Date.now() / 1000 - dev.last_seen) * 1000) : "—"}`
+        `${dev.ip || "—"} · ${dev.last_seen ? fmtAgo((Date.now() / 1000 - dev.last_seen) * 1000) : "sin contacto"}`
       );
       setText(
         "cPolls",
@@ -1245,6 +1367,12 @@
         tel.rele_pin != null
           ? (tel.pump_manual ? "bomba manual ON" : (tel.rele_pin ? "bomba encendida" : "bomba apagada"))
           : "—");
+      t("cPumpOn",
+        tel.pump_on != null
+          ? (tel.pump_on
+              ? `ENCENDIDA${tel.pump_rest_s != null ? ` · restan ${tel.pump_rest_s} s` : ""}`
+              : "apagada")
+          : "—");
       t("cQueue",
         tel.cola_n != null ? `${tel.cola_n}/${tel.cola_max ?? "?"} fotos` : "—");
       t("cCam", tel.camara_ok != null ? (tel.camara_ok ? "OK" : "CAÍDA") : "—");
@@ -1254,24 +1382,70 @@
 
       const trig = pumpRes.pump_trigger_photos ?? state.config?.pump_trigger_photos ?? 3;
       setText("cPumpProg", `${pumpRes.photos_since_pump ?? 0}/${trig} fotos`);
+
+      // Filas nuevas del firmware: failover, versión, reinicios y uptime.
+      t("cSrvAct",
+        tel.srv_act != null
+          ? (tel.srv_act === 0 ? "principal" : tel.srv_act === 1 ? "alternativo" : String(tel.srv_act))
+          : "—");
+      t("cFw", tel.fw || "—");
+      t("cBoots", tel.boots != null ? String(tel.boots) : "—");
+      t("cDevUptime", tel.uptime_s != null ? fmtUptime(tel.uptime_s) : "—");
+      t("cReset", tel.reset || "—");
+
+      // Línea de hardware en el panel Bomba (vista Operación): mismo dato
+      // de telemetría, visible donde el operador decide activar la bomba.
+      if (hasTel) {
+        setText("pumpRelayState",
+          tel.rele_pin != null
+            ? (tel.rele_pin ? "ACTIVO · bomba ON" : "inactivo")
+            : "sin datos");
+        setText("pumpHwState",
+          tel.pump_on != null
+            ? (tel.pump_on ? "ENCENDIDA" : "apagada")
+            : "sin datos");
+      } else {
+        setText("pumpRelayState", "sin datos");
+        setText("pumpHwState", "sin datos");
+      }
+
       setText(
         "circuitNote",
         hasTel
           ? `Telemetría recibida hace ${fmtAgo(((Date.now() / 1000) - (tel._ts || 0)) * 1000)} · llega con cada poll (~60 s).`
           : "La telemetría del dispositivo llega con cada poll (~60 s). Si el firmware es anterior a esta versión, las filas del sensor/relé/cola muestran \"sin datos\"."
       );
+      updateEmptyStates();
+      updateCfgDelivery();
+      refreshOverview();
     } catch (_) { /* silencioso */ }
   }
 
-  // --- Reset de datos de prueba ---
+  // --- Reset de datos de prueba (confirmación contextual obligatoria) ---
   async function resetServerData(scope, btn) {
-    const label = btn ? btn.textContent : "";
-    const ok = confirm(
-      scope === "all"
-        ? "¿Borrar TODAS las capturas, detecciones, contadores de materiales y el historial de eventos de bomba? Esta acción no se puede deshacer."
-        : "¿Borrar todas las fotos del álbum y sus detecciones? Los contadores de materiales se reinician."
-    );
+    const isAll = scope === "all";
+    const ok = await askConfirm({
+      title: isAll ? "Borrar todos los datos" : "Vaciar álbum de capturas",
+      desc: isAll
+        ? "Operación irreversible: se eliminan del servidor todos los datos registrados."
+        : "Operación irreversible: se eliminan del servidor las fotos y detecciones del álbum.",
+      scope: isAll
+        ? [
+            "Todas las fotos y detecciones del álbum",
+            "Contadores de materiales por clase",
+            "Historial de eventos de bomba",
+            "Progreso del ciclo de bomba",
+          ]
+        : [
+            "Todas las fotos del álbum",
+            "Sus detecciones y clases",
+            "Los contadores de materiales se reinician",
+          ],
+      requireText: isAll ? "BORRAR TODO" : "",
+      okLabel: isAll ? "Borrar todo" : "Vaciar álbum",
+    });
     if (!ok) return;
+    const label = btn ? btn.textContent : "";
     if (btn) { btn.disabled = true; btn.textContent = "Borrando…"; }
     try {
       const res = await fetch(`/api/captures?scope=${scope}`, { method: "DELETE" });
@@ -1324,6 +1498,7 @@
   async function requestReconnect() {
     const btn = $("btnReconnect");
     const stateEl = $("reconnectState");
+    state.busy.reconnect = true;
     if (btn) btn.disabled = true;
     const btnLabel = btn ? btn.textContent : "";
     if (stateEl) {
@@ -1337,6 +1512,14 @@
         body: "{}",
       });
       const data = await res.json();
+      if (res.status === 409) {
+        if (stateEl) {
+          stateEl.textContent = `⚠ ${data.detail || "Ya hay una orden de reconexión en cola."}`;
+          stateEl.classList.remove("is-queued");
+        }
+        loadCommands();
+        return;
+      }
       if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
       const devOffline = data.device && data.device.online === false;
       if (stateEl) {
@@ -1351,6 +1534,7 @@
           if (btn) btn.textContent = btnLabel || "Reconectar ESP32";
         }, 3500);
       }
+      loadCommands();
       loadCircuit();
     } catch (err) {
       console.warn("device/reconnect failed", err);
@@ -1359,6 +1543,7 @@
         stateEl.classList.remove("is-queued");
       }
     } finally {
+      state.busy.reconnect = false;
       if (btn) btn.disabled = false;
     }
   }
@@ -1366,7 +1551,16 @@
   // Vaciar la cola de fotos pendientes DENTRO de la ESP32 (vía config remota)
   async function queueClearEsp(btn) {
     const label = btn ? btn.textContent : "";
-    if (!confirm("¿Ordenar a la ESP32 que descarte las fotos tomadas que aún no ha podido subir? Se aplica en su próximo poll (≤60 s).")) return;
+    const ok = await askConfirm({
+      title: "Vaciar cola de fotos del ESP32",
+      desc: "La ESP32 descarta las fotos tomadas que aún no ha podido subir. Se aplica en su próximo contacto (≤60 s).",
+      scope: [
+        "Fotos pendientes dentro del dispositivo",
+        "No afecta al álbum ya subido al servidor",
+      ],
+      okLabel: "Vaciar cola",
+    });
+    if (!ok) return;
     if (btn) { btn.disabled = true; btn.textContent = "Enviando…"; }
     try {
       const res = await fetch("/api/admin/device-config", {
@@ -1374,9 +1568,11 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ queue_clear: String(Math.floor(Date.now() / 1000)) }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
       if (btn) btn.textContent = "En cola ✓";
       setTimeout(() => { if (btn) btn.textContent = label; btn.disabled = false; }, 3000);
+      loadCommands();
     } catch (err) {
       console.warn("queue_clear failed", err);
       if (btn) { btn.disabled = false; btn.textContent = label; }
@@ -1384,11 +1580,535 @@
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Órdenes al dispositivo (ciclo de vida: en cola → entregada → ejecutada)
+  // ---------------------------------------------------------------------------
+  const COMMAND_KIND_LABEL = {
+    pump: "Bomba",
+    capture: "Foto",
+    reconnect: "Reconexión",
+    queue_clear: "Vaciar cola",
+  };
+  const COMMAND_STATE_LABEL = {
+    queued: "En cola",
+    delivered: "Entregada",
+    acked: "Ejecutada",
+    expired: "Expirada",
+    cancelled: "Cancelada",
+  };
+
+  function fmtClock(ts) {
+    if (!ts) return "—";
+    const d = new Date(ts * 1000);
+    if (Number.isNaN(d.getTime())) return "—";
+    const p = (n) => String(n).padStart(2, "0");
+    return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  }
+
+  async function loadCommands() {
+    try {
+      const res = await fetch("/api/device/commands?limit=40");
+      if (!res.ok) return;
+      const data = await res.json();
+      state.orders = { items: data.items || [], pending: data.pending ?? 0 };
+      renderOrders();
+      syncCommandButtons();
+      refreshOverview();
+    } catch (_) { /* silencioso: reintenta en el próximo ciclo */ }
+  }
+
+  function renderOrders() {
+    const ul = $("ordersList");
+    if (!ul) return;
+    ul.replaceChildren();
+    const items = state.orders.items;
+    setText("ordersPending",
+      state.orders.pending > 0 ? `${state.orders.pending} pendientes` : "0 pendientes");
+    setText("ordersUpdated", `actualizado ${new Date().toLocaleTimeString()}`);
+    if (!items.length) {
+      const li = document.createElement("li");
+      li.className = "orders-empty";
+      li.textContent = "Sin órdenes registradas";
+      ul.appendChild(li);
+      return;
+    }
+    for (const cmd of items) {
+      const li = document.createElement("li");
+      li.className = `order-item st-${cmd.state}`;
+
+      const kind = document.createElement("span");
+      kind.className = "order-kind";
+      kind.textContent = COMMAND_KIND_LABEL[cmd.kind] || cmd.kind;
+
+      const detail = document.createElement("span");
+      detail.className = "order-detail";
+      detail.textContent = cmd.detail || "—";
+      detail.title = `uid ${cmd.uid}`;
+
+      const time = document.createElement("span");
+      time.className = "order-time";
+      time.textContent = fmtClock(cmd.created_ts);
+      time.title = new Date(cmd.created_ts * 1000).toLocaleString();
+
+      const st = document.createElement("span");
+      st.className = "order-state";
+      st.textContent = COMMAND_STATE_LABEL[cmd.state] || cmd.state;
+
+      li.append(kind, detail, time, st);
+
+      // Solo se puede cancelar mientras la orden no haya salido del servidor.
+      if (cmd.state === "queued") {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "order-cancel";
+        btn.textContent = "Cancelar";
+        btn.addEventListener("click", () => cancelCommand(cmd.id, btn));
+        li.appendChild(btn);
+      }
+      ul.appendChild(li);
+    }
+  }
+
+  async function cancelCommand(id, btn) {
+    if (btn) btn.disabled = true;
+    try {
+      const res = await fetch(`/api/device/commands/${id}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      loadCommands();
+    } catch (err) {
+      console.warn("cancel command failed", err);
+      alert("No se pudo cancelar la orden: " + err.message);
+      loadCommands();
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  // Deshabilita los botones de acción mientras haya una orden del mismo
+  // tipo en cola/entregada: el servidor también la rechaza con 409.
+  function syncCommandButtons() {
+    const pending = (kind) =>
+      state.orders.items.some(
+        (c) => c.kind === kind && (c.state === "queued" || c.state === "delivered")
+      );
+    const pumpBtn = $("manualPumpBtn");
+    if (pumpBtn) {
+      const hasPending = pending("pump");
+      pumpBtn.disabled = state.busy.pump || hasPending;
+      pumpBtn.title = hasPending
+        ? "Ya hay una orden de bomba en cola — cancélala en Órdenes al dispositivo"
+        : "La orden viaja en el próximo contacto del ESP32 (hasta ~60 s)";
+    }
+    const capBtn = $("manualCaptureBtn");
+    if (capBtn) {
+      const hasPending = pending("capture");
+      capBtn.disabled = state.busy.capture || hasPending;
+      capBtn.title = hasPending
+        ? "Ya hay una orden de foto en cola — cancélala en Órdenes al dispositivo"
+        : "La orden viaja en el próximo contacto del ESP32 (hasta ~60 s)";
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Estado general (vista Estado): tarjetas + "Requiere atención"
+  // ---------------------------------------------------------------------------
+  function devicePhase() {
+    if (!state.deviceLastSeen) return "never";
+    return state.deviceOnline ? "online" : "offline";
+  }
+
+  function renderOverviewCards() {
+    const phase = devicePhase();
+    const lastSeen = state.deviceLastSeen;
+    const lastSeenTxt = lastSeen
+      ? fmtAgo((Date.now() / 1000 - lastSeen) * 1000)
+      : "sin contacto";
+
+    const devCard = $("ovCardDev");
+    if (devCard) {
+      devCard.classList.toggle("warn", phase === "offline");
+      devCard.classList.toggle("danger", phase === "never");
+      devCard.classList.toggle("ok", phase === "online");
+    }
+    setText("ovDevState",
+      phase === "never" ? "Nunca conectado"
+      : phase === "online" ? "EN LÍNEA" : "Sin señal");
+    setText("ovDevIp", state.deviceIp || "—");
+    setText("ovLastSeen", lastSeenTxt);
+
+    // Bomba: prioridad al estado real del hardware (telemetría) y luego
+    // al countdown estimado del servidor.
+    const tel = state.telemetry || {};
+    const pumpCard = $("ovCardPump");
+    const until = state.pump?.pump_active_until || 0;
+    const restS = until ? Math.ceil(until - Date.now() / 1000) : 0;
+    let pumpTxt, pumpSub, pumpCls = "";
+    if (tel.pump_on) {
+      pumpTxt = "ENCENDIDA";
+      pumpSub = tel.pump_rest_s != null ? `restan ~${tel.pump_rest_s} s` : "en curso";
+      pumpCls = "ok";
+    } else if (restS > 0) {
+      pumpTxt = "ENCENDIDA";
+      pumpSub = `restan ~${restS} s (estimado)`;
+      pumpCls = "ok";
+    } else if (phase !== "online") {
+      pumpTxt = "—";
+      pumpSub = phase === "never" ? "sin datos del dispositivo" : "sin señal";
+      pumpCls = "warn";
+    } else {
+      const cur = state.pump?.photos_since_pump ?? 0;
+      const trig = state.pump?.pump_trigger_photos ?? state.config?.pump_trigger_photos ?? 3;
+      pumpTxt = "Apagada";
+      pumpSub = cur > 0 ? `${cur}/${trig} fotos para el ciclo` : "esperando fotos";
+    }
+    setText("ovPumpState", pumpTxt);
+    setText("ovPumpSub", pumpSub);
+    if (pumpCard) {
+      pumpCard.classList.remove("ok", "warn", "danger");
+      if (pumpCls) pumpCard.classList.add(pumpCls);
+    }
+
+    setText("ovCaptures", String(state.captureCount || 0));
+    const capTs = state.currentCapture?.ts;
+    const capAge = capTs ? Date.now() - new Date(capTs).getTime() : NaN;
+    setText("ovCaptureAge",
+      !Number.isNaN(capAge) ? `última ${fmtAgo(capAge)}` : "sin capturas");
+
+    const pending = state.orders.pending || 0;
+    const active = state.orders.items.filter(
+      (c) => c.state === "queued" || c.state === "delivered");
+    setText("ovOrders", pending > 0 ? String(pending) : "0");
+    if (pending > 0 && active.length) {
+      const oldest = Math.min(...active.map((c) => c.created_ts));
+      setText("ovOrdersSub",
+        `la más antigua ${fmtAgo((Date.now() / 1000 - oldest) * 1000)}`);
+    } else {
+      setText("ovOrdersSub", "sin órdenes activas");
+    }
+
+    const perf = state.perf || {};
+    setText("ovServer", fmtUptime(perf.server?.uptime_s));
+    setText("ovServerSub",
+      `${perf.server?.ws_clients ?? "—"} clientes · RTT ${state.netMs ?? "—"} ms`);
+    setText("ovUpdated", `actualizado ${new Date().toLocaleTimeString()}`);
+  }
+
+  function renderAttention() {
+    const list = $("attentionList");
+    if (!list) return;
+    const items = [];
+    const phase = devicePhase();
+    const lastSeen = state.deviceLastSeen;
+
+    if (phase === "never") {
+      items.push({ level: "danger",
+        text: "El ESP32-CAM nunca ha contactado al servidor. Revisa alimentación y que esté en la red WiFi del servidor." });
+    } else if (phase === "offline") {
+      items.push({ level: "warn",
+        text: `ESP32 sin señal desde ${fmtAgo((Date.now() / 1000 - lastSeen) * 1000)}. Las órdenes en cola expiran a los 10 min y las nuevas no se entregan hasta que vuelva.` });
+    }
+
+    // Telemetría desactualizada: dispositivo en línea pero sin reporte
+    // dentro del intervalo esperado (~60 s + margen).
+    const telTs = state.telemetry?._ts;
+    if (phase === "online" && telTs) {
+      const ageS = Date.now() / 1000 - telTs;
+      if (ageS > 200) {
+        items.push({ level: "warn",
+          text: `Telemetría desactualizada (hace ${fmtAgo(ageS * 1000)}). El dispositivo reporta cada ~60 s.` });
+      }
+    }
+
+    const active = state.orders.items.filter(
+      (c) => c.state === "queued" || c.state === "delivered");
+    if (active.length) {
+      const oldest = Math.min(...active.map((c) => c.created_ts));
+      items.push({ level: phase === "offline" ? "warn" : "info",
+        text: `${active.length} orden(es) esperando al ESP32 · la más antigua lleva ${fmtAgo((Date.now() / 1000 - oldest) * 1000)}.` });
+    }
+
+    if (!state.wsOnline) {
+      items.push({ level: "warn",
+        text: "Sin conexión en vivo (WebSocket) con el servidor: los datos se actualizan solo por sondeo." });
+    }
+
+    const until = state.pump?.pump_active_until || 0;
+    const restS = until ? Math.ceil(until - Date.now() / 1000) : 0;
+    if (restS > 0) {
+      items.push({ level: "info",
+        text: `Bomba encendida · restan ~${restS} s (orden manual o ciclo automático).` });
+    }
+
+    list.replaceChildren();
+    if (!items.length) {
+      const li = document.createElement("li");
+      li.className = "attn-item ok";
+      li.innerHTML = `<span class="attn-dot"></span><span><strong>Todo en orden.</strong> Sin incidencias detectadas.</span>`;
+      list.appendChild(li);
+      setText("attentionCount", "0");
+      return;
+    }
+    setText("attentionCount", String(items.length));
+    for (const it of items) {
+      const li = document.createElement("li");
+      li.className = `attn-item ${it.level}`;
+      const dot = document.createElement("span");
+      dot.className = "attn-dot";
+      const txt = document.createElement("span");
+      txt.textContent = it.text;
+      li.append(dot, txt);
+      list.appendChild(li);
+    }
+  }
+
+  function refreshOverview() {
+    renderOverviewCards();
+    renderAttention();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Estados vacíos diferenciados (nunca conectado / desconectado / sin datos)
+  // ---------------------------------------------------------------------------
+  function updateEmptyStates() {
+    const phase = devicePhase();
+    const lastSeen = state.deviceLastSeen;
+    const ago = lastSeen
+      ? fmtAgo((Date.now() / 1000 - lastSeen) * 1000)
+      : null;
+
+    // Banner de la vista Operación
+    const bTitle = $("offlineBannerTitle");
+    const bText = $("offlineBannerText");
+    if (bTitle && bText) {
+      if (phase === "never") {
+        bTitle.textContent = "El ESP32-CAM nunca ha contactado al servidor";
+        bText.textContent =
+          "Cuando encienda y se una a la red del servidor, empezará a reportar cada ~60 s.";
+      } else if (phase === "offline") {
+        bTitle.textContent = `ESP32-CAM sin señal · último contacto ${ago}`;
+        bText.textContent =
+          "Las capturas y la telemetría se reanudan cuando el dispositivo vuelva a contactar. Las órdenes en cola expiran a los 10 min.";
+      } else {
+        bTitle.textContent = "Esperando conexión del dispositivo";
+        bText.textContent =
+          "Las métricas aparecerán cuando la ESP32-CAM haga contacto (reporta una vez por minuto).";
+      }
+    }
+
+    // Placeholder de la última captura (solo cuando no hay imagen)
+    const capEmpty = $("captureEmpty");
+    if (capEmpty && !state.currentCapture) {
+      capEmpty.textContent =
+        phase === "never" ? "El dispositivo aún no ha enviado su primera foto."
+        : phase === "offline" ? `Sin capturas nuevas · el ESP32 está sin señal (${ago}).`
+        : "El dispositivo está en línea; esperando la primera foto.";
+    }
+
+    // Placeholder de telemetría (vista Sensores)
+    const telEmpty = $("telemetryEmpty");
+    if (telEmpty) {
+      telEmpty.textContent =
+        phase === "never" ? "El ESP32-CAM nunca ha reportado telemetría."
+        : phase === "offline" ? `Sin telemetría nueva · último contacto ${ago}.`
+        : "El dispositivo está en línea; la telemetría llega con cada poll (~60 s).";
+    }
+
+    // Placeholder de la galería (vista Archivo)
+    const galEmpty = $("galleryEmpty");
+    if (galEmpty) {
+      galEmpty.textContent =
+        phase === "online"
+          ? "El dispositivo está en línea pero el archivo está vacío."
+          : "Sin capturas en el archivo todavía.";
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Estado de entrega de la configuración del dispositivo
+  // ---------------------------------------------------------------------------
+  function updateCfgDelivery() {
+    const el = $("cfgDelivery");
+    if (!el) return;
+    const meta = state.cfgMeta || {};
+    const keys = Object.keys(meta);
+    if (!state.cfgSavedAt && !keys.length) {
+      el.textContent = "";
+      return;
+    }
+    const parts = [];
+    if (state.cfgSavedAt) {
+      const lastPoll = state.deviceLastPoll;
+      if (lastPoll && lastPoll * 1000 > state.cfgSavedAt) {
+        parts.push("guardada en el servidor ✓ · descargada por el ESP32 ✓");
+      } else {
+        parts.push("guardada en el servidor ✓ · el ESP32 la recoge en su próximo poll (≤60 s)");
+      }
+      // El firmware no confirma aplicación por clave; la única verificable
+      // es pump_photos vía telemetría (pump_photos_max).
+      const tel = state.telemetry || {};
+      const want = parseInt(state.cfgPayload?.pump_photos, 10);
+      if (!Number.isNaN(want) && tel.pump_photos_max === want) {
+        parts.push("valores de bomba confirmados por telemetría");
+      }
+    } else if (keys.length) {
+      const newest = Math.max(...keys.map((k) => meta[k] || 0));
+      parts.push(
+        `${keys.length} ajuste(s) activo(s) · última modificación ${fmtAgo((Date.now() / 1000 - newest) * 1000)}`
+      );
+    }
+    el.textContent = parts.join(" · ") + ".";
+  }
+
+  function updateOtaCurrent() {
+    const el = $("otaCurrent");
+    if (!el) return;
+    const meta = state.cfgMeta || {};
+    const ota = meta.ota_url;
+    el.textContent = ota?.value
+      ? `OTA programada: ${ota.value} (se aplica una sola vez)`
+      : "";
+  }
+
+  async function programOta() {
+    const input = $("otaUrlInput");
+    const btn = $("btnOta");
+    const st = $("otaState");
+    let url = (input?.value || "").trim();
+    if (!url) url = `${location.origin}/firmware.bin`;
+    if (!url.startsWith("http://")) {
+      if (st) {
+        st.textContent = "La ESP32 solo acepta http:// (HTTP plano, sin TLS).";
+        st.classList.remove("is-queued");
+      }
+      return;
+    }
+    if (btn) btn.disabled = true;
+    const btnLabel = btn ? btn.textContent : "";
+    if (st) {
+      st.textContent = "Enviando…";
+      st.classList.remove("is-queued");
+    }
+    try {
+      const res = await fetch("/api/admin/device-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ota_url: url }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      const devOffline = !state.deviceOnline;
+      if (st) {
+        st.textContent = devOffline
+          ? "OTA en cola · ESP32 sin señal — la URL queda activa y se aplicará cuando vuelva a contactar."
+          : "OTA programada · el ESP32 descarga y flashea el .bin en su próximo poll (≤60 s).";
+        st.classList.add("is-queued");
+      }
+      if (input) input.value = "";
+      refreshCfgMeta();
+    } catch (err) {
+      console.warn("ota program failed", err);
+      if (st) {
+        st.textContent = `Error: ${err.message}`;
+        st.classList.remove("is-queued");
+      }
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = btnLabel || "Programar OTA";
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Modal de confirmación para acciones destructivas / sensibles
+  // ---------------------------------------------------------------------------
+  let cmResolve = null;
+
+  function askConfirm({ title, desc, scope = [], requireText = "", okLabel = "Confirmar" }) {
+    return new Promise((resolve) => {
+      const modal = $("confirmModal");
+      if (!modal) { resolve(confirm(`${title}\n\n${desc}`)); return; }
+      cmResolve = resolve;
+      setText("cmTitle", title);
+      setText("cmDesc", desc);
+      const ul = $("cmScope");
+      if (ul) {
+        ul.replaceChildren();
+        for (const s of scope) {
+          const li = document.createElement("li");
+          li.textContent = s;
+          ul.appendChild(li);
+        }
+      }
+      const wrap = $("cmTypeWrap");
+      const input = $("cmTypeInput");
+      const okBtn = $("cmOk");
+      if (wrap) wrap.hidden = !requireText;
+      if (input) {
+        input.value = "";
+        input.dataset.expect = requireText;
+      }
+      setText("cmTypeWord", requireText);
+      if (okBtn) {
+        okBtn.textContent = okLabel;
+        okBtn.disabled = !!requireText;
+      }
+      modal.hidden = false;
+      if (requireText && input) input.focus();
+    });
+  }
+
+  function closeConfirmModal(result) {
+    const modal = $("confirmModal");
+    if (modal) modal.hidden = true;
+    const resolve = cmResolve;
+    cmResolve = null;
+    if (resolve) resolve(result);
+  }
+
+  function wireConfirmModal() {
+    const modal = $("confirmModal");
+    const okBtn = $("cmOk");
+    const cancelBtn = $("cmCancel");
+    const input = $("cmTypeInput");
+    if (!modal) return;
+    if (okBtn) {
+      okBtn.addEventListener("click", () => {
+        const expect = input?.dataset.expect || "";
+        if (expect && (input?.value || "").trim().toUpperCase() !== expect) return;
+        closeConfirmModal(true);
+      });
+    }
+    if (cancelBtn) cancelBtn.addEventListener("click", () => closeConfirmModal(false));
+    if (input) {
+      input.addEventListener("input", () => {
+        const expect = input.dataset.expect || "";
+        if (okBtn && expect) {
+          okBtn.disabled = input.value.trim().toUpperCase() !== expect;
+        }
+      });
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") okBtn?.click();
+      });
+    }
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) closeConfirmModal(false);
+    });
+  }
+
   // --- Navegación por pestañas (sidebar desktop / bottom-nav móvil) ---
   const VIEW_META = {
-    live: ["En vivo", "Capturas y bomba · el ESP32 reporta cada ~60 s"],
-    analytics: ["Analítica", "Materiales, actividad y archivo de capturas"],
-    device: ["Dispositivo", "Configuración y salud del ESP32-CAM"],
+    overview: ["Estado", "Salud general · conectividad, bomba y órdenes"],
+    operation: ["Operación", "Capturas, bomba y órdenes al dispositivo"],
+    sensors: ["Sensores", "Telemetría del ESP32-CAM · reporta cada ~60 s"],
+    analytics: ["Analítica", "Materiales, tendencias y rendimiento de la IA"],
+    archive: ["Archivo", "Capturas clasificadas · filtros y exportación"],
+    admin: ["Administración", "Configuración, diagnóstico y mantenimiento"],
   };
 
   function activateView(name) {
@@ -1599,12 +2319,42 @@
   setInterval(updatePollCountdown, 100);
   updatePollCountdown();
 
+  // Reloj en vivo de la topbar (hora local del navegador que mira el dashboard)
+  function updateTopClock() {
+    const el = $("topClock");
+    if (el) el.textContent = new Date().toLocaleTimeString("es-SV", { hour12: false });
+  }
+  setInterval(updateTopClock, 1000);
+  updateTopClock();
+
+  // Cronómetro de la bomba en la topbar: cuenta regresiva desde
+  // pump_active_until (epoch del server) hasta que la bomba se apaga.
+  function updateTopTimer() {
+    const pill = $("topTimerPill");
+    const txt = $("topTimerText");
+    if (!pill || !txt) return;
+    const until = state.pump?.pump_active_until || 0;
+    const restS = until ? Math.ceil(until - Date.now() / 1000) : 0;
+    if (restS > 0) {
+      txt.textContent = `Bomba · ${restS}s`;
+      pill.classList.add("counting");
+    } else {
+      txt.textContent = "Bomba · --";
+      pill.classList.remove("counting");
+    }
+  }
+  setInterval(updateTopTimer, 500);
+  updateTopTimer();
+
   // Métricas de rendimiento + circuito: RTT cada 5 s, REST cada 15 s
   setInterval(() => { measureNetLatency(); updateRealtimeBits(); }, 5000);
   setInterval(() => { loadPerf(); loadCircuit(); }, 15000);
+  // Ciclo de vida de las órdenes al dispositivo (entregada/ejecutada/expirada)
+  setInterval(loadCommands, 10000);
   measureNetLatency();
   loadPerf();
   loadCircuit();
+  loadCommands();
 
   bootstrapFromRest();
   bootstrapCaptures();
@@ -1612,5 +2362,7 @@
   loadFullGallery(true);
   loadPumpEvents();
   loadTimeseries();
+  updateEmptyStates();
+  refreshOverview();
   connectWs();
 })();
